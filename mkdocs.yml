@@ -1,0 +1,16 @@
+site_name: cdxCore
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            docstring_style: numpy   # or "numpy"
+            heading_level: 3
+          extra:
+            show_private: false
+            show_special: false

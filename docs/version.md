@@ -1,0 +1,4 @@
+# version module
+
+::: cdxcore.version
+

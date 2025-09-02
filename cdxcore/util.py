@@ -1,0 +1,877 @@
+"""
+## Overview
+Basic utilities for Python such as type management, formatting, some trivial timers.
+
+## Import
+```
+import cdxcore.util as util
+```
+"""
+
+import datetime as datetime
+import types as types
+import psutil as psutil
+from collections.abc import Mapping, Collection
+import sys as sys
+import time as time
+from collections import OrderedDict
+from sortedcontainers import SortedDict
+import numpy as np
+import pandas as pd
+import os as os
+import warnings as warnings
+from collections.abc import Callable
+from .err import fmt, _fmt, verify, error, warn_if, warn #NOQA
+
+# =============================================================================
+# basic indentification short cuts
+# =============================================================================
+
+__types_functions = None
+
+def types_functions():
+    """ Returns all types.* considered functions """
+    global __types_functions
+    if __types_functions is None:
+        __types_functions = set()
+        try: __types_functions.add(types.FunctionType)
+        except: pass
+        try: __types_functions.add(types.LambdaType)
+        except: pass
+        try: __types_functions.add(types.CodeType)
+        except: pass
+        #types.MappingProxyType
+        #types.SimpleNamespace
+        try: __types_functions.add(types.GeneratorType)
+        except: pass
+        try: __types_functions.add(types.CoroutineType)
+        except: pass
+        try: __types_functions.add(types.AsyncGeneratorType)
+        except: pass
+        try: __types_functions.add(types.MethodType)
+        except: pass
+        try: __types_functions.add(types.BuiltinFunctionType)
+        except: pass
+        try: __types_functions.add(types.BuiltinMethodType)
+        except: pass
+        try: __types_functions.add(types.WrapperDescriptorType)
+        except: pass
+        try: __types_functions.add(types.MethodWrapperType)
+        except: pass
+        try: __types_functions.add(types.MethodDescriptorType)
+        except: pass
+        try: __types_functions.add(types.ClassMethodDescriptorType)
+        except: pass
+        #types.ModuleType,
+        #types.TracebackType,
+        #types.FrameType,
+        try: __types_functions.add(types.GetSetDescriptorType)
+        except: pass
+        try: __types_functions.add(types.MemberDescriptorType)
+        except: pass
+        try: __types_functions.add(types.DynamicClassAttribute)
+        except: pass
+        __types_functions = tuple(__types_functions)
+    return __types_functions
+
+def isFunction(f) -> bool:
+    """
+    Checks whether `f` is a function in an extended sense.
+    Check `types_functions` for what is tested against.
+    In particular it does not test positive for properties.    
+    """
+    return isinstance(f,types_functions())
+
+def isAtomic( o ):
+    """ Returns true if `o` is a string, int, float, date or bool, or a numpy generic """
+    if type(o) in [str,int,bool,float,datetime.date]:
+        return True
+    if isinstance(o,np.generic):
+        return True
+    return False
+
+def isFloat( o ):
+    """ Checks whether a type is a float which includes numpy floating types """
+    if type(o) is float:
+        return True
+    if isinstance(o,np.floating):
+        return True
+    return False
+
+# =============================================================================
+# python basics
+# =============================================================================
+
+def _get_recursive_size(obj, seen=None):
+    """
+    Recursive helper for sizeof
+    :meta private: 
+    """
+    if seen is None:
+        seen = set()  # Keep track of seen objects to avoid double-counting
+
+    # Get the size of the current object
+    size = sys.getsizeof(obj)
+
+    # Avoid counting the same object twice
+    if id(obj) in seen:
+        return 0
+    seen.add(id(obj))
+
+    if isinstance( obj, np.ndarray ):
+        size += obj.nbytes
+    elif isinstance(obj, Mapping):
+        for key, value in obj.items():
+            size += _get_recursive_size(key, seen)
+            size += _get_recursive_size(value, seen)
+    elif isinstance(obj, Collection):
+        for item in obj:
+            size += _get_recursive_size(item, seen)
+    else:
+        try:
+            size += _get_recursive_size( obj.__dict__, seen )
+        except:
+            pass
+        try:
+            size += _get_recursive_size( obj.__slots__, seen )
+        except:
+            pass
+    return size
+
+def getsizeof(obj):
+    """
+    Approximates the size of 'obj'.
+    In addition to sys.getsizeof this function also iterates through embedded containers.
+    :meta private: 
+    """
+    return _get_recursive_size(obj,None)    
+
+# =============================================================================
+# string formatting
+# =============================================================================
+
+def fmt_seconds( seconds : float, *, eps : float = 1E-8 ) -> str:
+    """
+    Generate format string for seconds, e.g. "23s"" for `seconds=23`, or "1:10" for `seconds=70`
+    
+    Parameters
+    ----------
+    seconds : float
+        Seconds
+    eps : float
+        anything below `eps` is considered zero.
+
+    Returns
+    -------
+    String.    
+    """
+    assert eps>=0., ("'eps' must not be negative")
+    if seconds < -eps:
+        return "-" + fmt_seconds(-seconds, eps=eps)
+
+    if seconds <= eps:
+        return "0s"
+    if seconds < 0.01:
+        return "%.3gms" % (seconds*1000.)
+    if seconds < 2.:
+        return "%.2gs" % seconds
+    seconds = int(seconds)
+    if seconds < 60:
+        return "%lds" % seconds
+    if seconds < 60*60:
+        return "%ld:%02ld" % (seconds//60, seconds%60)
+    return "%ld:%02ld:%02ld" % (seconds//60//60, (seconds//60)%60, seconds%60)
+
+def fmt_list( lst : list, *, none : str = "-", link : str = "and", sort : bool = False ) -> str:
+    """
+    Returns a formatted string of a list, its elements separated by commas and a final 'and'.
+    If the list is `[1,2,3]` then the function will return "1, 2 and 3".
+    
+    Parameters
+    ----------
+    lst  : list.
+        The `list()` operator is applied to `lst`, so it will resolve dictionaries and generators.
+    none : str
+        string used when list was empty
+    link : str
+        string used to connect the last item. Default is "and".        
+    sort : bool
+        whether to sort the list
+
+    Returns
+    -------
+    Text : str
+        String.
+    """
+    if lst is None:
+        return str(none)
+    lst  = list(lst)
+    if len(lst) == 0:
+        return none
+    if len(lst) == 1:
+        return str(lst[0])
+    if sort:
+        lst = sorted(lst)
+    if link=="," or link=="":
+        link = ", "
+    elif link == "and": # make the default fast
+        link = " and "
+    elif link[:1] == ",":
+        link = ", " + link[1:].strip() + " "
+    else:
+        link = " " + link.strip() + " "
+                
+    s    = ""
+    for k in lst[:-1]:
+        s += str(k) + ", "
+    return s[:-2] + link + str(lst[-1])
+
+def fmt_dict( dct : dict, *, sort : bool = False, none : str = "-", link : str = "and" ) -> str:
+    """
+    Return a readable representation of a dictionary
+    This assumes that the elements of the dictionary itself can be formatted well with `str()`.
+
+    For a dictionary `dict(a=1,b=2,c=3)` this function will return `a: 1, b: 2, and c: 3`.
+
+    Parameters
+    ----------
+    dct : dict
+        The dictionary to format.
+    sort : bool
+        whether to sort the keys
+    none :  str
+        string to be used if dictionary is empty
+    link : str
+        string to be used to link the last element to the previous string
+
+    Returns
+    -------
+    String.
+    """
+    if len(dct) == 0:
+        return str(none)
+    if sort:
+        keys = sorted(dct)
+    else:
+        keys = list(dct)
+    strs = [ str(k) + ": " + str(dct[k]) for k in keys ]
+    return fmt_list( strs, none=none, link=link, sort=False )
+
+def fmt_digits( integer : int, sep : str = "," ):
+    """
+    String representation of `integer` with 1000 separators
+    So 10000 becomes "10,000".
+    
+    Parameters
+    --------
+    integer : int
+        The number. The function will `int()` the input which allows
+        for processing of a number of inputs (such as strings) but
+        might cut off floating point numbers.
+    sep : str
+        Separator, "," by default
+
+    Returns
+    -------
+    String.
+    """
+    if isinstance( integer, float ):
+        raise ValueError("float value provided", integer)
+    integer = int(integer)
+    if integer < 0:
+        return "-" + fmt_digits( -integer, sep )
+    assert integer >= 0
+    if integer < 1000:
+        return "%ld" % integer
+    else:
+        return fmt_digits(integer//1000, sep) + ( sep + "%03ld" % (integer % 1000) )
+
+def fmt_big_number( number : int ) -> str:
+    """
+    Return a formatted big number string, e.g. 12.35M instead of all digits.
+    Uses decimal system and "B" for billions.
+    Use fmt_big_byte_number for byte sizes ie 1024 units.
+
+    Parameters
+    ----------
+    number : int
+        Number to format.
+
+    Returns
+    -------
+    String.
+    """
+    if isinstance( number, float ):
+        raise ValueError("float value provided", number)
+    if number < 0:
+        return "-" + fmt_big_number(-number)
+    if number >= 10**13:
+        number = number/(10**12)
+        
+        if number > 10*3:
+            intg   = int(number)
+            rest   = number - intg
+            lead   = fmt_digits(intg)
+            rest   = "%.2f" % round(rest,2)
+            return f"{lead}{rest[1:]}T"
+        else:
+            number = round(number,2)
+            return "%gT" % number
+    if number >= 10**10:
+        number = number/(10**9)
+        number = round(number,2)
+        return "%gB" % number
+    if number >= 10**7:
+        number = number/(10**6)
+        number = round(number,2)
+        return "%gM" % number
+    if number >= 10**4:
+        number = number/(10**3)
+        number = round(number,2)
+        return "%gK" % number
+    return str(number)
+
+def fmt_big_byte_number( byte_cnt : int, str_B = True ) -> str:
+    """
+    Return a formatted big number string, e.g. 12.35M instead of all digits.
+
+    Parameters
+    ----------
+    byte_cnt : int
+        Number of bytes
+    str_B : bool
+        If true, return GB, MB and KB. If False, return G, M, K
+        If `byte_cnt` is less than 10KB, then this will add 'bytes'
+        e.g. '1024 bytes'
+    Returns
+    -------
+    String.
+    """
+    if isinstance( byte_cnt, float ):
+        raise ValueError("float value provided", byte_cnt)
+    if byte_cnt < 0:
+        return "-" + fmt_big_byte_number(-byte_cnt,str_B=str_B)
+    if byte_cnt >= 10*1024*1024*1024*1024:
+        byte_cnt = byte_cnt/(1024*1024*1024*1024)
+        if byte_cnt > 1024:
+            intg   = int(byte_cnt)
+            rest   = byte_cnt - intg
+            lead   = fmt_digits(intg)
+            rest   = "%.2f" % round(rest,2)
+            s = f"{lead}{rest[1:]}T"
+        else:
+            byte_cnt = round(byte_cnt,2)
+            s = "%gT" % byte_cnt
+    elif byte_cnt >= 10*1024*1024*1024:
+        byte_cnt = byte_cnt/(1024*1024*1024)
+        byte_cnt = round(byte_cnt,2)
+        s = "%gG" % byte_cnt
+    elif byte_cnt >= 10*1024*1024:
+        byte_cnt = byte_cnt/(1024*1024)
+        byte_cnt = round(byte_cnt,2)
+        s = "%gM" % byte_cnt
+    elif byte_cnt >= 10*1024:
+        byte_cnt = byte_cnt/1024
+        byte_cnt = round(byte_cnt,2)
+        s = "%gK" % byte_cnt
+    else:
+        if byte_cnt==1:
+            return "1" if not str_B else "1 byte"
+        return str(byte_cnt) if not str_B else f"{byte_cnt} bytes"
+    return s if not str_B else s+"B"
+
+def fmt_datetime(dt        : datetime.datetime, *, 
+                 sep       : str = ':', 
+                 ignore_ms : bool = False,
+                 ignore_tz : bool = True
+                 ) -> str:
+    """
+    Returns string for `dt` of the form "YYYY-MM-DD HH:MM:SS" if `dt` is a datetime,
+    or a the respective version for time or date.
+    
+    Microseconds are added as digits:
+        "YYYY-MM-DD HH:MM:SS,MICROSECONDS"
+        
+    Optinally a time zone is added via:
+        "YYYY-MM-DD HH:MM:SS+HH"
+        "YYYY-MM-DD HH:MM:SS+HH:MM"
+        
+    Parameters
+    ----------
+    dt : datetime, date, or time
+        String represent this.
+    sep : str
+        Seperator for hours, minutes, seconds. The default ':' looks better
+        but is not suitable for filenames
+    ignore_ms : bool
+        Whether to ignore microseconds. Default False
+    ignore_tz : bool
+        Whether to ignore the time zone. Default True
+
+    Returns
+    -------
+    String, see above.
+    """
+    if not isinstance(dt, datetime.datetime):
+        if isinstance(dt, datetime.date):
+            return fmt_date(dt)
+        else:
+            assert isinstance(dt, datetime.time), "'dt' must be datetime.datetime, datetime.date, or datetime.time. Found %s" % type(dt)
+            return fmt_time(dt,sep=sep,ignore_ms=ignore_ms)
+
+    s = fmt_date(dt.date()) + " " +\
+        fmt_time(dt.timetz(),sep=sep,ignore_ms=ignore_ms)
+
+    if ignore_tz or dt.tzinfo is None:
+        return s
+
+    # time zone handling
+    # pretty obscure: https://docs.python.org/3/library/datetime.html#tzinfo-objects
+    tzd     = dt.tzinfo.utcoffset(dt)
+    assert not tzd is None, ("tzinfo.utcoffset() returned None")
+    assert tzd.microseconds == 0, ("Timezone date offset with microseconds found", tzd )
+    seconds = tzd.days * 24*60*60 + tzd.seconds
+    if seconds==0:
+        return s
+    sign    = "+" if seconds >= 0 else "-"
+    seconds = abs(seconds)
+    hours   = seconds//(60*60)
+    minutes = (seconds//60)%60
+    seconds = seconds%60
+    if minutes == 0:
+        s += sign + str(hours)
+    else:
+        s += f"{sign}{hours}{sep}{minutes:02d}"
+    return s
+    
+def fmt_date(dt : datetime.date) -> str:
+    """
+    Returns string representation for date `dt` of the form YYYY-MM-DD
+    If passed a datetime, it will extract its `date()`.    
+    """
+    if isinstance(dt, datetime.datetime):
+        dt = dt.date()
+    assert isinstance(dt, datetime.date), "'dt' must be datetime.date. Found %s" % type(dt)
+    return f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
+
+def fmt_time(dt        : datetime.time, *,
+             sep       : str = ':',
+             ignore_ms : bool = False
+             ) -> str:
+    """
+    Returns string for `dt` of the form "HH:MM:SS".
+    
+    Microseconds are added as digits:
+        "HH:MM:SS,MICROSECONDS"
+        
+    Optinally a time zone is added via:
+        "HH:MM:SS+HH"
+
+    If passed a datetime, it will extract its `time()`.
+    Note that while `datetime.time` objects may carry a `tzinfo` time zone object,
+    the corresponding `otcoffset()` function returns None without
+    providing a 'dt' parameter, see [tzinfo documentation](https://docs.python.org/3/library/datetime.html#tzinfo-objects).
+    We bypass this inconsistency by not allowing `dt` to contain
+    a time zone.
+        
+    Parameters
+    ----------
+    dt : time
+        String represent this.
+    sep : str
+        Seperator for hours, minutes, seconds. The default ':' looks better
+        but is not suitable for filenames
+    ignore_ms : bool
+        Whether to ignore microseconds. Default False
+            
+    Returns
+    -------
+    String, see above.
+    """
+    if isinstance(dt, datetime.datetime):
+        dt = dt.timetz()
+ 
+    assert isinstance(dt, datetime.time), "'dt' must be datetime.time. Found %s" % type(dt)
+    if ignore_ms or dt.microsecond == 0:
+        return f"{dt.hour:02d}{sep}{dt.minute:02d}{sep}{dt.second:02d}"
+    else:
+        return f"{dt.hour:02d}{sep}{dt.minute:02d}{sep}{dt.second:02d},{dt.microsecond}"  
+
+def fmt_timedelta(dt      : datetime.timedelta, *,
+                  sep     : str = "" )  -> str:
+    """
+    Returns string representation for a time delta in the form DD:HH:MM:SS,MS
+    
+    Parameters
+    ----------
+    dt : timedelta
+        Timedelta.
+    sep :
+        Identify the three separators: between days, and HMS and between microseconds:
+        ```
+            DD*HH*MM*SS*MS
+              0  1  1  2
+         ```
+         
+        * `sep` can be a string, in which case:
+            * If it is an empty string, all separators are ''
+            * A single character will be reused for all separators
+            * If the string has length 2, then the last character is used for '2'
+            * If the string has length 3, then the chracters are used accordingly
+
+        * `sep` can also be a collection ie a tuple or list. In this case each element is used accordingly.
+            
+    Returns
+    -------
+    String with leading sign. Returns "" if timedelta is 0.
+    """
+    assert isinstance(dt, datetime.timedelta), "'dt' must be datetime.timedelta. Found %s" % type(dt)
+
+    if isinstance(sep, str):
+        if len(sep) == 0:
+            sepd   = ''
+            sephms = ''
+            sepms  = ''
+        elif len(sep) == 1:
+            sepd   = sep
+            sephms = sep
+            sepms  = sep
+        elif len(sep) == 2:
+            sepd   = sep[0]
+            sephms = sep[0]
+            sepms  = sep[-1]
+        else:
+            if len(sep) != 3: raise ValueError(f"'sep': if a string is provided, its length must not exceed 3. Found '{sep}'")
+            sepd   = sep[0]
+            sephms = sep[1]
+            sepms  = sep[2]
+    elif isinstance(sep, Collection):
+        if len(sep) != 3: raise ValueError("'sep': if a collection is provided, it must be of length 3")
+        sepd   = str( sep[0] ) if not sep[0] is None else ""
+        sephms = str( sep[1] ) if not sep[1] is None else ""
+        sepms  = str( sep[2] ) if not sep[2] is None else ""
+
+    microseconds = (dt.seconds + dt.days*24*60*60)*1000000+dt.microseconds
+    if microseconds==0:
+        return ""
+    
+    sign         = "+" if microseconds >= 0 else "-"
+    microseconds = abs(microseconds)
+
+    if microseconds < 1000000:
+        return f"{sign}{microseconds}ms"
+        
+    seconds      = microseconds//1000000
+    microseconds = microseconds%1000000
+    rest         = "" if microseconds == 0 else f"{sepms}{microseconds}ms"
+
+    if seconds < 60:        
+        return f"{sign}{seconds}s{rest}"
+    
+    minutes      = seconds//60
+    seconds      = seconds%60   
+    rest         = rest if seconds==0 else f"{sephms}{seconds}s{rest}"
+    if minutes < 60:
+        return f"{sign}{minutes}m{rest}"
+
+    hours        = minutes//60
+    minutes      = minutes%60
+    rest         = rest if minutes==0 else f"{sephms}{minutes}m{rest}"
+    if hours <= 24:        
+        return f"{sign}{hours}h{rest}"
+
+    days         = hours//24
+    hours        = hours%24
+    rest         = rest if hours==0 else f"{sepd}{hours}h{rest}"
+    return f"{sign}{days}d{rest}"
+
+def fmt_now() -> str:
+    """ Returns the [fmt_datetime]() string for 'now' """
+    return fmt_datetime(datetime.datetime.now())
+
+""" Default map from characters which cannot be used under either Windows or Linux to valid characters """
+DEF_FILE_NAME_MAP = {  
+                 '/' : "_",
+                 '\\': "_",
+                 '|' : "_",
+                 ':' : ";",
+                 '>' : ")",
+                 '<' : "(",
+                 '?' : "!",
+                 '*' : "@",
+                 }
+INVALID_FILE_NAME_CHARCTERS = set(DEF_FILE_NAME_MAP)
+
+def fmt_filename( s : str , by : str = DEF_FILE_NAME_MAP ):
+    """
+    Replaces invalid filename characters by a differnet character.
+    The returned string is technically a valid file name under both windows and linux.
+    
+    However, that does not prevent the filename to be a reserved name, for example "." or "..".
+    
+    Parameters
+    ----------
+    s : str
+        Input string
+    by : str, default=cdxcore.util.DEF_FILE_NAME_MAP
+        Either a single character or a dictionary with elements.
+        The default is `cdxcore.util.DEF_FILE_NAME_MAP`. You can access this
+        list using `fmt_filename.DEF_FILE_NAME_MAP` as well.
+    
+    Returns
+    -------
+    Filename string
+    """
+
+    if isinstance(by, Mapping):
+        for c in INVALID_FILE_NAME_CHARCTERS:
+            s = s.replace(c, by[c])
+    else:
+        assert isinstance(by, str), ("by: 'str' or mapping expected", type(by))
+        for c in INVALID_FILE_NAME_CHARCTERS:
+            s = s.replace(c, by)
+    return s
+fmt_filename.DEF_FILE_NAME_MAP = DEF_FILE_NAME_MAP
+
+# =============================================================================
+# Conversion of arbitrary python elements into re-usable versions
+# =============================================================================
+
+# deprecated
+def plain( inn, *, sorted_dicts : bool = False,
+                   native_np    : bool = False,
+                   dt_to_str    : bool = False):
+    """
+    Converts a python structure into a simple atomic/list/dictionary collection such
+    that it can be read without the specific imports used inside this program.
+    or example, objects are converted into dictionaries of their data fields.
+
+    Parameters
+    ----------
+    inn :
+        some object
+    sorted_dicts : bool
+        use SortedDicts instead of dicts. Since Python 3.7 all dictionaries are sorted anyway.
+    native_np : bool
+        convert numpy to Python natives.
+    dt_to_str : bool
+        convert date times to strings
+
+    :meta::private: 
+    """
+    def rec_plain( x ):
+        return plain( x, sorted_dicts=sorted_dicts, native_np=native_np, dt_to_str=dt_to_str )
+    # basics
+    if isAtomic(inn) or inn is None:
+        return inn
+    if isinstance(inn,(datetime.time,datetime.date,datetime.datetime)):
+        return fmt_datetime(inn) if dt_to_str else inn
+    if not np is None:
+        if isinstance(inn,np.ndarray):
+            return inn if not native_np else rec_plain( inn.tolist() )
+        if isinstance(inn, np.integer):
+            return int(inn)
+        elif isinstance(inn, np.floating):
+            return float(inn)
+    # can't handle functions --> return None
+    if isFunction(inn) or isinstance(inn,property):
+        return None
+    # dictionaries
+    if isinstance(inn,Mapping):
+        r  = { k: rec_plain(v) for k, v in inn.items() if not isFunction(v) and not isinstance(v,property) }
+        return r if not sorted_dicts else SortedDict(r)
+    # pandas
+    if not pd is None and isinstance(inn,pd.DataFrame):
+        rec_plain(inn.columns)
+        rec_plain(inn.index)
+        rec_plain(inn.to_numpy())
+        return
+    # lists, tuples and everything which looks like it --> lists
+    if isinstance(inn,Collection):
+        return [ rec_plain(k) for k in inn ]
+    # handle objects as dictionaries, removing all functions
+    if not getattr(inn,"__dict__",None) is None:
+        return rec_plain(inn.__dict__)
+    # nothing we can do
+    raise TypeError(fmt("Cannot handle type %s", type(inn)))
+
+# =============================================================================
+# Misc Jupyter
+# =============================================================================
+
+def is_jupyter():
+    """
+    Wheher we operate in a jupter session
+    Somewhat unreliable function. Use with care
+    
+    :meta private: 
+    """
+    parent_process = psutil.Process().parent().cmdline()[-1]
+    return  'jupyter' in parent_process
+
+# =============================================================================
+# Misc
+# =============================================================================
+
+class TrackTiming(object):
+    """
+    Simplistic class to track the time it takes to run sequential tasks.
+    Usage:
+
+        timer = TrackTiming()   # clock starts
+
+        # do job 1
+        timer += "Job 1 done"
+
+        # do job 2
+        timer += "Job 2 done"
+
+        print( timer.summary() )
+        
+    :meta private:
+    """
+
+    def __init__(self):
+        """ Initialize a new tracked timer """
+        self.reset_all()
+
+    def reset_all(self):
+        """ Reset timer, and clear all tracked items """
+        self._tracked = OrderedDict()
+        self._current = time.time()
+
+    def reset_timer(self):
+        """ Reset the timer to current time """
+        self._current = time.time()
+
+    def track(self, text, *args, **kwargs ):
+        """ Track 'text', formatted with 'args' and 'kwargs' """
+        text = _fmt(text,args,kwargs)
+        self += text
+
+    def __iadd__(self, text : str):
+        """ Track 'text' """
+        text  = str(text)
+        now   = time.time()
+        dt    = now - self._current
+        if text in self._tracked:
+            self._tracked[text] += dt
+        else:
+            self._tracked[text] = dt
+        self._current = now
+        return self
+
+    def __str__(self):
+        """ Returns summary """
+        return self.summary()
+
+    @property
+    def tracked(self) -> list:
+        """ Returns dictionary of tracked texts """
+        return self._tracked
+
+    def summary(self, fmat : str = "%(text)s: %(fmt_seconds)s", jn_fmt : str = ", " ) -> str:
+        """
+        Generate summary string by applying some formatting
+
+        Parameters
+        ----------
+        fmat : str
+            Format string. Arguments are `text`, `seconds` (as int) and `fmt_seconds` (a string)
+        jn_fmt : str
+            String to be used between two texts
+        Returns
+        -------
+        The combined summary string
+        """
+        s = ""
+        for text, seconds in self._tracked.items():
+            tr_txt = fmat % dict( text=text, seconds=seconds, fmt_seconds=fmt_seconds(seconds))
+            s      = tr_txt if s=="" else s+jn_fmt+tr_txt
+        return s
+
+# =============================================================================
+# Misc
+# =============================================================================
+
+class Timer(object):
+    """
+    Micro utility which allows keeing track of time using `with`.
+ 
+    ```
+    with Timer() as t:
+        .... do somthing ...
+        print(f"This took {t}.")
+    ```
+    """
+    
+    def __init__(self):
+        self.time = time.time()
+        self.intv = None
+        
+    def reset(self):
+        """ Resets the timer. """
+        self.time = time.time()
+        self.intv = None
+        
+    def __enter__(self):
+        self.reset()
+        return self
+    
+    def __str__(self):
+        """ Seconds elapsed since construction or [reset][cdxcore.util.Timer.reset](), formatted using [fmt_seconds][cdxcore.util.Timer.fmt_seconds] """
+        return self.fmt_seconds
+    
+    def interval_test( self, interval : float ):
+        r"""
+        Tests if `interval` seconds have passed.
+        If yes, reset timer and return True. Otherwise return False
+        
+        Usage:
+        ------
+        ```
+        tme = Timer()
+        for i in range(n):
+            if tme.test_dt_seconds(2.): print(f"\r{i+1}/{n} done. Time taken so far {tme}.", end='', flush=True)
+        print("\rDone. This took {tme}.")
+        ```
+        """
+        if interval is None:
+            self.intv = self.seconds
+            return True
+        if self.intv is None:
+            self.intv = self.seconds
+            return True
+        if self.seconds - self.intv > interval:
+            self.intv = self.seconds
+            return True
+        return False            
+
+    @property
+    def fmt_seconds(self):
+        """ Seconds elapsed since construction or [reset][cdxcore.util.Timer.reset](), formatted using [fmt_seconds][cdxcore.util.Timer.fmt_seconds] """
+        return fmt_seconds(self.seconds)
+
+    @property
+    def seconds(self) -> float:
+        """ Seconds passed since construction or [reset][cdxcore.util.Timer.reset]() """
+        return time.time() - self.time
+
+    @property
+    def minutes(self) -> float:
+        """ Minutes passed since construction or [reset][cdxcore.util.Timer.reset]() """
+        return self.seconds / 60.
+
+    @property
+    def hours(self) -> float:
+        """ Hours passed since construction or [reset][cdxcore.util.Timer.reset]() """
+        return self.minutes / 60.
+
+    def __exit__(self, *kargs, **wargs):
+        return False
+
+
+
+
+
+

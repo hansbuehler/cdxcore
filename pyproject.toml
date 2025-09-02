@@ -1,0 +1,27 @@
+# https://packaging.python.org/en/latest/tutorials/packaging-projects/
+
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cdxcore"
+version = "0.1.8"
+description = "Basic Python Tools; upgraded cdxbasics"
+authors = [{ name = "Hans Buehler", email = "github@buehler.london" }]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ['numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil',
+	 'jsonpickle', 'numba', 'joblib', 'blosc', 'mkdocstrings[python]>=0.18']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+    
+[project.urls]
+Homepage = "https://github.com/hansbuehler/cdxcore"
+
+[tool.setuptools.packages.find]
+where = ["."]

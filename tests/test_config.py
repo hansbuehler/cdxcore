@@ -7,8 +7,11 @@ Created on Tue Apr 14 21:24:52 2020
 
 import unittest as unittest
 import dataclasses as dataclasses
-import pickle as pickle
 import sys as sys
+import os as os
+import pickle as pickle
+import tempfile as tempfile
+import shutil as shutil
 sys.setrecursionlimit(100)
 
 def import_local():
@@ -36,9 +39,9 @@ def import_local():
             print("Reloaded", name)
 import_local()
 
-from cdxcore.config import Config, Int, Float, ConfigField
-from cdxcore.prettydict import pdct
-from cdxcore.uniquehash import uniqueHash
+from cdxcore.config import Config, Int, Float
+from cdxcore.pretty import PrettyObject as pdct
+from cdxcore.uniquehash import unique_hash16
 
 class Test(unittest.TestCase):
 
@@ -336,7 +339,7 @@ class Test(unittest.TestCase):
         config.trainer.visual.confidence_pcnt_lo = 0.25
         config.trainer.visual.confidence_pcnt_hi = 0.75
 
-        id1 = config.unique_id()
+        id1 = config.unique_hash()
 
         config = Config()
         # world
@@ -363,20 +366,24 @@ class Test(unittest.TestCase):
         config.trainer.visual.confidence_pcnt_lo = 0.25
         config.trainer.visual.confidence_pcnt_hi = 0.75
 
-        id2 = config.unique_id()
+        id2 = config.unique_hash()
         self.assertNotEqual(id1,id2)
         self.assertEqual(id2,"cfef59b69770d0a973342ad68f38fba2")
 
         _ = config.nothing("get_nothing", 0)  # this triggered a new ID in old versions
 
-        id3 = config.unique_id()
+        id3 = config.unique_hash()
         self.assertEqual(id2,id3)
+        
+        idempty = Config().unique_hash()
+        self.assertEqual(idempty,"xx")
+        self.assertNotEqual(idempty,id3)
 
         # pickle test
 
         binary   = pickle.dumps(config)
         restored = pickle.loads(binary)
-        idrest   = restored.unique_id()
+        idrest   = restored.unique_hash()
         self.assertEqual(idrest,id2)
 
         # unique ID test
@@ -387,7 +394,7 @@ class Test(unittest.TestCase):
         config2 = Config()
         config2.x = 1
         config2.sub.y = 3
-        self.assertNotEqual( uniqueHash(config1), uniqueHash(config2) )
+        self.assertNotEqual( unique_hash16(config1), unique_hash16(config2) )
 
         config1 = Config()
         config1.x = 1
@@ -395,7 +402,7 @@ class Test(unittest.TestCase):
         config2 = Config()
         config2.x = 2
         config2.sub.y = 2
-        self.assertNotEqual( uniqueHash(config1), uniqueHash(config2) )
+        self.assertNotEqual( unique_hash16(config1), unique_hash16(config2) )
 
         config1 = Config()
         config1.x = 1
@@ -403,16 +410,16 @@ class Test(unittest.TestCase):
         config2 = Config()
         config2.x = 1
         config2.sub.y = 2
-        self.assertEqual( uniqueHash(config1), uniqueHash(config2) )
+        self.assertEqual( unique_hash16(config1), unique_hash16(config2) )
 
-        # uniqueHash() ignores protected and private members
+        # unique_hash16() ignores protected and private members
         config1 = Config()
         config1.x = 1
         config1.sub._y = 2
         config2 = Config()
         config2.x = 1
         config2.sub._y = 3
-        self.assertEqual( uniqueHash(config1), uniqueHash(config2) )
+        self.assertEqual( unique_hash16(config1), unique_hash16(config2) )
 
     def test_detach(self):
         """ testing detach/copy/clean_cooy """
@@ -449,7 +456,7 @@ class Test(unittest.TestCase):
         @dataclasses.dataclass
         class A:
             i : int = 0
-            config : ConfigField = ConfigField.Field()
+            config : Config = Config().as_field()
             
             def f(self):
                 return self.config("a", 1, int, "Test")
@@ -457,14 +464,38 @@ class Test(unittest.TestCase):
         a = A()
         self.assertEqual(a.f(),1)
         c = Config()
-        a = A(i=2,config=ConfigField(c))
+        a = A(i=2,config=Config(c))
         self.assertEqual(a.f(),1)
         c = Config(a=2)
-        a = A(i=2,config=ConfigField(c))
+        a = A(i=2,config=Config(c))
         self.assertEqual(a.f(),2)
         a = A(i=2,config=Config(a=2))
         self.assertEqual(a.f(),2)
             
+    def test_io(self):
+
+        config = Config(x=1)
+        config.child.y = 2
+        config._test = 33        
+
+        try:
+            tmp_dir  = tempfile.mkdtemp()    
+            self.assertNotEqual(tmp_dir[-1],"/")
+            self.assertNotEqual(tmp_dir[-1],"\\")
+            tmp_file = tmp_dir + "/test_pretty_object.pck"
+            
+            with open(tmp_file, "wb") as f:
+                pickle.dump(config,f)
+                
+            with open(tmp_file, "rb") as f:
+                config2 = pickle.load(f)
+                self.assertEqual(config,config2)
+                
+            os.remove(tmp_file)
+        finally:
+            shutil.rmtree(tmp_dir)
+
+        
 if __name__ == '__main__':
     unittest.main()
 

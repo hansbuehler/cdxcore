@@ -1,11 +1,17 @@
 """
-## Overview
+Overview
+--------
+
 Basic utilities for Python such as type management, formatting, some trivial timers.
 
-## Import
-```
-import cdxcore.util as util
-```
+Import
+------
+.. code-block:: python
+
+    import cdxcore.util as util
+    
+Documentation
+-------------
 """
 
 import datetime as datetime
@@ -18,9 +24,6 @@ from collections import OrderedDict
 from sortedcontainers import SortedDict
 import numpy as np
 import pandas as pd
-import os as os
-import warnings as warnings
-from collections.abc import Callable
 from .err import fmt, _fmt, verify, error, warn_if, warn #NOQA
 
 # =============================================================================
@@ -29,69 +32,70 @@ from .err import fmt, _fmt, verify, error, warn_if, warn #NOQA
 
 __types_functions = None
 
-def types_functions():
-    """ Returns all types.* considered functions """
+#: a set of all ``types`` considered functions
+def types_functions() -> tuple[type]:
+    """ Returns a set of all ``types`` considered functions """
     global __types_functions
     if __types_functions is None:
-        __types_functions = set()
-        try: __types_functions.add(types.FunctionType)
+        fs = set()
+        try: fs.add(types.FunctionType)
         except: pass
-        try: __types_functions.add(types.LambdaType)
+        try: fs.add(types.LambdaType)
         except: pass
-        try: __types_functions.add(types.CodeType)
+        try: fs.add(types.CodeType)
         except: pass
         #types.MappingProxyType
         #types.SimpleNamespace
-        try: __types_functions.add(types.GeneratorType)
+        try: fs.add(types.GeneratorType)
         except: pass
-        try: __types_functions.add(types.CoroutineType)
+        try: fs.add(types.CoroutineType)
         except: pass
-        try: __types_functions.add(types.AsyncGeneratorType)
+        try: fs.add(types.AsyncGeneratorType)
         except: pass
-        try: __types_functions.add(types.MethodType)
+        try: fs.add(types.MethodType)
         except: pass
-        try: __types_functions.add(types.BuiltinFunctionType)
+        try: fs.add(types.BuiltinFunctionType)
         except: pass
-        try: __types_functions.add(types.BuiltinMethodType)
+        try: fs.add(types.BuiltinMethodType)
         except: pass
-        try: __types_functions.add(types.WrapperDescriptorType)
+        try: fs.add(types.WrapperDescriptorType)
         except: pass
-        try: __types_functions.add(types.MethodWrapperType)
+        try: fs.add(types.MethodWrapperType)
         except: pass
-        try: __types_functions.add(types.MethodDescriptorType)
+        try: fs.add(types.MethodDescriptorType)
         except: pass
-        try: __types_functions.add(types.ClassMethodDescriptorType)
+        try: fs.add(types.ClassMethodDescriptorType)
         except: pass
         #types.ModuleType,
         #types.TracebackType,
         #types.FrameType,
-        try: __types_functions.add(types.GetSetDescriptorType)
+        try: fs.add(types.GetSetDescriptorType)
         except: pass
-        try: __types_functions.add(types.MemberDescriptorType)
+        try: fs.add(types.MemberDescriptorType)
         except: pass
-        try: __types_functions.add(types.DynamicClassAttribute)
+        try: fs.add(types.DynamicClassAttribute)
         except: pass
-        __types_functions = tuple(__types_functions)
+        __types_functions = tuple(fs)
     return __types_functions
 
-def isFunction(f) -> bool:
+def is_function(f) -> bool:
     """
     Checks whether `f` is a function in an extended sense.
-    Check `types_functions` for what is tested against.
+    Check :func:`cdxcore.util.types_functions` for what is tested against.
     In particular it does not test positive for properties.    
     """
     return isinstance(f,types_functions())
 
-def isAtomic( o ):
-    """ Returns true if `o` is a string, int, float, date or bool, or a numpy generic """
+def is_atomic( o ):
+    """ Returns true if `o` is a ``string``, ``int``, ``float``, :class:`datedatime.date` or ``bool``, or a :class:`numpy.generic` """
     if type(o) in [str,int,bool,float,datetime.date]:
         return True
     if isinstance(o,np.generic):
         return True
     return False
 
-def isFloat( o ):
-    """ Checks whether a type is a float which includes numpy floating types """
+def is_float( o ):
+    """ Checks whether a type is a ``float`` which includes numpy floating types """
     if type(o) is float:
         return True
     if isinstance(o,np.floating):
@@ -118,7 +122,7 @@ def _get_recursive_size(obj, seen=None):
         return 0
     seen.add(id(obj))
 
-    if isinstance( obj, np.ndarray ):
+    if isinstance( obj, (np.ndarray, pd.DataFrame) ):
         size += obj.nbytes
     elif isinstance(obj, Mapping):
         for key, value in obj.items():
@@ -141,7 +145,7 @@ def _get_recursive_size(obj, seen=None):
 def getsizeof(obj):
     """
     Approximates the size of 'obj'.
-    In addition to sys.getsizeof this function also iterates through embedded containers.
+    In addition to calling :func:`sys.getsizeof` this function also iterates embedded containers, numpy arrays, and dataframes.
     :meta private: 
     """
     return _get_recursive_size(obj,None)    
@@ -152,12 +156,12 @@ def getsizeof(obj):
 
 def fmt_seconds( seconds : float, *, eps : float = 1E-8 ) -> str:
     """
-    Generate format string for seconds, e.g. "23s"" for `seconds=23`, or "1:10" for `seconds=70`
+    Generate format string for seconds, e.g. "23s"" for `seconds=23`, or "1:10" for `seconds=70`.
     
     Parameters
     ----------
     seconds : float
-        Seconds
+        Seconds as a float.
     eps : float
         anything below `eps` is considered zero.
 
@@ -184,7 +188,7 @@ def fmt_seconds( seconds : float, *, eps : float = 1E-8 ) -> str:
 
 def fmt_list( lst : list, *, none : str = "-", link : str = "and", sort : bool = False ) -> str:
     """
-    Returns a formatted string of a list, its elements separated by commas and a final 'and'.
+    Returns a formatted string of a list, its elements separated by commas and (by default) a final 'and'.
     If the list is `[1,2,3]` then the function will return "1, 2 and 3".
     
     Parameters
@@ -192,11 +196,11 @@ def fmt_list( lst : list, *, none : str = "-", link : str = "and", sort : bool =
     lst  : list.
         The `list()` operator is applied to `lst`, so it will resolve dictionaries and generators.
     none : str
-        string used when list was empty
+        string used when list was empty.
     link : str
         string used to connect the last item. Default is "and".        
     sort : bool
-        whether to sort the list
+        whether to sort the list.
 
     Returns
     -------
@@ -229,24 +233,25 @@ def fmt_list( lst : list, *, none : str = "-", link : str = "and", sort : bool =
 def fmt_dict( dct : dict, *, sort : bool = False, none : str = "-", link : str = "and" ) -> str:
     """
     Return a readable representation of a dictionary
-    This assumes that the elements of the dictionary itself can be formatted well with `str()`.
+    This assumes that the elements of the dictionary itself can be formatted well with :func:`str()`.
 
-    For a dictionary `dict(a=1,b=2,c=3)` this function will return `a: 1, b: 2, and c: 3`.
+    For a dictionary ``dict(a=1,b=2,c=3)`` this function will return ``a: 1, b: 2, and c: 3``.
 
     Parameters
     ----------
     dct : dict
         The dictionary to format.
     sort : bool
-        whether to sort the keys
+        whether to sort the keys.
     none :  str
-        string to be used if dictionary is empty
+        string to be used if dictionary is empty.
     link : str
-        string to be used to link the last element to the previous string
+        string to be used to link the last element to the previous string.
 
     Returns
     -------
-    String.
+    Text : str
+        String.
     """
     if len(dct) == 0:
         return str(none)
@@ -259,21 +264,21 @@ def fmt_dict( dct : dict, *, sort : bool = False, none : str = "-", link : str =
 
 def fmt_digits( integer : int, sep : str = "," ):
     """
-    String representation of `integer` with 1000 separators
-    So 10000 becomes "10,000".
+    String representation of `integer` with 1000 separators: 10000 becomes "10,000".
     
     Parameters
     --------
     integer : int
-        The number. The function will `int()` the input which allows
+        The number. The function will :func:`int()` the input which allows
         for processing of a number of inputs (such as strings) but
         might cut off floating point numbers.
     sep : str
-        Separator, "," by default
+        Separator, "," by default.
 
     Returns
     -------
-    String.
+    Text : str
+        String.
     """
     if isinstance( integer, float ):
         raise ValueError("float value provided", integer)
@@ -290,7 +295,7 @@ def fmt_big_number( number : int ) -> str:
     """
     Return a formatted big number string, e.g. 12.35M instead of all digits.
     Uses decimal system and "B" for billions.
-    Use fmt_big_byte_number for byte sizes ie 1024 units.
+    Use :func:`cdxcore.util.fmt_big_byte_number` for byte sizes i.e. 1024 units.
 
     Parameters
     ----------
@@ -299,7 +304,8 @@ def fmt_big_number( number : int ) -> str:
 
     Returns
     -------
-    String.
+    Text : str
+        String.
     """
     if isinstance( number, float ):
         raise ValueError("float value provided", number)
@@ -333,19 +339,25 @@ def fmt_big_number( number : int ) -> str:
 
 def fmt_big_byte_number( byte_cnt : int, str_B = True ) -> str:
     """
-    Return a formatted big number string, e.g. 12.35M instead of all digits.
+    Return a formatted big byte string, e.g. 12.35MB.
+    Uses 1024 as base for KB.
+    
+    Use :func:`cdxcore.util.fmt_big_number` for converting general numbers
+    using 1000 blocks instead.
 
     Parameters
     ----------
     byte_cnt : int
-        Number of bytes
+        Number of bytes.
     str_B : bool
         If true, return GB, MB and KB. If False, return G, M, K
         If `byte_cnt` is less than 10KB, then this will add 'bytes'
-        e.g. '1024 bytes'
+        e.g. '1024 bytes'.
+
     Returns
     -------
-    String.
+    Text : str
+        String.
     """
     if isinstance( byte_cnt, float ):
         raise ValueError("float value provided", byte_cnt)
@@ -390,27 +402,30 @@ def fmt_datetime(dt        : datetime.datetime, *,
     or a the respective version for time or date.
     
     Microseconds are added as digits:
-        "YYYY-MM-DD HH:MM:SS,MICROSECONDS"
+        
+    ``YYYY-MM-DD HH:MM:SS,MICROSECONDS``
         
     Optinally a time zone is added via:
-        "YYYY-MM-DD HH:MM:SS+HH"
-        "YYYY-MM-DD HH:MM:SS+HH:MM"
+        
+    ``YYYY-MM-DD HH:MM:SS+HH``
+    ``YYYY-MM-DD HH:MM:SS+HH:MM``
         
     Parameters
     ----------
-    dt : datetime, date, or time
+    dt : :class:`datetime.datetime`, :class:`datetime.date`, or :class:`datetime.time`.
         String represent this.
     sep : str
         Seperator for hours, minutes, seconds. The default ':' looks better
-        but is not suitable for filenames
+        but is not suitable for filenames.
     ignore_ms : bool
-        Whether to ignore microseconds. Default False
+        Whether to ignore microseconds. Default False.
     ignore_tz : bool
-        Whether to ignore the time zone. Default True
+        Whether to ignore the time zone. Default True.
 
     Returns
     -------
-    String, see above.
+    Text : str
+        String.
     """
     if not isinstance(dt, datetime.datetime):
         if isinstance(dt, datetime.date):
@@ -446,12 +461,12 @@ def fmt_datetime(dt        : datetime.datetime, *,
     
 def fmt_date(dt : datetime.date) -> str:
     """
-    Returns string representation for date `dt` of the form YYYY-MM-DD
-    If passed a datetime, it will extract its `date()`.    
+    Returns string representation for date `dt` of the form "YYYY-MM-DD".
+    If passed a datetime, it will extract its :func:`datetime.datetime.date`.
     """
     if isinstance(dt, datetime.datetime):
         dt = dt.date()
-    assert isinstance(dt, datetime.date), "'dt' must be datetime.date. Found %s" % type(dt)
+    assert isinstance(dt, datetime.date), "'dt' must be :class:`datetime.date`. Found %s" % type(dt)
     return f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
 
 def fmt_time(dt        : datetime.time, *,
@@ -468,25 +483,26 @@ def fmt_time(dt        : datetime.time, *,
         "HH:MM:SS+HH"
 
     If passed a datetime, it will extract its `time()`.
-    Note that while `datetime.time` objects may carry a `tzinfo` time zone object,
-    the corresponding `otcoffset()` function returns None without
-    providing a 'dt' parameter, see [tzinfo documentation](https://docs.python.org/3/library/datetime.html#tzinfo-objects).
+    Note that while :class:`datetime.time` objects may carry a ``tzinfo`` time zone object,
+    the corresponding :func:`datetime.time.otcoffset()` function returns ``None`` without
+    providing a 'dt' parameter, see `tzinfo documentation <https://docs.python.org/3/library/datetime.html#tzinfo-objects>`__.
     We bypass this inconsistency by not allowing `dt` to contain
     a time zone.
         
     Parameters
     ----------
-    dt : time
+    dt : :class:`datetime.time`
         String represent this.
     sep : str
         Seperator for hours, minutes, seconds. The default ':' looks better
-        but is not suitable for filenames
+        but is not suitable for filenames.
     ignore_ms : bool
-        Whether to ignore microseconds. Default False
+        Whether to ignore microseconds. Default False.
             
     Returns
     -------
-    String, see above.
+    Text : str
+        String.
     """
     if isinstance(dt, datetime.datetime):
         dt = dt.timetz()
@@ -500,30 +516,32 @@ def fmt_time(dt        : datetime.time, *,
 def fmt_timedelta(dt      : datetime.timedelta, *,
                   sep     : str = "" )  -> str:
     """
-    Returns string representation for a time delta in the form DD:HH:MM:SS,MS
+    Returns string representation for a time delta in the form "DD:HH:MM:SS,MS".
     
     Parameters
     ----------
-    dt : timedelta
+    dt : :class:`datetime.timedelta`
         Timedelta.
     sep :
         Identify the three separators: between days, and HMS and between microseconds:
-        ```
+        
+        .. code-block:: python
+
             DD*HH*MM*SS*MS
               0  1  1  2
-         ```
-         
-        * `sep` can be a string, in which case:
-            * If it is an empty string, all separators are ''
-            * A single character will be reused for all separators
-            * If the string has length 2, then the last character is used for '2'
-            * If the string has length 3, then the chracters are used accordingly
 
-        * `sep` can also be a collection ie a tuple or list. In this case each element is used accordingly.
+        * `sep` can be a string, in which case:
+            * If it is an empty string, all separators are ''.
+            * A single character will be reused for all separators.
+            * If the string has length 2, then the last character is used for '2'.
+            * If the string has length 3, then the chracters are used accordingly.
+
+        * `sep` can also be a collection ie a ``tuple`` or ``list``. In this case each element is used accordingly.
             
     Returns
     -------
-    String with leading sign. Returns "" if timedelta is 0.
+    Text : str
+        String with leading sign. Returns "" if `timedelta` is 0.
     """
     assert isinstance(dt, datetime.timedelta), "'dt' must be datetime.timedelta. Found %s" % type(dt)
 
@@ -586,10 +604,10 @@ def fmt_timedelta(dt      : datetime.timedelta, *,
     return f"{sign}{days}d{rest}"
 
 def fmt_now() -> str:
-    """ Returns the [fmt_datetime]() string for 'now' """
+    """ Returns the :func:`cdxcore.util.fmt_datetime` string for :func:`datetime.datetime.now` """
     return fmt_datetime(datetime.datetime.now())
 
-""" Default map from characters which cannot be used under either Windows or Linux to valid characters """
+#: Default map from characters which cannot be used for filenames under either Windows or Linux to valid characters
 DEF_FILE_NAME_MAP = {  
                  '/' : "_",
                  '\\': "_",
@@ -602,9 +620,9 @@ DEF_FILE_NAME_MAP = {
                  }
 INVALID_FILE_NAME_CHARCTERS = set(DEF_FILE_NAME_MAP)
 
-def fmt_filename( s : str , by : str = DEF_FILE_NAME_MAP ):
-    """
-    Replaces invalid filename characters by a differnet character.
+def fmt_filename( s : str , by : str | Mapping = "default" ) -> str:
+    r"""
+    Replaces invalid filename characters such as `\\', ':', or '/' by a differnet character.
     The returned string is technically a valid file name under both windows and linux.
     
     However, that does not prevent the filename to be a reserved name, for example "." or "..".
@@ -612,24 +630,23 @@ def fmt_filename( s : str , by : str = DEF_FILE_NAME_MAP ):
     Parameters
     ----------
     s : str
-        Input string
-    by : str, default=cdxcore.util.DEF_FILE_NAME_MAP
-        Either a single character or a dictionary with elements.
-        The default is `cdxcore.util.DEF_FILE_NAME_MAP`. You can access this
-        list using `fmt_filename.DEF_FILE_NAME_MAP` as well.
+        Input string.
+        
+    by : str, default="default"
+        A dictionary of characters and their replacement.
+        The default value ``"default"`` leads to using :data:`cdxcore.util.DEF_FILE_NAME_MAP`.
     
     Returns
     -------
-    Filename string
+    Text : str
+        Filename
     """
+    if not isinstance(by, Mapping):
+        assert isinstance(by, str) and str == "default", ("by: must be a Mapping or 'default'")
+        by = DEF_FILE_NAME_MAP
 
-    if isinstance(by, Mapping):
-        for c in INVALID_FILE_NAME_CHARCTERS:
-            s = s.replace(c, by[c])
-    else:
-        assert isinstance(by, str), ("by: 'str' or mapping expected", type(by))
-        for c in INVALID_FILE_NAME_CHARCTERS:
-            s = s.replace(c, by)
+    for c in INVALID_FILE_NAME_CHARCTERS:
+        s = s.replace(c, by[c])
     return s
 fmt_filename.DEF_FILE_NAME_MAP = DEF_FILE_NAME_MAP
 
@@ -649,20 +666,24 @@ def plain( inn, *, sorted_dicts : bool = False,
     Parameters
     ----------
     inn :
-        some object
+        some object.
     sorted_dicts : bool
         use SortedDicts instead of dicts. Since Python 3.7 all dictionaries are sorted anyway.
     native_np : bool
         convert numpy to Python natives.
     dt_to_str : bool
-        convert date times to strings
+        convert date times to strings.
 
+    Returns
+    -------
+    Text : str
+        Filename
     :meta::private: 
     """
     def rec_plain( x ):
         return plain( x, sorted_dicts=sorted_dicts, native_np=native_np, dt_to_str=dt_to_str )
     # basics
-    if isAtomic(inn) or inn is None:
+    if is_atomic(inn) or inn is None:
         return inn
     if isinstance(inn,(datetime.time,datetime.date,datetime.datetime)):
         return fmt_datetime(inn) if dt_to_str else inn
@@ -674,11 +695,11 @@ def plain( inn, *, sorted_dicts : bool = False,
         elif isinstance(inn, np.floating):
             return float(inn)
     # can't handle functions --> return None
-    if isFunction(inn) or isinstance(inn,property):
+    if is_function(inn) or isinstance(inn,property):
         return None
     # dictionaries
     if isinstance(inn,Mapping):
-        r  = { k: rec_plain(v) for k, v in inn.items() if not isFunction(v) and not isinstance(v,property) }
+        r  = { k: rec_plain(v) for k, v in inn.items() if not is_function(v) and not isinstance(v,property) }
         return r if not sorted_dicts else SortedDict(r)
     # pandas
     if not pd is None and isinstance(inn,pd.DataFrame):
@@ -699,10 +720,10 @@ def plain( inn, *, sorted_dicts : bool = False,
 # Misc Jupyter
 # =============================================================================
 
-def is_jupyter():
+def is_jupyter() -> bool:
     """
-    Wheher we operate in a jupter session
-    Somewhat unreliable function. Use with care
+    Whether we operate in a jupter session.
+    Somewhat unreliable function. Use with care.
     
     :meta private: 
     """
@@ -716,8 +737,9 @@ def is_jupyter():
 class TrackTiming(object):
     """
     Simplistic class to track the time it takes to run sequential tasks.
-    Usage:
+    Usage::
 
+        from cdxcore.util import TrackTiming
         timer = TrackTiming()   # clock starts
 
         # do job 1
@@ -777,12 +799,14 @@ class TrackTiming(object):
         Parameters
         ----------
         fmat : str
-            Format string. Arguments are `text`, `seconds` (as int) and `fmt_seconds` (a string)
+            Format string. Arguments are `text`, `seconds` (as int) and :func:`cdxcore.util.fmt_seconds` (a string).
         jn_fmt : str
-            String to be used between two texts
+            String to be used between two texts.
+            
         Returns
         -------
-        The combined summary string
+        Summary : str
+            The combined summary string
         """
         s = ""
         for text, seconds in self._tracked.items():
@@ -796,13 +820,12 @@ class TrackTiming(object):
 
 class Timer(object):
     """
-    Micro utility which allows keeing track of time using `with`.
- 
-    ```
-    with Timer() as t:
-        .... do somthing ...
-        print(f"This took {t}.")
-    ```
+    Micro utility which allows keeing track of time using `with`::
+
+        from cdxcore.util import Timer
+        with Timer() as t:
+            .... do somthing ...
+            print(f"This took {t}.")
     """
     
     def __init__(self):
@@ -819,22 +842,26 @@ class Timer(object):
         return self
     
     def __str__(self):
-        """ Seconds elapsed since construction or [reset][cdxcore.util.Timer.reset](), formatted using [fmt_seconds][cdxcore.util.Timer.fmt_seconds] """
+        """
+        Seconds elapsed since construction or :meth:`cdxcore.util.Timer.reset`,
+        formatted using :func:`cdxcore.util.Timer.fmt_seconds`
+        """
         return self.fmt_seconds
     
-    def interval_test( self, interval : float ):
+    def interval_test( self, interval : float ) -> bool:
         r"""
         Tests if `interval` seconds have passed.
-        If yes, reset timer and return True. Otherwise return False
+        If yes, reset timer and return True. Otherwise return False.
         
-        Usage:
-        ------
-        ```
-        tme = Timer()
-        for i in range(n):
-            if tme.test_dt_seconds(2.): print(f"\r{i+1}/{n} done. Time taken so far {tme}.", end='', flush=True)
-        print("\rDone. This took {tme}.")
-        ```
+        Usage::
+            
+            from cdxcore.util import Timer
+            tme = Timer()
+            for i in range(n):
+                if tme.test_dt_seconds(2.):
+                    print(f"\r{i+1}/{n} done. Time taken so far {tme}.", end='', flush=True)
+            print("\rDone. This took {tme}.")
+
         """
         if interval is None:
             self.intv = self.seconds
@@ -849,22 +876,24 @@ class Timer(object):
 
     @property
     def fmt_seconds(self):
-        """ Seconds elapsed since construction or [reset][cdxcore.util.Timer.reset](), formatted using [fmt_seconds][cdxcore.util.Timer.fmt_seconds] """
+        """
+        Seconds elapsed since construction or :meth:`cdxcore.util.Timer.reset`, formatted using :func:`cdxcore.util.fmt_seconds`
+        """
         return fmt_seconds(self.seconds)
 
     @property
     def seconds(self) -> float:
-        """ Seconds passed since construction or [reset][cdxcore.util.Timer.reset]() """
+        """ Seconds elapsed since construction or :meth:`cdxcore.util.Timer.reset` """
         return time.time() - self.time
 
     @property
     def minutes(self) -> float:
-        """ Minutes passed since construction or [reset][cdxcore.util.Timer.reset]() """
+        """ Minutes passed since construction or :meth:`cdxcore.util.Timer.reset` """
         return self.seconds / 60.
 
     @property
     def hours(self) -> float:
-        """ Hours passed since construction or [reset][cdxcore.util.Timer.reset]() """
+        """ Hours passed since construction or :meth:`cdxcore.util.Timer.reset` """
         return self.minutes / 60.
 
     def __exit__(self, *kargs, **wargs):

@@ -1,23 +1,54 @@
 """
-## Overview
+Overview
+--------
 
 Framework for producing unique hashes for various Python elements. Hashing is key for caching strategies and managing data pipelines effectively.
 The module contains a range of utility functions to ease implementation of pipelines and other tasks where hashes of data are required.
-A key implementatio is @[SubDir.cache][cdxcore.subdir.SubDir.cache] which implements a full versioned, hash-based caching mechanism.s
 
-The functionality here follows by default important design principles which are discussed in [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__](), such
-as
+The functionality here follows by default important design principles which are discussed in :func:`cdxcore.uniquehash.UniqueHash.__init__`,
+such as
 
-* Members of objects, and elements of dictionaries whcih start with '_' are ignored.
-
+* Members of objects, and elements of dictionaries which start with "_" are ignored.
 * Member functions of objects or dictionaries are ignored.
+* Dictionaries are assumed to be order-invariant, even though Python now
+  `maintains construction order for objects <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__
+  and therefore also objects.
 
-* Dictionaries are assumed to be order-invariant, even though Python now maintains construction order.
+Example::
 
-## Import
-```
-import cdxcore.uniquehash as uniquehash
-```
+    class A(object):
+        def __init__(self, x):
+            self.x = x
+            self._y = x*2  # protected member will not be hashed by default
+    
+    from cdxcore.uniquehash import UniqueHash
+    uniqueHash = UniqueHash(length=12)
+    a = A(2)
+    print( uniqueHash(a) ) # --> "2d1dc3767730"
+
+The module contains a few pre-defined hash functions with different hash lengths:
+    
+* :func:`cdxcore.uniquehash.unique_hash8`
+* :func:`cdxcore.uniquehash.unique_hash16`
+* :func:`cdxcore.uniquehash.unique_hash32`
+* :func:`cdxcore.uniquehash.unique_hash48`
+* :func:`cdxcore.uniquehash.unique_hash64`
+
+
+Related functionality
+---------------------
+
+:func:`cdxcore.subdir.SubDir.cache` implements a lightweight versioned, hash-based caching mechanism
+using :class:`cdxcore.uniquehash.UniqueHash`.
+
+Import
+------
+.. code-block:: python
+
+    import cdxcore.uniquehash as uniquehash
+    
+Documentation
+-------------
 """
 
 import datetime as datetime
@@ -29,12 +60,16 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import struct as struct
-from .util import isFunction, DEF_FILE_NAME_MAP, fmt_filename
-from .prettyobject import PrettyObject
+from .util import is_function, DEF_FILE_NAME_MAP, fmt_filename
+from .pretty import PrettyObject
 from .verbose import Context
 
 def _qual_name(x, with_mod=False):
-    """ Obtain a descriptive name of qualified name and module name :meta private: """
+    """
+    Obtain a descriptive name of qualified name and module name
+
+    :meta private:
+    """#@private
     q = getattr(x, '__qualname__', x.__name__)
     if with_mod:
         m = getattr(x, "__module__", None)
@@ -46,18 +81,24 @@ class DebugTrace(object):
     """
     Base class for tracing hashing operations. 
     
-    Use either [DebugTraceCollect][cdxcore.uniquehash.DebugTraceCollect] or
-    [DebugTraceVerbose][cdxcore.uniquehash.DebugTraceVerbose] for debugging. The latter prints out tracing during the computation
+    Use either :class:`cdxcore.uniquehash.DebugTraceCollect` or
+    :class:`cdxcore.uniquehash.DebugTraceVerbose` for debugging. The latter prints out tracing during the computation
     of a hash, while to former collects all this information in a simplistic data structure. Note that this can be quite memory intensive.
     """
     def _update( self, x, msg : str = None ):
-        """ Notify processing of `x`, with an optional process `msg` :meta private: """
+        """ Notify processing of `x`, with an optional process `msg`
+        :meta private:
+        """#@private
         raise NotImplementedError()        
     def _update_topic( self, x, msg : str = None ):
-        """ Notify processing of a topc `x` with message `msg`, and return a sub-trace context :meta private: """
+        """ Notify processing of a topc `x` with message `msg`, and return a sub-trace context
+        :meta private:
+        """#@private
         raise NotImplementedError()        
     def _warning( self, msg : str):
-        """ Issue warning `msg` :meta private: """
+        """ Issue warning `msg`
+        :meta private:
+        """#@private
         raise NotImplementedError()        
 
 # =============================================================================
@@ -66,8 +107,24 @@ class DebugTrace(object):
 
 class UniqueHash( object ):
     """
-    Object to compute recursively unique hashes with.
-    See [__init__][cdxcore.uniquehash.UniqueHash.__init__] for details.
+    A calculator class which computes unique hashes of a fixed length. 
+    There are a number of parameters which control the exact semantics
+    of the hashing algorithm as it iterates through collections and objects which are are
+    discussed with :meth:`cdxcore.uniquehash.UniqueHash.__init__`.
+    
+    The base use case is to only specify the length of the unique ID string to be computed::
+    
+        class A(object):
+            def __init__(self, x):
+                self.x = x
+                self._y = x*2  # protected member will not be hashed by default
+        
+        from cdxcore.uniquehash import UniqueHash
+        uniqueHash = UniqueHash(length=12)
+        a = A(2)
+        print( uniqueHash(a) ) # --> "2d1dc3767730"
+
+    The callable ``uniquehash`` can be applied to "any" Python construct.
     """
     
     def __init__(self, length                 : int = 32, *,
@@ -82,36 +139,38 @@ class UniqueHash( object ):
                        f_include_globals      : bool = True,
                        ):
         """
-        Initializes a callable object which iteratively generates hashes of length at most `length`.
+        :meta public:
+
+        Initializes the hash calculator which can iteratively generate hashes of a given length for arbitrary input.
         The algorithm is meant to be mostly hands-off, but there are a few important design choices to be aware of:
             
         **Private and Protected members**
 
-        When an object is passed to this functional its members are iterated using `__dict__` or `__slots__`, respectively.
+        When an object is passed to this functional its members are iterated using ``__dict__`` or ``__slots__``, respectively.
         By default this process ignores any fields in objects or dictionaries which starts with "_". The idea here is
         that "functional" parameters are stored as members, but any derived data is stored in protected members.
         This behaviour can be changed with `parse_underscore`.
 
         Objects can optionally implement their own hashing scheme by implementing:
-        
-            ```
+
+        .. code-block:: python
+
             __unique_hash__( self, uniqueHash : UniqueHash, debug_trace : DebugTrace  )
-            ```
             
-        This function may return a unique string, or any other non-None Python object which will then be passed to
-        [UniqueHash.__call__][cdxcore.uniquehash.UniqueHash.__call__]().
-        A common use case is to ignroe the parameters to this function and return a tuple of members of the class which are
+        This function may return a unique string, or any other non-None Python object which will then again be hashed.
+        A common use case is to ignore the parameters to this function and return a tuple of members of the class which are
         pertinent for hashing.
                 
         **Dictionaries**
         
-        Since Python 3.7 [dictionaries preserve the order in which they were constructed](https://mail.python.org/pipermail/python-dev/2017-December/151283.html).
-        However, Python semantics otherwise remain order-invariant, i.e. `{'x':1, 'y':2}` tests equal to `{'y':2',x':1}`.
+        Since Python 3.6 `dictionaries preserve the order <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__
+        in which they were constructed.
+        However, Python semantics remain otherwise order-invariant, i.e. ``{'x':1, 'y':2}`` tests equal to ``{'y':2',x':1}``.
         For this reasom the default behaviour here for dictonaries is to sort them before hasing their content. This also applies
-        to objects processed via their `__dict__`.
+        to objects processed via their ``__dict__``.
 
         This can be turned off with `sort_dicts`.
-        OrderedDicts or any classes derived from them (such as [pdct][cdxcore.prettydict.pdct])
+        OrderedDicts or any classes derived from them (such as :class:`cdxcore.prettydict.pdct`)
         are processed in order and not sorted in any case.
 
         **Functions**
@@ -129,21 +188,22 @@ class UniqueHash( object ):
         ----------
         length : int
             Intended length of the hash function.
-        parse_underscore : bool
-            How to handle object members starting with '_'.
             
-             * 'none' : ignore members starting with '_' (the default)               
-             
-             * 'protected' : ignore 'private' members declared starting with '_' and containing '__'
-             
-             * 'private' : consider all members
+        parse_underscore : bool
+            How to handle object members starting with "_".
+            
+            * ``"none"`` : ignore members starting with "_" (the default).                       
+            * ``"protected"`` : ignore 'private' members declared starting with "_" and containing "__".
+            * ``"private"`` : consider all members.
              
         sort_dicts : bool
-            From python 3.7 dictionaries are ordered. That means that strictly speaking
-            the two dictionaries `{'x':1, 'y':2}` and `{'y':2, 'x':1}` are not indentical;
-            however Python will sematicallly still assume they are as == between the two will return True.
+            Since Python 3.6 `dictionaries are ordered <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__.
+            That means that strictly speaking
+            the two dictionaries ``{'x':1, 'y':2}`` and ``{'y':2, 'x':1}`` are not indentical;
+            however Python will sematicallly still assume they are as ``==`` between the two will return True.
             Accordingly, by default this hash function assumes the order of dictionaries does _not_ 
-            matter unless the are `OrderedDict`s. Practically that means the function first sorts the keys of mappings before
+            matter unless the are, or are derived from, :class:`OrderedDict` (as is :class:`cdxcore.prettydict.pdct`).
+            Practically that means the function first sorts the keys of mappings before
             hashing their items. 
             
             This can be turned off by setting `sort_dicts=False`.
@@ -152,19 +212,19 @@ class UniqueHash( object ):
             If True, then the function will attempt to generate unique hashes for functions.
                 
         pd_ignore_column_order : bool
-            _Advanced parameter_.
+            (Advanced parameter).
             Whether to ingore the order of panda columns. The default is True.
         np_nan_equal : bool
-            _Advanced parameter_.
+            (Advanced parameter).
             Whether to ignore the specific type of a NaN. The default is False.
         f_include_defaults : bool
-            _Advanced parameter_.
+            (Advanced parameter).
             When parsing functions whether to include default values. Default is True.
         f_include_closure : bool
-            _Advanced parameter_.
+            (Advanced parameter).
             When parsing functions whether to include the function colusure. This can be expensive. Default is True.
         f_include_globals : bool
-            _Advanced parameter_.
+            (Advanced parameter).
             When parsing functions whether to include globals used by the function. This can be expensicve. Default is False.
         """
         self.length             = int(length)
@@ -203,32 +263,43 @@ class UniqueHash( object ):
         """ Return copy of `self`. """
         return UniqueHash( **{ k:v for k,v in self.__dict__.items() if not k[:1] == "_"} )
 
-    def __call__(self, *args, debug_trace : DebugTrace = None, **kwargs):
+    def __call__(self, *args, debug_trace : DebugTrace = None, **kwargs) -> str:
         """
-        Returns a unique hash for the parameters passed to this function.
-
-        Hashing can have curious side effect, in particular when handling objects and functions.
-        For this reason this function allows tracing all hashing activity using its debug_trace
-        parameter.
+        :meta public:
+            
+        Returns a unique hash for the `arg` and `kwargs` parameters passed to this function.
         
+        Example::
+            
+            class A(object):
+                def __init__(self, x):
+                    self.x = x
+                    self._y = x*2  # protected member will not be hashed by default
+            
+            from cdxcore.uniquehash import UniqueHash
+            uniqueHash = UniqueHash(12)
+            a = A(2)
+            print( uniqueHash(a) ) # --> "2d1dc3767730"
+            
         Parameters
         ----------
         args, kwargs:
             Parameters to hash.
-        debug_trace : DebugTrace
-            Allows tracing of hashing activity.
-            Two classes derived from [DebugTrace][cdxcore.uniquehash.DebugTrace] are available:
-                
-            * [DebugTraceVerbose][cdxcore.uniquehash.DebugTraceVerbose] simply prints out hashing activity to stdout.
             
-            * [DebugTraceCollect][cdxcore.uniquehash.DebugTraceCollect] collects an array of tracing information.
-                    The object itself is an iterable which contains
-                    the respective tracing information.
+        debug_trace : :class:`cdxcore.uniquehash.DebugTrace`
+            Allows tracing of hashing activity for debugging purposes.
+            Two implementations of ``DebugTrace`` are available:
+                
+            * :class:`cdxcore.uniquehash.DebugTraceVerbose` simply prints out hashing activity to stdout.
+            
+            * :class:`cdxcore.uniquehash.DebugTraceCollect` collects an array of tracing information.
+              The object itself is an iterable which contains the respective tracing information
+              once the hash function has returned.
         
         Returns
         -------
-        Hash, str:
-            Hash of at most length `length`
+        Hash : str
+            String of at most `length`
         """
         h, _ = self._mk_blake( h=self.length//2 )
         if len(args) > 0:
@@ -358,7 +429,7 @@ class UniqueHash( object ):
             self._hash_any(h, x.total_seconds(), debug_trace=debug_trace )
             return
         # functions
-        if isFunction(x) or isinstance(x,property):
+        if is_function(x) or isinstance(x,property):
             if self.parse_functions:
                 self._hash_function( h, x, debug_trace=debug_trace )
             elif not debug_trace is None:
@@ -654,28 +725,9 @@ class DebugTraceCollect(DebugTrace):
     """
     Keep track of everything parsed during hashing.
     
-    The result of the trace is contained in `self.trace`. This list contains [pdct][cdx.prettydict.pdct] objects
-    with the following fields:
-        
-    * if `tostr` is a positive integer:
-        
-        * `typex`: type of the element
+    The result of the trace is contained in :attr:`cdxcore.uniquehash.DebugTraceCollect.trace`.
     
-        * `reprx`: `repr` of the element, up to `tostr` length.
-    
-        * `msg`: message occured during hashing if any
-
-        * `child`: if the element was a container or object
-    
-    * if `tostr` is None:
-    
-        * `x`: the element
-        
-        * `msg`: message occured during hashing if any
-        
-        * `child`: if the element was a container or object
-        
-    Note that `DebugTraceCollect` itself implements `Collection` and `Sequence` semantics
+    Note that `DebugTraceCollect` itself implements :class:`Collection` and :class:`Sequence` semantics
     so you can iterate it directly.
     """
     def __init__(self, tostr : int = None ):
@@ -685,7 +737,7 @@ class DebugTraceCollect(DebugTrace):
         Parameters
         ----------
         tostr: int
-            If set to a positive integer, then any object encountered will be represented as a string with `repr`,
+            If set to a positive integer, then any object encountered will be represented as a string with :func:`repr`,
             and the length of the string will be limited to `tostr`. This avoids generation of large amounts
             of data if the objects hashed are large (e.g. numpy arrays).
             
@@ -693,9 +745,25 @@ class DebugTraceCollect(DebugTrace):
         """
         if tostr and tostr<=0: raise ValueError("'tostr' must be None or a positive integer")
         self.tostr = tostr
+        
+        #: Trace of the hashing operation.
+        #: Upon completion of :meth:`cdxcore.uniquehash.UniqueHash.__call__` this list contains
+        #: elemenets of the following type:
+        #:
+        #: * if `tostr` is a positive integer:
+        #:    * `typex`: type of the element
+        #:    * `reprx`: `repr` of the element, up to `tostr` length.
+        #:    * `msg`: message occured during hashing if any
+        #:    * `child`: if the element was a container or object
+        #:
+        #: * if `tostr` is ``None``:    
+        #:    * `x`: the element
+        #:    * `msg`: message occured during hashing if any
+        #:    * `child`: if the element was a container or object
         self.trace = []     
     def _mupdate( self, x, msg, child ):
-        """ Notify processing of 'x', with an optional process 'msg' :meta private: """
+        """ Notify processing of 'x', with an optional process 'msg'
+        :meta private: """#@private
         if self.tostr:
             y = PrettyObject(   typex = type(x),
                                 reprx = repr(x)[:self.tostr],
@@ -707,15 +775,18 @@ class DebugTraceCollect(DebugTrace):
                                 child = child )
         self.trace.append( y )        
     def _update( self, x, msg : str = None ):
-        """ Notify processing of `x`, with an optional process `msg` :meta private: """
+        """ Notify processing of `x`, with an optional process `msg`
+        :meta private: """#@private
         self._mupdate( x, msg, None )
     def _update_topic( self, x, msg : str = None ):
-        """ Notify and return a sub-trace context :meta private: """
+        """ Notify and return a sub-trace context
+        :meta private: """#@private
         child = DebugTraceCollect(tostr=self.tostr)
         self._mupdate( x, msg, child )
         return child
     def _warning( self, msg : str):
-        """ Issue warning """
+        """ Issue warning
+        :meta private: """
         self._update( None, msg, None )
         
     # results
@@ -735,27 +806,29 @@ class DebugTraceCollect(DebugTrace):
         
 class DebugTraceVerbose(DebugTrace):
     """
-    Live printing of tracing information with [cdxcore.verbose.Context][].
+    Live printing of tracing information with :class:`cdxcore.verbose.Context`.
     for some formatting. All objects will be reported by type and
     their string representation, sufficiently reduced if necessary.
     """
     def __init__(self, strsize : int = 50, verbose : Context = None ):
         """
         Initialize tracer.
-        
+
         Parameters
         ----------
         strsize : int
-            Maximum string size when using `repr()` on reported objects.
-        verbose :
-            Context object or None for a new context object.
+            Maximum string size when using :func:`repr` on reported objects.
+        verbose : :class:`cdxcore.verbose.Context`
+            Context object or ``None`` for a new context object.
         """                
         from .verbose import Context
         if strsize<=3: ValueError("'strsize' must exceed 3")
         self.strsize = strsize
         self.verbose = Context("all") if verbose is None else verbose
     def _update( self, x, msg : str = None ):
-        """ Notify processing of 'x', with an optional process 'msg' :meta private: """
+        """ Notify processing of 'x', with an optional process 'msg'
+        :meta private:
+        """#@private
         xstr = repr(x)
         if xstr[:1] == "'" and xstr[-1] == "'":
             xstr = xstr[1:-1]
@@ -766,53 +839,55 @@ class DebugTraceVerbose(DebugTrace):
         else:
             self.verbose.write( f"{msg} {type(x).__name__}: '{xstr}'" )
     def _update_topic( self, x, msg : str = None ):
-        """ Notify and return a sub-trace context :meta private: """
+        """ Notify and return a sub-trace context
+        :meta private:
+        """#@private
         self._update( x, msg )
         return DebugTraceVerbose( self.strsize, self.verbose(1) )    
     def _warning( self, msg : str):
-        """ Issue warning :meta private: """
+        """ Issue warning
+        :meta private:"""#@private
         self.verbose.write( msg )
                 
 # =============================================================================
 # Utility wrappers
 # =============================================================================
 
-def uniqueHashExt(**parameters) -> UniqueHash:
-    """ Function wrapper aroud [UniqueHash][cdxcore.uniquehash.UniqueHash] """
-    return UniqueHash(**parameters)
-uniqueHashExt.__doc__ = UniqueHash.__init__.__doc__
-
-def namedUniqueHashExt( max_length       : int = 60,
-                        id_length        : int = 16,  *,
-                        separator        : str = ' ',
-                        filename_by      : str = None,
-                        **unique_hash_arguments
-                        ):
+def NamedUniqueHash( max_length       : int = 60,
+                     id_length        : int = 16,  *,
+                     separator        : str = ' ',
+                     filename_by      : str = None,
+                     **unique_hash_arguments 
+                     ) -> Callable:
     """
-    Returns a function 
+    Generate user-readable unique hashes and filenames.    
     
-    ```
-        f( label, **argv, **argp )
-    ```
-    
-    which generates unique strings of at most a length of `max_length` of the format
-    ```
-        label + separator + ID
-    ```
-    where ID has length `id_length`.
+    Returns a function::
+        
+        f( label, *args, **kwargs )
 
+    which generates unique strings of at most a length of `max_length` of the format ``label + separator + ID``
+    where ID has length `id_length`. Since `label` heads the resulting string this function is suited for
+    use cases where a user might want an indication what a hash refers to.
+
+    This function does not suppose that `label` is unqiue, hence the ID is prioritized.
+    See :func:`cdxcore.uniquehash.UniqueLabel` for a function which assumes the label is unique.
+    
     The maximum length of the returned string is `max_length`; if need be `label` will be truncated: 
     the returned string will always end in `ID`.
 
-    This function does not suppose that `label` is unqiue, hence the ID is prioritized.
-    See `uniqueLabelExt()` for a function which assumes the label is unique.
-    
     The function optionally makes sure that the returned string is a valid file name using
-    [fmt_filename][cdxcore.util.fmt_filename]().
+    :func:`cdxcore.util.fmt_filename`.
 
-    Important
-    ---------
-    It is *strongly recommended* to read the documentation for [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__]() for details on hashing logic
+    **Short Cut**
+    
+    Consider :func:`cdxcore.verbose.named_unique_filename48_8` if the defaults used
+    for that function are suitable for your use case.
+
+    **Important**
+
+    It is *strongly recommended* to read the documentation for
+    :meth:`cdxcore.uniquehash.UniqueHash.__init__` for details on hashing logic
     and the available parameters
 
     Parameters
@@ -821,24 +896,23 @@ def namedUniqueHashExt( max_length       : int = 60,
         Total length of the returned string including the ID.
         Defaults to 60 to allow file names with extensions with three letters.
     id_length : int
-        Intended length of the hash function, default 16
+        Intended length of the hash `ID`, default 16
     separator : str
         Separator between `label` and `id_length`.
         Note that the separator will be included in the ID calculation, hence different separators
         lead to different IDs.
     filename_by : str
-        If not None, use [fmt_filename][cdxcore.util.fmt_filename]( *, by=filename_by ) to ensure the returned string is a valid
+        If not ``None``, use :class:`cdxcore.util.fmt_filename` with ``by=filename_by`` to ensure the returned string is a valid
         filename for both windows and linux, of at most `max_length` size.
-        If set to the string "default", use [DEF_FILE_NAME_MAP][cdxcore.util.DEF_FILE_NAME_MAP]
-        as the default mapping for [fmt_filename][cdxcore.util.fmt_filename]().
+        If set to the string ``default``, use :data:`cdxcore.util.DEF_FILE_NAME_MAP`
+        as the default mapping for :func:`cdxcore.util.fmt_filename`.
     **unique_hash_arguments:
-        Parameters passed to [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__]().
+        Parameters passed to :meth:`cdxcore.uniquehash.UniqueHash.__init__`.
 
     Returns
     -------
-    uniqueHash : Callable
-        hash function with signature `(label, *args, **kwargs)`.
-        All arguments including `label` and `separator` will be used to generate the hash key.
+    uniqueHash : :class:`Callable`
+        hash function with signature ``(label, *args, **kwargs)``.        
     """
     if id_length < 4: raise ValueError("'id_length' must be at least 4. Found {id_length}")
     if id_length > max_length: raise ValueError(f"'max_length' must not be less than 'id_length'. Founb {max_length} and {id_length}, respectivelty")
@@ -863,30 +937,34 @@ def namedUniqueHashExt( max_length       : int = 60,
         return label
     return named_unique_hash
 
-def uniqueLabelExt(     max_length       : int = 60,
-                        id_length        : int = 8,
-                        separator        : str = ' ',
-                        filename_by      : str = None ):
+def UniqueLabel(     max_length       : int = 60,
+                     id_length        : int = 8,
+                     separator        : str = ' ',
+                     filename_by      : str = None ) -> Callable:
     """
-    Returns a function 
-    ```
+    Returns a function:: 
+        
         f( unique_label )
-    ```
-    which generates strings of at most `max_length` of the format:
-    ```
-    If len(unique_label) <= max_length:
-        unique_label
-    else:
-        unique_label + separator + ID
-    ```
-    where the ID is of maximum length `id_length`.
+
+    which generates strings of at most `max_length`
+    based on a provided `unique_label`; essentially:
+    
+    .. code-block:: python
+
+        If len(unique_label) <= max_length:
+            unique_label
+        else:
+            unique_label + separator + ID
+
+    where ``ID`` is a unqiue hash computed from `unique_label` of maximum length `id_length`.
 
     This function assumes that `unique_label` is unique, hence the ID is dropped if `unique_label` is less than `max_length`.
-    Use [namedUniqueHashExt][cdxcore.uniquehash.namedUniqueHashExt]() if the label is not unique, and which therefore always appends the ID.
+    Use :func:`cdxcore.uniquehash.NamedUniqueHash` if the label is not unique, and which therefore always appends the 
+    dynamically calculated unique ID.
 
     Note that if `filename_by` conversion is used, then this function will always attach the unique ID to the filename because
-    after the reduction of the label to a filename it is no longer guaranteed that the filename is unique. If your label is unique as a filename, do not
-    use `filename_by`. The function will return valid file names if label is a valid file name.
+    after the conversion of the label to a filename it is no longer guaranteed that the result is unique. If your label is unique as a filename, do not
+    use `filename_by`. The function will return valid file names if `label` is a valid file name.
 
     Parameters
     ----------
@@ -901,15 +979,15 @@ def uniqueLabelExt(     max_length       : int = 60,
         Note that the separator will be included in the ID calculation, hence different separators
         lead to different IDs.
     filename_by : str
-        If not None, use [fmt_filename][cdxcore.util.fmt_filename]( *, by=filename_by ) to ensure the returned string is a valid
+        If not ``None``, use :func:`cdxcore.util.fmt_filename`( *, by=filename_by ) to ensure the returned string is a valid
         filename for both windows and linux, of at most `max_length` size.
-        If set to the string "default", use [DEF_FILE_NAME_MAP][cdxcore.util.DEF_FILE_NAME_MAP]
-        as the default mapping for [fmt_filename][cdxcore.util.fmt_filename]().
+        If set to the string "default", :data:`cdxcore.util.DEF_FILE_NAME_MAP`
+        as the default mapping for :func:`cdxcore.util.fmt_filename`.
 
     Returns
     -------
-    Hash function : Callable
-        Hash function with signature `(unique_label)`.
+    Hash function : :class:`Callable`
+        Hash function with signature ``(unique_label)``.
     """
     if id_length < 4: raise ValueError("'id_length' must be at least 4. Found {id_length}")
     if id_length > max_length: raise ValueError(f"'max_length' must not be less than 'id_length'. Founb {max_length} and {id_length}, respectivelty")
@@ -943,59 +1021,88 @@ def uniqueLabelExt(     max_length       : int = 60,
 # Short cuts
 # =============================================================================
 
-def uniqueHash8( *args, **argv ) -> str:
+def unique_hash8( *args, **kwargs ) -> str:
     """
-    Short-cut for the hash function returned by [UniqueHash][cdxcore.uniquehash.UniqueHash]
-    with parameter `length=8`.
+    Short-cut for the hash function returned by :class:`cdxcore.uniquehash.UniqueHash`
+    with parameter ``length=8``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__]() around
+    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
     elements starting with `_` or function members.
+    
+    :meta private:
     """
-    return UniqueHash(8)(*args,**argv)
+    return UniqueHash(8)(*args,**kwargs)
 
-def uniqueHash16( *args, **argv ) -> str:
+def unique_hash16( *args, **kwargs ) -> str:
     """
-    Short-cut for the hash function returned by [UniqueHash][cdxcore.uniquehash.UniqueHash]
-    with parameter `length=16`.
+    Short-cut for the hash function returned by :class:`cdxcore.uniquehash.UniqueHash`
+    with parameter ``length=16``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__]() around
+    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
     elements starting with `_` or function members.
     """
-    return UniqueHash(16)(*args,**argv)
+    return UniqueHash(16)(*args,**kwargs)
 
-def uniqueHash32( *args, **argv ) -> str:
+def unique_hash32( *args, **kwargs ) -> str:
     """
-    Short-cut for the hash function returned by [UniqueHash][cdxcore.uniquehash.UniqueHash]
-    with parameter `length=32`.
+    Short-cut for the hash function returned by :class:`cdxcore.uniquehash.UniqueHash`
+    with parameter ``length=32``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__]() around
+    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
     elements starting with `_` or function members.
     """
-    return UniqueHash(32)(*args,**argv)
+    return UniqueHash(32)(*args,**kwargs)
 
-uniqueHash = uniqueHash32
-
-def uniqueHash48( *args, **argv ) -> str:
+def unique_hash48( *args, **kwargs ) -> str:
     """
-    Short-cut for the hash function returned by [UniqueHash][cdxcore.uniquehash.UniqueHash]
-    with parameter `length=48`.
+    Short-cut for the hash function returned by :class:`cdxcore.uniquehash.UniqueHash`
+    with parameter ``length=48``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__]() around
+    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
     elements starting with `_` or function members.
     """
-    return UniqueHash(48)(*args,**argv)
+    return UniqueHash(48)(*args,**kwargs)
 
-def uniqueHash64( *args, **argv ) -> str:
+def unique_hash64( *args, **kwargs ) -> str:
     """
-    Short-cut for the hash function returned by [UniqueHash][cdxcore.uniquehash.UniqueHash]
-    with parameter `length=64`.
+    Short-cut for the hash function returned by :class:`cdxcore.uniquehash.UniqueHash`
+    with parameter ``length=64``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in [UniqueHash.__init__][cdxcore.uniquehash.UniqueHash.__init__]() around
+    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
     elements starting with `_` or function members.
     """
-    return UniqueHash(64)(*args,**argv)
+    return UniqueHash(64)(*args,**kwargs)
+
+def named_unique_filename48_8( label : str, *args, **kwargs ) -> str:
+    """
+    Returns a unique and valid filename which is composed of `label` and a unique ID
+    computed using all of `label`, `args`, and `kwargs`.
+    
+    Consider a use cases where an experiment defined by ``definition``
+    has produced ``results`` which we wish to :mod:`pickle` to disk.
+    Assume further that ``str(definition)`` provides an
+    informative user-readable but
+    not necessarily unique description of ``definition``.
+    
+    Pseudo-Code::
+        
+        def store_experiment( num : int, definition : object, results : object ):
+            label    = f"Experiment {str(definition)}"
+            filename = named_unique_hash48_8( label, (num, definition) )
+            with open(filename, "wb") as f:
+                pickle.dumps(results)
+    
+    This is the hash function returned by :class:`cdxcore.uniquehash.NamedUniqueHash`
+    with parameters ``max_length=48, id_length=8, filename_by="default"``.
+
+    *Important* please make sure you aware of the functional considerations
+    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
+    elements starting with `_` or function members.
+    """
+    return NamedUniqueHash( max_length=48, id_length=8, filename_by="default" )
+    

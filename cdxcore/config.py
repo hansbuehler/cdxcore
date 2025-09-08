@@ -1,50 +1,436 @@
 """
-config
-Utility object for ML project configuration
-Hans Buehler 2022
+Overview
+--------
+
+Tooling for setting up program-wide configuration hierachies.
+Aimed at machine learning programs to ensure consistency of code accross experimentation.
+
+**Basic config construction**::
+
+    from cdxbasics.config import Config, Int
+    config = Config()
+    config.num_batches = 1000    # object-like assigment of config values
+    config.network.depth = 3     # on-the-fly hierarchy generation: here `network` becomes a sub-config
+    config.network.width = 100    
+    ...
+    
+    def train(config):
+        num_batches = config("num_batches", 10, Int>=2, "Number of batches. Must be at least 2")
+        ...
+    
+**Key features:**
+
+* Detect misspelled parameters by checking that all parameters provided via a  `config` by a user have been read.
+
+* Provide summary of all parameters used, including summary help for what they were for.
+
+* Nicer object attribute synthax than dictionary notation, in particular for nested configurations.
+
+* Automatic conversion including simple value validation to ensure user-provided values are within
+  a given range or from a list of options.
+
+Creating Configs
+^^^^^^^^^^^^^^^^
+
+Set data with both dictionary and member notation::
+        
+    config = Config()
+    config['features']           = [ 'time', 'spot' ]   # examplearray-type assignment
+    config.scaling               = [ 1., 1000. ]        # example object-type assignment
+
+Reading a Config
+^^^^^^^^^^^^^^^^^
+
+When reading the value for a ``key`` from a config, :meth:`cdxcore.config.Config.__call__`
+expects a ``key``, a ``default`` value, a ``cast`` type, and a brief ``help`` text.
+The function first attempts to find ``key`` in the provided `Config`:
+
+* If ``key`` is found, it casts the value provided for ``key`` using the ``cast`` type and returns.
+
+* If ``key`` is not found, then the default value will be returned (after also being cast using ``cast``).
+
+Example::
+    
+    from cdxcore.config import Config
+    import numpy as np
+    
+    class Model(object):
+        def __init__( self, config ):
+            # read top level parameters
+            self.features = config("features", [], list, "Features for the agent" )
+            self.scaling  = config("scaling", [], np.asarray, "Scaling for the features", help_default="no scaling")
+        
+    model = Model( config )
+
+Most of the example is self-explanatory, but note that
+the :class:'numpy.asarray` provided as ``cast`` parameter for
+``weights`` means that any values passed by the user will be automatically
+converted to :class:`numpy.ndarray` objects.
+
+The ``help`` text parameter allows providing information on what variables
+are read from the config. The latter can be displayed using the function
+:meth:`cdxcore.config.Config.usage_report`. (There a number of further parameters to
+:meth:`cdxcore.config.Config.__call__` to fine-tune this report such as the ``help_defaults``
+parameter used above).
+
+In the above example, ``print( config.usage_report() )`` will return::
+
+    config['features'] = ['time', 'spot'] # Features for the agent; default: []
+    config['scaling'] = [   1. 1000.] # Weigths for the agent; default: no initial weights
+    
+Sub-Configs
+^^^^^^^^^^^
+
+You can write and read sub-configurations directly with member notation, without having
+to explicitly create an entry for the sub-config:
+
+Assume as before::
+    
+    config = Config()
+    config['features']           = [ 'time', 'spot' ]   
+    config.scaling               = [ 1., 1000. ]        
+
+Then create a ``network`` sub configuration with member notation on the fly::
+        
+    config.network.depth         = 10
+    config.network.width         = 100
+    config.network.activation    = 'relu'
+
+This is equivalent to::
+
+    config.network               = Config()
+    config.network.depth         = 10
+    config.network.width         = 100
+    config.network.activation    = 'relu'
+
+Now use naturally as follows::
+
+    from cdxcore.config import Config
+    import numpy as np
+    
+    class Network(object):
+        def __init__( self, config ):
+            self.depth      = config("depth", 1, Int>0, "Depth of the network")
+            self.width      = config("width", 1, Int>0, "Width of the network")
+            self.activation = config("activation", "selu", str, "Activation function")
+            config.done() # see below
+    
+    class Model(object):
+        def __init__( self, config ):
+            # read top level parameters
+            self.features = config("features", [], list, "Features for the agent" )
+            self.weights  = config("weights", [], np.asarray, "Weigths for the agent", help_default="no initial weights")
+            self.networks = Network( config.network )
+            config.done() # see below
+            
+    model = Model( config )
+  
+Imposing Simple Restrictions on Values
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``cast`` parameter to :meth:`cdxcore.config.Config.__call__` is a callable; this allows imposing
+simple restrictions to any values read from a config.
+To this end, import the respective type operators::
+
+    from cdxcore.config import Int, Float
+
+Implement a one-sided restriction::
+
+    # example enforcing simple conditions
+    self.width = network('width', 100, Int>3, "Width for the network")
+
+Restrictions on both sides of a scalar::
+
+    # example encorcing two-sided conditions
+    self.percentage = network('percentage', 0.5, ( Float >= 0. ) & ( Float <= 1.), "A percentage")
+
+Enforce the value being a member of a list::
+
+    # example ensuring a returned type is from a list
+    self.ntype = network('ntype', 'fastforward', ['fastforward','recurrent','lstm'], "Type of network")
+
+We can allow a returned value to be one of several casting types by using tuples.
+The most common use case is that ``None`` is a valid value, too.
+For example, assume that the ``name`` of the network model should be a string or ``None``.
+This is implemented as::
+
+    # example allowing either None or a string
+    self.keras_name = network('name', None, (None, str), "Keras name of the network model")
+
+We can combine conditional expressions with the tuple notation::
+
+    # example allowing either None or a positive int
+    self.batch_size = network('batch_size', None, (None, Int>0), "Batch size or None for TensorFlow's default 32", help_cast="Positive integer, or None")
+
+Ensuring that we had no Typos & that all provided Data is meaningful
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A common issue when using dictionary-based code configuration is that we might misspell one of the parameters.
+Unless this is a mandatory parameter we might not notice that we have not actually
+changed its value.
+
+To check that all values of a `config` were read use :meth:`cdxcore.config.Config.done`.
+It will alert you if there are keywords or children which have not been read.
+Most likely, those will be typos. Consider the following example where ``width`` is misspelled in our config::
+
+    class Network(object):
+        def __init__( self, config ):
+            # read top level parameters
+            self.depth     = config("depth", 1, Int>=1, "Depth of the network")
+            self.width     = config("width", 3, Int>=1, "Width of the network")
+            self.activaton = config("activation", "relu", help="Activation function", help_cast="String with the function name, or function")
+            config.done() # <-- test that all members of config where read
+
+    config                       = Config()
+    config.features              = ['time', 'spot']
+    config.network.depth         = 10
+    config.network.activation    = 'relu'
+    config.network.widht         = 100   # (intentional typo)
+
+    n = Network(config.network)
+
+Since ``width`` was misspelled in setting up the config,
+a :class:`cdxcore.config.NotDoneError` exception is raised::
+
+    NotDoneError: Error closing Config 'config.network': the following config arguments were not read: widht
+    
+    Summary of all variables read from this object:
+    config.network['activation'] = relu # Activation function; default: relu
+    config.network['depth'] = 10 # Depth of the network; default: 1
+    config.network['width'] = 3 # Width of the network; default: 3
+
+Note that you can also call :meth:`cdxcore.config.Config.done` at top level::
+
+    class Network(object):
+        def __init__( self, config ):
+            # read top level parameters
+            self.depth     = config("depth", 1, Int>=1, "Depth of the network")
+            self.width     = config("width", 3, Int>=1, "Width of the network")
+            self.activaton = config("activation", "relu", help="Activation function", help_cast="String with the function name, or function")
+
+    config                       = Config()
+    config.features              = ['time', 'spot']
+    config.network.depth         = 10
+    config.network.activation    = 'relu'
+    config.network.widht         = 100   # (intentional typo)
+
+    n = Network(config.network)
+    test_features = config("features", [], list, "Features for my network")
+    config.done()
+
+produces::
+
+    NotDoneError: Error closing Config 'config.network': the following config arguments were not read: widht
+
+    Summary of all variables read from this object:
+    config.network['activation'] = relu # Activation function; default: relu
+    config.network['depth'] = 10 # Depth of the network; default: 1
+    config.network['width'] = 3 # Width of the network; default: 3
+    # 
+    config['features'] = ['time', 'spot'] # Features for my network; default: []
+
+You can check the status of the use of the config by using the :attr:`cdxcore.config.Config.not_done` property.
+
+Detaching Child Configs
+^^^^^^^^^^^^^^^^^^^^^^^
+
+You can also detach a child config,
+which allows you to store it for later use without triggering :meth:`cdxcore.config.Config.done` errors::
+    
+        def read_config(  self, confg ):
+            ...
+            self.config_training = config.training.detach()
+            config.done()
+
+The function  :meth:`cdxcore.config.Config.detach` will mark he original child but not the detached
+child itself as 'done'.
+Therefore, we will need to call :meth:`cdxcore.config.Config.done` for the detached child
+when we finished processing it::
+
+        def training(self):
+            epochs     = self.config_training("epochs", 100, int, "Epochs for training")
+            batch_size = self.config_training("batch_size", None, help="Batch size. Use None for default of 32" )
+
+            self.config_training.done()
+            
+Various Copy Operations
+^^^^^^^^^^^^^^^^^^^^^^^
+
+When making a copy of a `config` we will need to decide about the semantics of the operation.
+A :class:`cdxcore.config.Config` object contains
+
+* **Inputs**: the user's input hierarchy. This is accessible via :attr:`cdxcore.config.Config.children` and
+  :meth:`cdxcore.config.Config.keys`.
+  
+  All copy operations share (and do not modify) the user's input.
+  See also :meth:`cdxcore.config.Config.input_report`.
+  
+* **Done Status**: to check whether all parameters provided by the users are read by some code `config` keeps
+  track of which parameters were read with :meth:`cdxcore.config.Config.__call__`. This list is
+  checked against when :meth:`cdxcore.config.Config.done` is called.
+  
+  This list of elements
+  not yet read can be obtained using :meth:`cdxcore.config.Config.input_dict`.
+  
+* **Consistency**: a :class:`cdxcore.config.Config` object makes sure that if a parameter is requested
+  twice with :meth:`cdxcore.config.Config.__call__` then the respective ``default`` and ``help`` values
+  are consistency between function calls. This avoids typically divergence of code where one
+  part of code assumes a different default value than another.
+  
+  Recorded consistency information are accessible via 
+  :attr:`cdxcore.config.Config.recorder`.
+  
+  Note that you can read a parameter "quietly" without recording any usage by using the ``[]`` operator.
+  
+Accordingly, when making a copy of ``self`` we need to determine the relationship of the copy with
+above.
+  
+* :meth:`cdxcore.config.Config.detach`: use case is deferring usage of a config to a later point.
+
+  * *Done status*: ``self`` is marked as "done"; the copy is used keep track of usage of the remaining parameters.
+  
+  * *Consistency*: both ``self`` and the copy share the same consistency recorder.
+  
+* :meth:`cdxcore.config.Config.copy`: make an indepedent copy of the current status of ``self``.
+
+  * *Done status*: the copy has an inpendent copy of the "done" status of ``self``.
+  
+  * *Consistency*: the copy has an inpendent copy of the consistency recorder of ``self``.
+  
+* :meth:`cdxcore.config.Config.clean_copy`: make an indepedent copy of ``self``, and 
+  reset all usage information.
+
+  * *Done status*: the copy has an empty "done" status.
+  
+  * *Consistency*: the copy has an empty consistency recorder.
+  
+* :meth:`cdxcore.config.Config.shallow_copy`: make a shallow copy which shares all
+  future usage tracking with ``self``. 
+  
+  The copy acts as a view on ``self``. This is the semantic of the copy constructor.
+
+  * *Done status*: the copy and ``self`` share all "done" status; if a parameter is read with one, it is considered
+    "done" by both.
+  
+  * *Consistency*: the copy and ``self`` share all consistency handling. If a parameter is read with one with a given
+    ``default`` and ``help``, the other must use the same values when accessing the same parameter.
+
+
+Self-Recording All Available Configuration Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Once your program ran, you can read the summary of all values read, their defaults, and their help texts::
+
+        print( config.usage_report( with_cast=True ) )
+        
+Prints::
+
+        config.network['activation'] = relu # (str) Activation function for the network; default: relu
+        config.network['depth'] = 10 # (int) Depth for the network; default: 10000
+        config.network['width'] = 100 # (int>3) Width for the network; default: 100
+        config.network['percentage'] = 0.5 # (float>=0. and float<=1.) Width for the network; default: 0.5
+        config.network['ntype'] = 'fastforward' # (['fastforward','recurrent','lstm']) Type of network; default 'fastforward'
+        config.training['batch_size'] = None # () Batch size. Use None for default of 32; default: None
+        config.training['epochs'] = 100 # (int) Epochs for training; default: 100
+        config['features'] = ['time', 'spot'] # (list) Features for the agent; default: []
+        config['weights'] = [1 2 3] # (asarray) Weigths for the agent; default: no initial weights
+
+Unique Hash
+^^^^^^^^^^^
+
+Another common use case is that we wish to cache the result of some complex operation. 
+Assuming that the `config` describes all relevant parameters, and is therefore a valid `ID` for
+the data we wish to cache, we can use :meth:`cdxcore.config.Config.unique_hash`
+to obtain a unique hash ID for the given config.
+
+:class:`cdxcore.config.Config` also implements
+the custom hashing protocol ``__unique_hash__`` defined by :class:`cdxcore.uniquehash.UniqueHash`,
+which means that if a ``Config`` is used during a hashing function from :mod:`cdxcore.uniquehash`
+the config will be hashed correctly.
+
+A fully transparent caching framework which supports code versioning and transparent
+hashing of function parameters is implemented with :meth:`cdxcore.subdir.SubDir.cache`.
+
+Consistent ** kwargs Handling
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The `Config` class can be used to improve ``** kwargs`` handling.
+Assume we have::
+
+        def f(** kwargs):
+            a = kwargs.get("difficult_name", 10)
+            b = kwargs.get("b", 20)
+
+We run the usual risk of a user mispronouncing a parameter name which we would never know.
+Therefore we may improve upon the above with::
+
+        def f(**kwargs):
+            kwargs = Config(kwargs)
+            a = kwargs("difficult_name", 10)
+            b = kwargs("b", 20)
+            kwargs.done()
+
+If now a user calls ``f`` with, say, ``config(difficlt_name=5)`` an error will be raised.
+
+A more advanced pattern is to allow both ``config`` and ``kwargs`` function parameters. In this case, the user
+can both provide a ``config`` or specify its parameters directory::
+
+        def f( config=None, **kwargs):
+            config = Config.config_kwargs(config,kwargs)
+            a = config("difficult_name", 10, int)
+            b = config("b", 20, int)
+            config.done()
+            
+Any of the following function calls are now valid::
+    
+        f( Config(difficult_name=11, b=21) )        # use a Config
+        f( difficult_name=12, b=22 )                # use a kwargs
+        f( Config(difficult_name=11, b=21), b=22 )  # use both; kwargs overwrite config values
+            
+Dataclasses
+^^^^^^^^^^^
+
+:mod:`dataclasses` rely on default values of any member being "frozen" objects, which most user-defined objects and
+:class:`cdxcore.config.Config` objects are not.
+This limitation applies as well to `flax <https://flax-linen.readthedocs.io/en/latest/api_reference/flax.linen/module.html>`__ modules.
+To use non-frozen default values, use the
+:meth:`cdxcore.config.Config.as_field` function::
+
+    from cdxcore.config import Config
+    from dataclasses import dataclass
+    
+    @dataclass
+    class Data:
+    	data : Config = Config().as_field()
+    
+        def f(self):
+            return self.data("x", 1, Int>0, "A positive integer")
+    
+    d = Data()   # default constructor used.
+    d.f()
+
+Import
+------
+.. code-block:: python
+
+    from cdxcore.config import Config
 """
 
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Mapping, Callable
 from sortedcontainers import SortedDict
 import dataclasses as dataclasses
+from dataclasses import Field
 from .err import verify, warn_if
 from .uniquehash import UniqueHash, DebugTrace
-from .prettydict import PrettyDict as pdct
+from .pretty import PrettyObject as pdct
 from .util import fmt_list
 
 class _ID(object):
     pass
 
-class NotDoneError( RuntimeError ):
-    """
-    Raised when done() finds that some arguments have not been read.
-    Those arguments are accessible via the 'not_done' attribute
-    """
-    def __init__(self, not_done, message):
-        self.not_done = not_done
-        RuntimeError.__init__(self, message)
-
-class InconsistencyError( RuntimeError ):
-    """
-    Raised when __call__ used inconsistently for a given parameter, ie when the defaults are different.
-    Such inconsistencies must be fixed for safe usage of any configuration strategy.
-    """
-    def __init__(self, field, message ):
-        self.field = field
-        RuntimeError.__init__(self, message)
-        
-class CastError( RuntimeError ):
-    """
-    Raised when __call__ could not cast a value provided by the user to the specified type
-    """
-    def __init__(self, *, config_name : str, key_name : str, exception : Exception):
-        header = f"Error in cast definition for key '{key_name}' in config '{config_name}': " if len(config_name) > 0 else f"Error in cast definition for key '{key_name}': "
-        RuntimeError.__init__(self, header+str(exception))
-        self.config_name = config_name
-        self.key_name    = key_name
-
-no_default = _ID()    #@private creates a unique object which can be used to detect if a default value was provided
+#: Value indicating no default is available for a given parameter.
+no_default = _ID()    
 
 # ==============================================================================
 #
@@ -54,85 +440,45 @@ no_default = _ID()    #@private creates a unique object which can be used to det
 
 class Config(OrderedDict):
     """
-    A simple Config class.
-    Main features
+    A simple `Config` class for hierarchical dictionary-like configurations but with type checking, detecting
+    missspelled parameters, and simple built-in help.
 
-    Write:
-        
-        Set data as usual:
-            config = Config()
-            config['features']  = [ 'time', 'spot' ]
-            config['weights']   = [ 1, 2, 3 ]
-
-        Use member notation
-            config.network.samples    = 10000
-            config.network.activation = 'relu'
-
-    Read:
-
-        def read_config( confg ):
-            features = config("features", [], list )          # reads features and returns a list
-            weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
-
-            network  = config.network
-            samples  = network('samples', 10000)              # networks samples
-            config.done()                                     # returns an error as we haven't read 'network.activitation'
-
-    Detaching child configs
-    You can also detach a child config, which allows you to store it for later
-    use without triggering done() errors for its parent.
-
-        def read_config( confg ):
-            features = config("features", [], list )          # reads features and returns a list
-            weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
-
-            network  = config.network.detach()
-            samples  = network('samples', 10000)              # networks samples
-            config.done()                                     # no error as 'network' was detached
-            network.done()                                    # error as network.activation was not read
-
-    Self-recording "help"
-    When reading a value, specify an optional help text:
-
-        def read_config( confg ):
-
-            features = config("features", [], list, help="Defines the features" )
-            weights  = config("weights", [], np.ndarray, help="Network weights" )
-
-            network  = config.network
-            samples  = network('samples', 10000, int, help="Number of samples")
-            activt   = network('activation', "relu", str, help="Activation function")
-            config.done()
-
-            config.usage_report()   # prints help
+    See :mod:`cdxcore.config` for an extensive discussion of features.
     """
 
     def __init__(self, *args, config_name : str = None, **kwargs):
         """
-        See help(Config) for a description of this class.
+        Create a :class:`cdxcore.config.Config`.
         
-        Two patterns:
+        See ``help(Config)`` for a description of this class 
+        and :mod:`cdxcore.config` for an extensive discussion of its features.
+        
+        Two patterns::
+            
             __init__(config):
-                is the copy constructor; see copy()
-        or
+                is the copy constructor; see shallow_copy()
+                
+        or::
             __init__( dict, x=1, y=2 ):
                 creates a new config by first iteratively loading all positional dictionary arguments,
                 and then copying the keyword arguments as provided.
             
-        See also Config.config_kwargs().
+        See also :func:`cdxcore.config.Config.config_kwargs`.
 
         Parameters
         ----------
             *args : list
                 List of dictionaries to create a new config with, iteratively.
+                
                 If the first element is a config, and no other parameters are passed,
-                then this object will be full copy of that config.
-                It then shares all usage recording. See copy().
+                then this object will be a shallow copy of that config.
+                It then shares all usage recording. See :meth:`cdxcore.config.Config.shallow_copy`.
+                
             config_name : str, optional
                 Name of the configuration for report_usage. Default is 'config'
+                
             **kwargs : dict
-                Used to initialize the config, e.g.
-                Config(a=1, b=2)
+                Additional key/value pairs to initialize the config with, e.g.``Config(a=1, b=2)``.
         """
         if len(args) == 1 and isinstance(args[0], Config) and config_name is None and len(kwargs) == 0:
             source               = args[0]
@@ -159,45 +505,52 @@ class Config(OrderedDict):
 
     @property
     def config_name(self) -> str:
-        """ Returns the fully qualified name of this config """
+        """ Qualified name of this config. """
         return self._name
 
     @property
     def children(self) -> OrderedDict:
-        """ Returns dictionary of children """
+        """ Dictionary of the child configs of ``self``. """
         return self._children
 
     def __str__(self) -> str:
-        """ Print myself as dictionary """
+        """ Print myself as dictionary. """
         s = self.config_name + str(self.as_dict(mark_done=False))
         return s
 
     def __repr__(self) -> str:
-        """ Print myself as reconstructable object """
+        """ Print myself as reconstructable object. """
         s = repr(self.as_dict(mark_done=False))
         s = "Config( **" + s + ", config_name='" + self.config_name + "' )"
         return s
 
     @property
     def is_empty(self) -> bool:
-        """ Checks whether any variables have been set """
-        return len(self) + len(self._children) == 0
-
+        """ Whether any parameters have been set, at parent level or at any child level. """
+        if len(self) > 0:
+            return False
+        for c in self._children.values():
+            if not c.is_empty:
+                return False
+        return True
+    
     # conversion
     # ----------
 
     def as_dict(self, mark_done : bool = True ) -> dict:
         """
-        Convert into dictionary of dictionaries
+        Convert ``self`` into a dictionary of dictionaries.
 
         Parameters
         ----------
             mark_done : bool
-                If True, then all members of this config will be considered read ('done').
+                If True, then all members of this config will be considered "done" 
+                upon return of this function.
 
         Returns
         -------
-            Dict of dict's
+            Dict : dict
+                Dictionary of dictionaries.
         """
         d = { key : self.get(key) if mark_done else self.get_raw(key) for key in self }
         for n, c in self._children.items():
@@ -208,31 +561,62 @@ class Config(OrderedDict):
             d[n] = c
         return d
     
-    def as_field(self) -> dataclasses.Field:
+    def as_field(self) -> Field:
         """
-        Returns a ConfigField wrapped around self for dataclasses and flax nn.Mpodule support.
-        See ConfigField documentation for an example.
+        This function provides support for :class:`dataclasses.dataclass` fields
+        with ``Config`` default values.
+        
+        When adding a field with a non-frozen default value to a ``@dataclass`` class,
+        a ``default_factory`` has to be provided.
+        The function ``as_field`` returns the corresponding :class:`dataclasses.Field`
+        element by returning simply::
+            
+            def factory():
+                return self
+            return dataclasses.field( default_factory=factory )
+            
+        Usage is as follows::
+            
+            from dataclasses import dataclass
+            @dataclass 
+            class A:
+                data : Config = Config(x=2).as_field()
+
+            a = A() 
+            print(a.data['x'])  # -> "2"
+            a = A(data=Config(x=3)) 
+            print(a.data['x'])  # -> "3"
         """
-        return ConfigField(self)
+        def factory():
+            return self
+        return dataclasses.field( default_factory=factory )
 
     # handle finishing config use
     # ---------------------------
 
     def done(self, include_children : bool = True, mark_done : bool = True ):
         """
-        Closes the config and checks that no unread parameters remain.
-        By default this function also validates that all child configs were "done" and raises a NotDoneError() if not the case
-        (NotDoneError is derived from RuntimeError).
+        Closes the config and checks that no unread parameters remain. This is used
+        to detect typos in configuration files.
         
-        If you want to make a copy of a child config for later processing use detach() first
+        Raises a
+        :class:`cdxcore.config.NotDoneError` if there are unused parameters in ``self``.
+        
+        Consider this example::
+
             config = Config()
             config.a = 1
             config.child.b = 2
 
             _ = config.a # read a
-            config.done()   # error because confg.child.b has not been read yet
+            child = config.child
+            config.done()     # error because config.child.b has not been read yet
+            
+            print( child.b )
 
-        Instead use:
+        This example raises an error because ``config.child.b`` was not read. If you wish to process
+        the sub-config ``config.child`` later, use :meth:`cdxcore.config.Config.detach`::
+
             config = Config()
             config.a = 1
             config.child.b = 2
@@ -241,25 +625,40 @@ class Config(OrderedDict):
             child = config.child.detach()
             config.done()   # no error, even though confg.child.b has not been read yet
 
-        You can force 'done' status by calling mark_done()
+            print( child.b )
+            child.done()    # need to call done() for the child
+
+        By default this function also validates that all child configs were "done".
+
+        **See Also**
+
+        * :meth:`cdxcore.config.Config.mark_done` marks all parameters as "done" (used).
+        
+        * :meth:`cdxcore.config.Config.reset_done` marks all parameters as "not done".
+        
+        * :meth:`cdxcore.config.Config.clean_copy` makes a copy of ``self`` without any usage information.
+        
+        * Introduction to the various copy operations in :mod:`cdxcore.config`.
 
         Parameters
         ----------
-            include_children:
-                Validate child configs, too.
+            include_children: bool
+                Validate child configs, too. Stronly recommended default.
             mark_done:
                 Upon completion mark this config as 'done'.
-                This stops it being modified; subsequent calls to done() will be successful.
+                This stops it being modified; that also means subsequent calls to done() will be successful.
                 
         Raises
         ------
-            NotDoneError if not all elements were read.
+            :class:`cdxcore.config.NotDoneError`
+                If not all elements were read.
         """
         inputs = set(self)
         rest   = inputs - self._done
         if len(rest) > 0:
-            raise NotDoneError( rest, f"Error closing Config '{self._name}': the following config arguments were not read: {fmt_list(rest)}\n\n"\
-                                      f"Summary of all variables read from this object:\n{self.usage_report(filter_path=self._name)}" )
+            raise NotDoneError( rest, self.config_name,
+                                      f"Error closing Config '{self._name}': the following config arguments were not read: {fmt_list(rest)}\n\n"\
+                                      f"Summary of all variables read from this object:\n{self.usage_report(filter_path=self.config_name)}" )
         if include_children:
             for _, c in self._children.items():
                 c.done(include_children=include_children,mark_done=False)
@@ -269,24 +668,33 @@ class Config(OrderedDict):
 
     def reset(self):
         """
-        Reset all usage information
+        Reset all usage information.
 
-        Use reset_done() to only reset the information whether a key was used, but to keep information on previously used default values.
-        This avoids inconsistency in default values between function calls.
+        Use :meth:`cdxcore.config.Config.reset_done` to only reset the information whether a key was used,
+        but to keep consistency information on previously used default and/or help values.
         """
         self._done.clear()
         self._recorder.clear()
 
     def reset_done(self):
         """
-        Reset the internal list of which are 'done', e.g. read.
-        This function does not reset the recording of previous uses of each key. This ensures consistency of default values between uses of keys.
-        Use reset() to reset both 'done' and create a new recorder.
+        Reset the internal list of which are "done" (used).
+        
+        Typically "done" means that a parameter
+        has been read using :meth:`cdxcore.config.Config.call`.
+        
+        This function does not reset the consistency recording of previous uses of each key.
+        This ensures consistency of default values between uses of keys.
+        Use :meth:`cdxcore.config.Config.reset` to reset all "done" and reset all usage records.
+        
+        See also the summary on various copy operations in :mod:`cdxcore.config`.
         """
         self._done.clear()
 
     def mark_done(self, include_children : bool = True ):
-        """ Mark all members as being read. Once called calling done() will no longer trigger an error """
+        """
+        Mark all members as "done" (having been used).
+        """
         self._done.update( self )
         if include_children:
             for _, c in self._children.items():
@@ -298,6 +706,7 @@ class Config(OrderedDict):
     def _detach( self,  *, mark_self_done : bool, copy_done : bool, new_recorder ):
         """
         Creates a copy of the current config, with a number of options how to share usage information.
+        
         Use the functions
             detach()
             copy()
@@ -343,81 +752,110 @@ class Config(OrderedDict):
 
     def detach( self ):
         """
-        Returns a copy of 'self': the purpose of this function is to defer using a config to a later point, while maintaining consistency of usage.
+        Returns a copy of ``self``, and sets ``self`` to "done".
+        
+        The purpose of this function is to defer using a config (often a sub-config) to a later point,
+        while maintaining consistency of usage.
 
-        - The copy has the same 'done' status at the time of calling detach. It does not share 'done' afterwards since 'self' will be marked as done.
-        - The copy shares the recorded to keep track of consistency of usage
-        - The function flags 'self' as done
+        * The copy has the same "done" status as ``self`` at the time of calling ``detach()``.
 
-        For example:
+        * The copy shares usage consistency checks with ``self``, i.e. if the same parameter is
+          read with different ``default`` or ``help`` values an error is raised.
+
+        * The function flags ``self`` as "done" using :meth:`cdxcore.config.Config.mark_done`.
+
+        For example::
 
             class Example(object):
-
+            
                 def __init__( config ):
-
                     self.a      = config('a', 1, Int>=0, "'a' value")
                     self.later  = config.later.detach()  # detach sub-config
                     self._cache = None
                     config.done()
-
+                
                 def function(self):
                     if self._cache is None:
                         self._cache = Cache(self.later)  # deferred use of the self.later config. Cache() calls done() on self.later
                     return self._cache
+ 
+        See also the summary on various copy operations in :mod:`cdxcore.config`.
 
-        See also the examples in Deep Hedging which make extensive use of this feature.
+        Returns
+        -------
+            copy : Config
+                A copy of ``self``.
         """
         return self._detach(mark_self_done=True, copy_done=True, new_recorder="share")
 
     def copy( self ):
         """
-        Return a copy of 'self': the purpose of this function is to create a copy of the current state of 'self', which is then independent of 'self'
-        -- The copy shares a copy of the 'done' status of 'self'
-        -- The copy has a copy of the usage of 'self', but will not share furhter usage
-        -- 'self' will not be flagged as 'done'
+        Return a fully independent copy of ``self``.
+        
+        * The copy has an independent "done" status of ``self``.
+        
+        * The copy has an independent usage consistency status.
+        
+        * ``self`` will remain untouched. In particular, in contrast to :meth:`cdxcore.config.Config.detach`
+          it will not be set to "done".
 
-        As an example, this allows using different default values for
-        config members of the same name:
+        As an example, the following allows using different default values for
+        config members of the same name::
 
             base = Config()
-            base.a = 1
-            _ = base('a', 1)  # use a
+            _ = base('a', 1)   # read a with default 1
 
             copy = base.copy() # copy will know 'a' as used with default 1
+                               # 'b' was not used yet
 
-            _ = base("x", 1)
-            _ = copy("x", 2) # will not fail, as usage tracking is not shared after copy()
+            _ = base('b', 111) # read 'b' with default 111
+            _ = copy('b', 222) # read 'b' with default 222 -> ok
+        
+            _ = copy('a', 2)   # use 'a' with default 2 -> will fail
+            
+        Use :meth:`cdxcore.config.Config.clean_copy` for making a copy which discards any prior
+        usage information.
 
-            _ = copy('a', 2) # will fail, as default value differs from previous use of 'a' prior to copy()
+        See also the summary on various copy operations in :mod:`cdxcore.config`.
         """
         return self._detach( mark_self_done=False, copy_done=True, new_recorder="copy" )
 
     def clean_copy( self ):
         """
-        Return a copy of 'self': the purpose of this function is to create a clean, unused copy of 'self'.
+        Make a copy of ``self``, and reset it to the original input state from the user.
 
-        As an example, this allows using different default values for
-        config members of the same name:
+        As an example, the following allows using different default values for
+        config members of the same name::
 
             base = Config()
-            base.a = 1
-            _ = base('a', 1)  # use a
+            _ = base('a', 1)   # read a with default 1
 
             copy = base.copy() # copy will know 'a' as used with default 1
+                               # 'b' was not used yet
 
-            _ = base("x", 1)
-            _ = copy("x", 2) # will not fail, as no usage is shared
+            _ = base('b', 111) # read 'b' with default 111
+            _ = copy('b', 222) # read 'b' with default 222 -> ok
+        
+            _ = copy('a', 2)   # use 'a' with default 2 -> ok
 
-            _ = copy('a', 2) # will not fail, as no usage is shared
+        Use :meth:`cdxcore.config.Config.copy` for a making a copy which
+        tracks prior usage information.
+
+        See also the summary on various copy operations in :mod:`cdxcore.config`.
+
         """
         return self._detach( mark_self_done=False, copy_done=False, new_recorder="clean" )
 
-    def clone(self):
+    def shallow_copy( self ):
         """
-        Return a copy of 'self' which shares all usage tracking with 'self'.
-        -- The copy shares the 'done' status of 'self'
-        -- The copy shares the 'usage' status of 'self'
-        -- 'self' will not be flagged as 'done'
+        Return a shallow copy of ``self`` which shares all usage tracking with ``self``
+        going forward.
+        
+        * The copy shares the "done" status of ``self``.
+        
+        * The copy shares all consistency usage status of ``self``.
+        
+        * ``self`` will not be flagged as 'done'
         """
         return Config(self)
 
@@ -426,92 +864,121 @@ class Config(OrderedDict):
 
     def __call__(self, key          : str,
                        default      = no_default,
-                       cast         : type = None,
+                       cast         : Callable = None,
                        help         : str = None,
                        help_default : str = None,
                        help_cast    : str = None,
                        mark_done    : bool = True,
                        record       : bool = True ):
         """
-        Reads 'key' from the config. If not found, return 'default' if specified.
+        Reads a parameter ``key`` from the `config` subject to casting with ``cast``.
+        If not found, return ``default``
 
-            config("key")                      - returns the value for 'key' or if not found raises an exception
-            config("key", 1)                   - returns the value for 'key' or if not found returns 1
-            config("key", 1, int)              - if 'key' is not found, return 1. If it is found cast the result with int().
-            config("key", 1, int, "A number"   - also stores an optional help text.
-                                                 Call usage_report() after the config has been read to a get a full
-                                                 summary of all data requested from this config.
+        Examples::
+
+            config("key")                      # returns the value for 'key' or if not found raises an exception
+            config("key", 1)                   # returns the value for 'key' or if not found returns 1
+            config("key", 1, int)              # if 'key' is not found, return 1. If it is found cast the result with int().
+            config("key", 1, int, "A number"   # also stores an optional help text.
+                                               # Call usage_report() after the config has been read to a get a full
+                                               # summary of all data requested from this config.
                                                  
-        Advanced casting
-        ----------------
-        
-            Int, Float allow to bind the range of numbers:
-                config("positive_int", 1, Int>=1, "A positive integer")
-                config("ranged_int", 1, (Int>=0)&(Int<=10), "An integer between 0 and 10, inclusive")
-                config("positive_float", 1, Float>0., "A positive integerg"
+        Use :attr:`cdxcore.config.Int` and :attr:`cdxcore.config.Float` to ensure a number
+        is within a given range::
+              
+            config("positive_int", 1, Int>=1, "A positive integer")
+            config("ranged_int", 1, (Int>=0)&(Int<=10), "An integer between 0 and 10, inclusive")
+            config("positive_float", 1, Float>0., "A positive integerg"
 
-            Choices are implemented with lists:
-                config("difficulty", 'easy', ['easy','medium','hard'], "Choose one")
+        Choices are implemented with lists::
+            
+            config("difficulty", 'easy', ['easy','medium','hard'], "Choose one")
                 
-            Alternative types are implemented with tuples:
-                config("difficulty", None, (None, ['easy','medium','hard']), "None or a level of difficulty")
-                config("level", None, (None, Int>=0), "None or a non-negative level")
+        Alternative types are implemented with tuples::
+
+            config("difficulty", None, (None, ['easy','medium','hard']), "None or a level of difficulty")
+            config("level", None, (None, Int>=0), "None or a non-negative level")
 
         Parameters
         ----------
             key : string
-                Keyword to read
+                Keyword to read.
+                
             default : optional
                 Default value.
-                Set to 'Config.no_default' to avoid defaulting. If then 'key' cannot be found a KeyError is raised.
-            cast : object, optional
-                If None, any value will be acceptable.
-                If not None, the function will attempt to cast the value provided with the provided value.
-                E.g. if cast = int, then it will run int(x)
-                This function now also allows passing the following complex arguemts:
-                    * A list, in which case it is assumed that the 'key' must be from this list. The type of the first element of the list will be used to cast values
-                    * Int or Float which allow defining constrained integers and floating numbers.
-                    * A tuple of types, in which case any of the types is acceptable. A None here means that the value 'None' is acceptable (it does not mean that any value is acceptable)
+                Set to :attr:`cdxcore.config.Config.no_default` for mandatory parameters without default.
+                If then 'key' cannot be found a :class:`KeyError` is raised.
+                
+            cast : Callable, optional
+
+                If ``None``, any value provided by the user will be acceptable.
+                
+                If not ``None``, the function will attempt to cast the value provided by the user
+                with ``cast()``.
+                For example, if ``cast = int``, then the function will apply ``int(x)`` to the user's input ``x``.
+                
+                This function also allows passing the following complex arguments:
+                    
+                * A list, in which case it is assumed that the ``key`` must be from this list. The type of the first element of the list will be
+                  used to ``cast()`` values to the target type.
+                
+                * :attr:`cdxcore.config.Int` and :attr:`cdxcore.config.Float` allow defining constrained integers and floating point numbers, respectively.
+                
+                * A tuple of types, in which case any of the types is acceptable.
+                  A ``None`` here means that the value ``None`` is acceptabl
+                  (it does not mean that any value is acceptable).
+                
+                * Any callable to validate a parameter.
+                                
             help : str, optional
                 If provied adds a help text when self documentation is used.
             help_default : str, optional
                 If provided, specifies the default value in plain text.
-                If not provided, help_default is equal to the string representation of the default value, if any.
+                If not provided, ``help_default`` is equal to the string representation of the ``default`` value, if any.
                 Use this for complex default values which are hard to read.
             help_cast : str, optional
                 If provided, specifies a description of the cast type.
-                If not provided, help_cast is set to the string representation of 'cast', or "None" if 'cast' is None. Complex casts are supported.
-                Use this for complex cast types which are hard to read.
+                If not provided, ``help_cast`` is set to the string representation of ``cast``, or
+                ``None`` if ``cast` is ``None``. Complex casts are supported.
+                Use this for cast types which are hard to read.
             mark_done : bool, optional
-                If true, marks the respective element as read.
+                If true, marks the respective element as read once the function returned successfully.
             record : bool, optional
-                If True, records usage of the key and validates that previous usage of the key is consistent with
+                If True, records consistency usage of the key and validates that previous usage of the key is consistent with
                 the current usage, e.g. that the default values are consistent and that if help was provided it is the same.
 
         Returns
         -------
-            Value.
+            Parameter value.
             
         Raises
         ------
-            KeyError
-                if 'key' could not be found.
-            InconsistencyError
-                if 'key' was previously accessed with different default, help, help_default or help_cast values.
-                For all the help texts empty strings are not compared, ie __call__("x", default=1) will succeed even if a previous call was  __call__("x", default=1, help="value for x").
-                Note that 'cast' is not validated.
-            CastError:
-                If an error occcurs casting a provided value.
-            ValueError:
+            :class:`KeyError`:
+                If ``key`` could not be found.
+                
+            :class:`ValueError`:
                 For input errors.
+
+            :class:`cdxcore.config.InconsistencyError`:
+                If ``key`` was previously accessed with different ``default``, ``help``, ``help_default`` or 
+                ``help_cast`` values.
+                For all the help texts empty strings are not compared, i.e.
+                ``__call__("x", default=1)`` will succeed even if a previous call was
+                ``__call__("x", default=1, help="value for x")``.
+                
+                Note that ``cast`` is not validated.
+
+            :class:`cdxcore.config.CastError`:
+                If an error occcurs casting a provided value.
+
         """
         verify( isinstance(key, str), "'key' must be a string but is of type '{typ}'. Key value was '{key}'", typ=type(key), key=key, exception=ValueError )
-        verify( key.find('.') == -1 , "Error using Config '{name}': key name cannot contain '.'; found '{key}'", name=self._name, key=key, exception=ValueError  )
+        verify( key.find('.') == -1 , "Error using Config '{name}': key name cannot contain '.'; found '{key}'", name=self.config_name, key=key, exception=ValueError  )
 
         # determine raw value
         if not key in self:
             if default == no_default:
-                raise KeyError(key, "Error using config '%s': key '%s' not found " % (self._name, key))
+                raise KeyError(key, "Error using config '%s': key '%s' not found " % (self.config_name, key))
             value = default
         else:
             value = OrderedDict.get(self,key)
@@ -529,7 +996,7 @@ class Config(OrderedDict):
             assert False, "Casters should not throw CastError's"
             raise e
         except Exception as e:
-            raise CastError( config_name=self._name, key_name=key, exception=e )
+            raise CastError( key=key, config_name=self._name, exception=e )
 
         # mark key as read
         if mark_done:
@@ -545,7 +1012,7 @@ class Config(OrderedDict):
         help_default  = str(help_default) if not help_default is None else ""
         help_default  = str(default) if default != no_default and len(help_default) == 0 else help_default
         help_cast     = str(help_cast) if not help_cast is None else str(caster)
-        verify( default != no_default or help_default == "", "Config %s setup error for key %s: cannot specify 'help_default' if no default is given", self._name, key, exception=ValueError  )
+        verify( default != no_default or help_default == "", "Config %s setup error for key %s: cannot specify 'help_default' if no default is given", self.config_name, key, exception=ValueError  )
 
         raw_use       = help == "" and help_cast == "" and help_default == "" # raw_use, e.g. simply get() or []. Including internal use
 
@@ -581,17 +1048,18 @@ class Config(OrderedDict):
 
         # Both current and past were bona fide recorded uses.
         # Ensure that their usage is consistent.
+        # Note that we do *not* check consistency of the cast operator.
         if default != no_default:
             if 'default' in exst_value:
                 if exst_value['default'] != default:
-                    raise InconsistencyError(key, "Key '%s' of config '%s' (%s) was read twice with different default values '%s' and '%s'" % ( key, self._name, record_key, exst_value['default'], default ))
+                    raise InconsistencyError(key, self.config_name, "Key '%s' of config '%s' (%s) was read twice with different default values '%s' and '%s'" % ( key, self.config_name, record_key, exst_value['default'], default ))
             else:
                 exst_value['default'] = default
 
         if help != "":
             if exst_value['help'] != "":
                 if exst_value['help'] != help:
-                    raise InconsistencyError(key, "Key '%s' of config '%s' (%s) was read twice with different 'help' texts '%s' and '%s'" % ( key, self._name, record_key, exst_value['help'], help ) )
+                    raise InconsistencyError(key, self.config_name, "Key '%s' of config '%s' (%s) was read twice with different 'help' texts '%s' and '%s'" % ( key, self.config_name, record_key, exst_value['help'], help ) )
             else:
                 exst_value['help'] = help
 
@@ -599,14 +1067,14 @@ class Config(OrderedDict):
             if exst_value['help_default'] != "":
                 # we do not insist on the same 'help_default'
                 if exst_value['help_default'] != help_default:
-                    raise InconsistencyError(key, "Key '%s' of config '%s' (%s) was read twice with different 'help_default' texts '%s' and '%s'" % ( key, self._name, record_key, exst_value['help_default'], help_default ) )
+                    raise InconsistencyError(key, self.config_name, "Key '%s' of config '%s' (%s) was read twice with different 'help_default' texts '%s' and '%s'" % ( key, self.config_name, record_key, exst_value['help_default'], help_default ) )
             else:
                 exst_value['help_default'] = help_default
 
         if help_cast != "" and help_cast != _Simple.STR_NONE_CAST:
             if exst_value['help_cast'] != "" and exst_value['help_cast'] != _Simple.STR_NONE_CAST:
                 if exst_value['help_cast'] != help_cast:
-                    raise InconsistencyError(key, "Key '%s' of config '%s' (%s) was read twice with different 'help_cast' texts '%s' and '%s'" % ( key, self._name, record_key, exst_value['help_cast'], help_cast ))
+                    raise InconsistencyError(key, self.config_name, "Key '%s' of config '%s' (%s) was read twice with different 'help_cast' texts '%s' and '%s'" % ( key, self.config_name, record_key, exst_value['help_cast'], help_cast ))
             else:
                 exst_value['help_cast'] = help_cast
         # done
@@ -630,10 +1098,10 @@ class Config(OrderedDict):
             config = Config()
             config.sub.x = 1  # <-- create 'sub' on the fly
         """
-        verify( key.find('.') == -1 , "Error using Config '{name}': key name cannot contain '.'; found '{key}", name=self._name, key=key, exception=ValueError )
+        verify( key.find('.') == -1 , "Error using Config '{name}': key name cannot contain '.'; found '{key}", name=self.config_name, key=key, exception=ValueError )
         if key in self._children:
             return self._children[key]
-        verify( key.find(" ") == -1, "Error using Config '{name}': sub-config names cannot contain spaces. Found '{key}'", name=self._name, key=key, exception=ValueError )
+        verify( key.find(" ") == -1, "Error using Config '{name}': sub-config names cannot contain spaces. Found '{key}'", name=self.config_name, key=key, exception=ValueError )
         config = Config()
         config._name              = self._name + "." + key
         config._recorder          = self._recorder
@@ -642,93 +1110,120 @@ class Config(OrderedDict):
 
     def get(self, *kargs, **kwargs ):
         """
-        Returns __call__(*kargs, **kwargs)
-        """
-        return self(*kargs, **kwargs)
-
-    def get_default(self, *kargs, **kwargs ):
-        """
-        Returns __call__(*kargs, **kwargs)
+        Returns :meth:`cdxcore.config.Config.__call__` ``(*kargs, **kwargs)``.
         """
         return self(*kargs, **kwargs)
 
     def get_raw(self, key : str, default = no_default ):
         """
-        Reads the respectitve element without marking the element as read, and without recording access to the element.        
-        Equivalent to __call__(key, default, mark_done=False, record=False )
+        Reads the raw value for ``key`` without any casting,
+        nor marking the element as read, nor recording access to the element.        
+        
+        Equivalent to using 
+        :meth:`cdxcore.config.Config.__call__` ``(key, default, mark_done=False, record=False )``
+        which, without ``default``, is turn itself equivalent to ``self[key]``
         """
         return self(key, default, mark_done=False, record=False)
 
     def get_recorded(self, key : str ):
         """
-        Returns the recorded used value of key, e.g. the value returned when the config was used:
-            If key is part of the input data, return that value
-            If key is not part of the input data, and a default was provided when the config was read, return the default.
-        This function:
-            Throws a KeyError if the key was never read successfully from the config (e.g. it is not used in the calling stack)
+        Returns the casted value returned for ``key`` previously.
+        
+        If the parameter ``key`` was provided as part of the input data, this value is returned, subject
+        to casting.
+        
+        If ``key`` was not part of the input data, and a ``default`` was provided when the
+        parameter was read with :meth:`cdxcore.config.Config.__call__`, then return this default value, subject
+        to casting.
+
+        Raises
+        ------
+            :class:`KeyError`:
+                If the key was not previously read successfully.
         """
-        verify( key.find('.') == -1 , "Error using Config '{name}': key name cannot contain '.'; found '{key}", name=self._name, key=key, exception=ValueError )
+        verify( key.find('.') == -1 , "Error using Config '{name}': key name cannot contain '.'; found '{key}", name=self.config_name, key=key, exception=ValueError )
         record_key    = self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
         record        = self._recorder.get(record_key, None)
         if record is None:
             raise KeyError(key)
         return record['value']
 
-    def keys(self):
+    def keys(self) -> list:
         """
-        Returns the keys for the immediate keys of this config.
-        This call will *not* return the names of config children
+        Returns the keys for the immediate parameters of this config.
+        This call will *not* return the names of child config; use :attr:`cdxcore.config.Config.children`.
+        
+        Use :meth:`cdxcore.config.Config.input_dict` to obtain the full hierarchy of input parameters.
         """
         return OrderedDict.keys(self)
 
     # Write
     # -----
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key : str, value):
         """
-        Assign value using member notation, i.e. self.key = value
-        Identical to self[key] = value
-        Do not use leading underscores for config variables, see below
+        Assign value using member notation: ``self.key = value``.
+        
+        Identical to ``self[key] = value``.
+        Do not use leading underscores for `config` variables, see below
 
         Parameters
         ----------
             key : str
-                Key to store. Note that keys with underscores are *not* stored as standard values,
-                but become classic members of the object (self.__dict__)
-            value :
-                If value is a Config object, them its usage information will be reset, and
-                the recorder will be set to the current recorder.
-                This way the following works as expected
+                ``key`` to store ``value`` for.
 
-                    config = Config()
-                    sub    = Config(a=1)
-                    config.sub = sub
-                    a      = config.sub("a", 0, int, "Test")
+                Key to store. Note that keys starting with underscores are *not* stored as standard
+                parameter values,
+                but become classic members of the object (in ``self.__dict__``).
+                
+            value :
+                The value for ``key``.
+            
+                If ``value`` is a ``Config`` object, then a child config is created::
+
+                    config     = Config()
+                    config.sub = Config(a=1)
+                    a          = config.sub("a", 0, int, "Test")
                     config.done() # <- no error is reported, usage_report() is correct
+                    
+                *Expert Usage Comment:*
+                this function assumes that if ``value`` is a config it is not used elsewhere.
+                In particular its usage will be reset, and its consistency recorder aligned
+                with ``self``. To avoid side effects for `config`s you wish to re-use elsewhere,
+                call :meth:`cdxcore.config.Config.clean_copy` first.                    
         """
         self.__setitem__(key,value)
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key : str, value):
         """
-        Assign value using array notation, i.e. self[key] = value
-        Identical to self.key = value
+        Assign a ``value`` to ``key`` using array notation ``self[key] = value``.
+                
+        Identical to ``self.key = value``.
 
         Parameters
         ----------
             key : str
-                Key to store. Note that keys with underscores are *not* stored as standard values,
-                but become classic members of the object (self.__dict__)
-                'key' may contain '.' for hierarchical access.
-            value :
-                If value is a Config object, them its usage information will be reset, and
-                the recorder will be set to the current recorder.
-                This way the following works as expected
+                ``key`` to store ``value`` for.
+                
+                Key to store. Note that keys starting with underscores are *not* stored as standard
+                parameter values,
+                but become classic members of the object (in ``self.__dict__``).
 
-                    config = Config()
-                    sub    = Config(a=1)
-                    config.sub = sub
-                    a      = config.sub("a", 0, int, "Test")
+                ``key`` may contain '.' for hierarchical access.
+
+            value :
+                If ``value`` is a ``Config`` object, then a child config is created::
+
+                    config     = Config()
+                    config.sub = Config(a=1)
+                    a          = config.sub("a", 0, int, "Test")
                     config.done() # <- no error is reported, usage_report() is correct
+                    
+                *Expert Usage Comment:*
+                this function assumes that if ``value`` is a config it is not used elsewhere.
+                In particular its usage will be reset, and its consistency recorder aligned
+                with ``self``. To avoid side effects for `config`s you wish to re-use elsewhere,
+                call :meth:`cdxcore.config.Config.clean_copy` first.
         """
         if key[0] == "_" or key in self.__dict__:
             OrderedDict.__setattr__(self, key, value )
@@ -755,10 +1250,10 @@ class Config(OrderedDict):
                     c = c.__getattr__(key)
                 OrderedDict.__setitem__(c, key, value)
 
-    def update( self, other=None, **kwargs ):
+    def update( self, other  = None, **kwargs ):
         """
         Overwrite values of 'self' new values.
-        Accepts the two main formats
+        Accepts the two main formats::
 
             update( dictionary )
             update( config )
@@ -767,13 +1262,20 @@ class Config(OrderedDict):
 
         Parameters
         ----------
-            other : dict, Config, optional
-                Copy all content of 'other' into 'self'.
-                If 'other' is a config: elements will be clean_copy()ed.
-                  'other' will not be marked as 'used'
-                If 'other' is a dictionary, then '.' notation can be used for hierarchical assignments 
+            other : dict, Config
+            
+                Copy all content of ``other`` into``self``.
+
+                If ``other`` is a config: elements will be clean_copy()ed; ``other`` will not be marked as "read".
+
+                If ``other`` is a dictionary, then '.' notation can be used for hierarchical assignments 
+
             **kwargs
                 Allows assigning specific values.
+                
+        Returns
+        -------
+            self : Config
         """
         if not other is None:
             if isinstance( other, Config ):
@@ -817,14 +1319,17 @@ class Config(OrderedDict):
 
         if len(kwargs) > 0:
             self.update( other=kwargs )
+        return self
 
     # delete
     # ------
 
     def delete_children( self, names : list ):
         """
-        Delete one or several children.
-        This function does not delete 'record' information.
+        Delete one or several children from ``self``.
+        
+        This function does not delete recorded consistency information (``defaults`` and ``help``
+        recorded from prior uses of :meth:`cdxcore.config.Config.__call__`).
         """
         if isinstance(names, str):
             names = [ names ]
@@ -834,11 +1339,6 @@ class Config(OrderedDict):
 
     # Usage information & reports
     # ---------------------------
-
-    @property
-    def recorder(self) -> SortedDict:
-        """ Returns the top level recorder """
-        return self._recorder
 
     def usage_report(self,    with_values  : bool = True,
                               with_help    : bool = True,
@@ -864,13 +1364,13 @@ class Config(OrderedDict):
                 Whether to print types
 
             filter_path : str, optional
-                If provided, will match all children names vs this string.
-                Most useful with filter_path = self._name
+                If provided, will match the beginning of the fully qualified path of all children vs this string.
+                Most useful with ``filter_path = self.config_name`` which ensures only children of this (child) config
+                are shown.
 
         Returns
         -------
-            str
-                Report.
+            Report : str
         """
         with_values   = bool(with_values)
         with_help     = bool(with_help)
@@ -915,9 +1415,8 @@ class Config(OrderedDict):
 
     def usage_reproducer(self) -> str:
         """
-        Returns a string expression which will reproduce the current
-        configuration tree as long as each 'value' handles
-        repr() correctly.
+        Returns a string representation of current usage, calling :func:`repr`
+        for each value.
         """
         report = ""
         for key, record in self._recorder.items():
@@ -925,16 +1424,28 @@ class Config(OrderedDict):
             report       += key + " = " + repr(value) + "\n"
         return report
 
-    def input_report(self) -> str:
+    def input_report(self, max_value_len : int = 100) -> str:
         """
-        Returns a report of all inputs in a readable format, as long as all values
-        are as such.
+        Returns a report of all inputs in a readable format. Assumes
+        that :func:`str` converts all values into some readable format.
+        
+        Parameters
+        ----------
+            max_value_len : int
+                Limits the length of :func:`str` for each value to ``max_value_len`` characters.
+                Set to ``None`` to not limit the length.
+                
+        Returns
+        -------
+            Report : str
         """
         inputs = []
+        def max_value( s ):
+            return s if max_value_len is None or len(s) < max_value_len else ( s[:max_value_len-3] + "..." )
         def ireport(self, inputs):
             for key in self:
                 value      = self.get_raw(key)
-                report_key = self._name + "['" + key + "'] = %s" % str(value)
+                report_key = f"{self._name}[{key}] = {max_value(value)}"
                 inputs.append( report_key )
             for c in self._children.values():
                 ireport(c, inputs)
@@ -948,7 +1459,15 @@ class Config(OrderedDict):
 
     @property
     def not_done(self) -> dict:
-        """ Returns a dictionary of keys which were not read yet """
+        """
+        Returns a dictionary of keys which were not read yet.
+        
+        Returns
+        -------
+            not_done: dict
+                Dictionary of dictionaries: for value parameters, the respective entry is their ``key`` and ``False``;
+                for children the ``key`` is followed by their ``not_done`` dictionary.
+        """
         h = { key : False for key in self if not key in self._done }
         for k,c in self._children.items():
             ch = c.not_done
@@ -956,8 +1475,19 @@ class Config(OrderedDict):
                 h[k] = ch
         return h
 
-    def input_dict(self, ignore_underscore = True ) -> dict:
-        """ Returns a (pretty) dictionary of all inputs into this config. """
+    @property
+    def recorder(self) -> SortedDict:
+        """ Returns the "recorder", a :class:`sortedcontainers.SortedDict` which contains
+        ``key``, ``default``, ``cast``, ``help``, and all other function parameters for
+        all calls of :meth:`cdxcore.config.Config.__call__`. It is used to ensure consistency
+        of parameter calls.
+        
+        *Use for debugging only.*
+        """
+        return self._recorder
+
+    def input_dict(self, ignore_underscore = True ) -> pdct:
+        """ Returns a :class:`cdxcore.pretty.PrettyObject` of all inputs into this config. """
         inputs = pdct()
         for key in self:
             if ignore_underscore and key[:1] == "_":
@@ -968,74 +1498,230 @@ class Config(OrderedDict):
                 continue
             inputs[k] = c.input_dict()
         return inputs
-
-    def unique_id(self, *, uniqueHash : UniqueHash = None, debug_trace : DebugTrace = None, **unique_hash_parameters ) -> str:
+    
+    def usage_value_dict( self ) -> SortedDict:
         """
-        Returns a unique hash key for this object, based on its provided inputs /not/ based on its usage.
-        Please consult the documentation for cdxbasics.uniquehash.UniqueHashExt
-        ** WARNING **
-        By default this function ignores
-         1) Config keys or children with leading '_'s are ignored unless the 'unique_hash_parameters' parameter 'parse_underscore' is set to 'protected' or 'private'.
-         2) Functions and properties are ignored unless 'parse_functions' in 'unique_hash_parameters is True.
-            In the latter case function code will be used to distinguish functions assigned to the config.
-        See uniquehash.unqiueHashExt() for further information.
+        Return a flat sorted dictionary of both "used" and, where not used, "input" values.
+        
+        A "used" value has either been read from user input or was provided as a default. In both cases,
+        it will have been subject to casting. 
 
+        This function will raise a :class:`RuntimeError` in either of the following two cases:
+            
+        * A key was marked as "done" (read), but no "value" was recorded at that time. A simple example is when :meth:`cdxcore.config.Config.detach` 
+          was called to create a child config, but that config has not yet been read.
+        * A key has not been read yet, but there is a record of a value being returned. An example of this happening is if :meth:`cdxcore.config.Config.reset_done`
+          is called.
+        """
+        uvd = SortedDict()
+        for key, record in self._recorder.items():
+            uvd[key] = record['value']
+
+        def add_inputs( config ):
+            for key in config:
+                full_key = config.record_key( key )
+                if key in config._done:
+                    verify( full_key in uvd, lambda : f"Error collecting 'usage_value_dict': key '{key}' with full name '{full_key}' is marked as `done` but has no recorder entry. "+\
+                                                       "This typically happens when a sub-config is detached(), and has not been used yet." )
+                else:
+                    verify( not full_key in uvd, lambda : f"Error collecting 'usage_value_dict': key '{key}' with full name '{full_key}' is not yet marked as `done` but has a recorder entry" )
+                    uvd[full_key] = config[key]
+            for c in config._children.values():
+                add_inputs(c)
+                
+        add_inputs(self)
+        return uvd
+            
+    # hashing
+    # -------
+
+    def unique_hash(self, *, unique_hash : Callable = None, debug_trace : DebugTrace = None, input_only : bool = True, **unique_hash_parameters ) -> str:
+        r"""
+        Returns a unique hash key for this object - based on its provided inputs and
+        *not* based on its usage.
+
+        This function allows both provision of an existing ``unique_hash`` function or
+        to specify one on the fly using ``unique_hash_parameters``. 
+        That means instead of::
+                
+            self.unique_hash( uniqueHash=UniqueHashExt(**p) )
+                
+        we can directly call::
+            
+            self.unique_hash( **p )            
+        
+        The purpose of this function is to allow indexing results of heavy computations with were
+        configured with ``Config`` with a simple hash key. A typical application is caching of results
+        based on the relevant user-configuration.
+
+        An example for a simplistic cache::
+            
+            from cdxcore.config import Config
+            import tempfile as tempfile
+            import pickle as pickle
+
+            def big_function( cache_dir : str, config : Config = None, **kwargs ):
+                assert not cache_dir[-1] in ["/","\\"], cache_dir
+                config = Config.config_kwargs( config, kwargs )
+                uid    = config.unique_hash(length=8)
+                cfile  = f"{cache_dir}/{uid}.pck"
+            
+                # attempt to read cache
+                try:
+                    with open(cfile, "rb") as f:
+                        return pickle.load(f)
+                except FileNotFoundError:
+                    pass
+            
+                # do something big...
+                result = config("a", 0, int, "Value 'a'") * 1000
+            
+                # write cache
+                with open(cfile, "wb") as f:
+                    pickle.dump(result,f)
+            
+                return result                
+            
+            cache_dir  = tempfile.mkdtemp()   # for real applications, use a permanent cache_dir.
+             _ = big_function( cache_dir = cache_dir, a=1 )
+            print(_)  
+
+        A more sophisticated framework which includes code versioning via :func:`cdxcore.version.version`
+        is implemented with :meth:`cdxcore.subdir.SubDir.cache`.
+
+        **Unique Hash Default Semantics**
+        
+        Please consult the documentation for :class:`cdxcore.uniquehash.UniqueHash` before using this functionality;
+        in particular note that by default this function ignores
+        config keys or children with leading underscores; set ``parse_underscore`` to ``"protected"`` or ``"private"`` to change this behaviour.
+
+        **Why is "Usage" not Considered when Computing the Hash (by Default)**
+
+        When using ``Config`` to configure our environment, then we have not only the user's input values
+        but also the realized values in the form of defaults for those values the user has not provided.
+        In most cases, these are the majority of values.
+        
+        By only considering actual input values when computing a hash, we stipulate that
+        defaults are not part of the current unique characteristic of the environment.
+        
+        That seems inconsistent: consider a program which reads a parameter ``activation`` with default ``relu``.
+        The hash key will be different for the case where the user does not provide a value for ``activation``,
+        and the case where its value is set to ``relu`` by the user. The effective ``activation`` value
+        in both cases is ``relu`` -- why would we not want this to be identified as the same
+        environment configuration.
+
+        The following illustrates this dilemma::
+
+            def big_function( config ):
+                _ = config("activation", "relu", str, "Activation function")
+                config.done()
+            
+            config = Config()
+            big_function( config )
+            print( config.unique_hash(length=8) )   # -> 36e9d246
+            
+            config = Config(activation="relu")
+            big_function( config )
+            print( config.unique_hash(length=8) )   # -> d715e29c
+        
+        *Robustness*
+        
+        The key driver of using only input values for hashing is the prevalence of reading (child) configs
+        close to the use of their parameters. That means that often config parameters are only read
+        (and therefore their usage registered) if the respective computation is actually executed:
+        even the ``big_function`` example above shows this issue: the call 
+        ``config("a", 0, int, "Value 'a'")`` will only be executed if the cache could not be found.
+        
+        This can be rectified if it is ensured that all config parameters are read regardless of
+        actual executed code. In this case, set the parameter ``input_only``
+        for ``unique_hash()``
+        to ``False``. Note that when using :meth:`cdxcore.config.Config.detach` 
+        you must make sure to have processed all detached configurations
+        before calling ``unique_hash()``.
+        
         Parameters
         ----------
-        unique_hash_parameters : **dict
-            If 'uniqueHash' is None, then this is passed to cdxcore.uniquehash.UniqueHashExt() to generate
-            a hashing function with the specified parameters (i.e. how to handle config elemets with underscore)
-        uniqueHash : UniqueHash
-            A UniqueHash function generated by cdxcore.uniquehash.UniqueHashExt().
-            Instread of
-                self.unique_id( uniqueHash=UniqueHashExt(**p) )
-            it's briefer to use
-                self.unique_id( **p )            
-        debug_trace : DebugTrace
-            A cdxcore.uniquehash.DebugTrace object which can be used to debug generation of
-            unique hashes. See cdxcore.uniquehash.UniqueHashExt() for details
+        unique_hash_parameters : dict
+        
+            If ``uniqueHash`` is ``None`` these parameters are passed to
+            :meth:`cdxcore.uniquehash.UniqueHash.__call__` to obtain
+            the corrsponding hashing function.
+            
+        unique_hash : Callable
+
+            A function to return unique hashes, usally generated using :class:`cdxcore.uniquehash.UniqueHash`.
+
+        debug_trace : :class:`cdxcore.uniquehash.DebugTrace`
+            Allows tracing of hashing activity for debugging purposes.
+            Two implementations of ``DebugTrace`` are currently available:
+                
+            * :class:`cdxcore.uniquehash.DebugTraceVerbose` simply prints out hashing activity to stdout.
+            
+            * :class:`cdxcore.uniquehash.DebugTraceCollect` collects an array of tracing information.
+              The object itself is an iterable which contains the respective tracing information
+              once the hash function has returned.
+                    
+        input_only : bool
+            *Expert use only.*
+            
+            If True (the default) only user-provided inputs are used to compute the unique hash.
+            If False, then the result of :meth:`cdxcore.config.Config.usage_value_dict` is used
+            to generate the hash. Make sure you read and understand
+            the discussion above on the topic.
+        
 
         Returns
         -------
-            String ID
+            Unique hash, str
+                A unique hash of at most the length specified via either ``unique_hash`` or ``unique_hash_parameters``.
+                
         """
-        if uniqueHash is None:
-            uniqueHash = UniqueHash( **unique_hash_parameters )
+        if unique_hash is None:
+            unique_hash = UniqueHash( **unique_hash_parameters )
         else:
             if len(unique_hash_parameters) != 0: raise ValueError("Cannot provide 'unique_hash_parameters' if 'uniqueHashExt' is provided")
         
-        def rec(config):
-            """ Recursive version which returns an empty string for empty sub configs """
-            inputs = {}
-            for key in config:
-                if key[:1] == "_":
-                    continue
-                inputs[key] = config.get_raw(key)
-            for c, child in config._children.items():
-                if c[:1] == "_":
-                    continue
-                # collect ID for the child
-                child_data = rec(child)
-                # we only register children if they have keys.
-                # this way we do not trigger a change in ID simply due to a failed read access.
-                if child_data != "":
-                    inputs[c]  = child_data
-            if len(inputs) == 0:
-                return ""
-            return uniqueHash(inputs,debug_trace=debug_trace)
-        uid = rec(self)
-        return uid if uid!="" else uniqueHash("",debug_trace=debug_trace)
+        if not input_only:
+            uid = unique_hash( self.usage_value_dict() )
+            
+        else:
+            def rec(config):
+                """ Recursive version which returns an empty string for empty sub configs """
+                inputs = {}
+                for key in config:
+                    if key[:1] == "_":
+                        continue
+                    inputs[key] = config.get_raw(key)
+                for c, child in config._children.items():
+                    if c[:1] == "_":
+                        continue
+                    # collect ID for the child
+                    child_data = rec(child)
+                    # we only register children if they have keys.
+                    # this way we do not trigger a change in ID simply due to a failed read access.
+                    if child_data != "":
+                        inputs[c]  = child_data
+                if len(inputs) == 0:
+                    return ""
+                return unique_hash(inputs,debug_trace=debug_trace)
+            uid = rec(self)
+        return uid if uid!="" else unique_hash("",debug_trace=debug_trace)
 
     def used_info(self, key : str) -> tuple:
-        """Returns the usage stats for a given key in the form of a tuple (done, record) where 'done' is a boolean and 'record' is a dictionary of information on the key """
+        """
+        Returns the usage stats for a given key in the form of a tuple ``(done, record)``.
+        
+        Here ``done`` is a boolean and ``record`` is a dictionary of consistency
+        information on the key. """
         done   = key in self._done
         record = self._recorder.get( self.record_key(key), None )
         return (done, record)
 
-    def record_key(self, key):
+    def record_key(self, key) -> str:
         """
-        Returns the fully qualified 'record' key for a relative 'key'.
-        It has the form config1.config['entry']
+        Returns the fully qualified string key for ``key``.
+
+        It has the form ``config1.config['entry']``.
         """
         return self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
 
@@ -1044,14 +1730,13 @@ class Config(OrderedDict):
 
     def __iter__(self):
         """
-        Iterate. For some odd reason, adding this override will make
-        using f(**self) call our __getitem__() function.
+        Iterator.
         """
         return OrderedDict.__iter__(self)
 
     # pickling
     # --------
-
+    
     def __reduce__(self):
         """
         Pickling this object explicitly
@@ -1077,51 +1762,53 @@ class Config(OrderedDict):
         keys = state['keys']
         for (k,d) in zip(keys,data):
             self[k] = d
-
+    
     # casting
     # -------
 
     @staticmethod
-    def to_config( kwargs : dict, config_name : str = "kwargs"):
+    def config_kwargs( config, kwargs : Mapping, config_name : str = "kwargs"):
         """
-        Makes sure an object is a config, and otherwise tries to convert it into one
-        Classic use case is to transform 'kwargs' to a Config
-        """
-        return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
-
-    @staticmethod
-    def config_kwargs( config, kwargs : dict, config_name : str = "kwargs"):
-        """
-        Default implementation for a usage pattern where the user can use both a 'config' and kwargs.
-        This function 'detaches' the current config from 'self' which means done() must be called again.
+        Default implementation for a usage pattern where the user can provide both a :class:`cdxcore.config.Config` parameter and ``** kwargs``.
         
-        Example
-        -------
+        Example::
 
-        def f(config, **kwargs):
-            config = Config.config_kwargs( config, kwargs )
-            ...
-            x = config("x", 1, ...)
-            config.done() # <-- important to do this here. Remembert that config_kwargs() calls 'detach'
+            def f(config, **kwargs):
+                config = Config.config_kwargs( config, kwargs )
+                ...
+                x = config("x", 1, ...)
+                config.done() # <-- important to do this here. Remembert that config_kwargs() calls 'detach'
 
-        and then one can use either
+        and then one can use either of the following::
 
-            config = Config()
-            config.x = 1
-            f(config)
-
-        or
+            f(Config(x=1))
             f(x=1)
+
+        *Important*: ``config_kwargs`` calls :meth:`cdxcore.config.Config.detach` to obtain a copy of ``config``.
+        This means :meth:`cdxcore.config.Config.done`
+        must be called explicitly for the returned object even if ``done()``
+        will be called elsewhere for the source ``config``.
             
         Parameters
         ----------
-            config : a Config object or None
-            kwargs : a dictionary. If 'config' is provided, the function will call config.update(kwargs).
-            config_name : a declarative name for the config if 'config' is not proivded
+            config : Config
+                A ``Config`` object or ``None``.
+                
+            kwargs : Mapping
+                If ``config`` is provided, the function will call :meth:`cdxcore.config.Config.update` with ``kwargs``.
+
+            config_name : str
+                A declarative name for the config if ``config`` is not proivded.
             
         Returns
         -------
-            A Config
+            config : Config
+                A new config object. Please note that if ``config`` was provided, then this a copy
+                obtained from calling :meth:`cdxcore.config.Config.detach`, which means that 
+                :meth:`cdxcore.config.Config.done` must be called explicitly for this object to
+                ensure no parameters were misspelled (it is not sufficient
+                if :meth:`cdxcore.config.Config.done` is called
+                for ``config``.)
         """
         assert isinstance( config_name, str ), "'config_name' must be a string"
         if type(config).__name__ == Config.__name__: # we allow for import inconsistencies
@@ -1132,6 +1819,21 @@ class Config(OrderedDict):
             config = Config.to_config( kwargs=kwargs, config_name=config_name )
         return config
 
+    @staticmethod
+    def to_config( kwargs : Mapping, config_name : str = "kwargs"):
+        """
+        Assess whether a parameters is a :class:`cdxcore.config.Config`, and otherwise tries to convert it into one.
+        Classic use case is to transform ``** kwargs`` to a :class:`cdxcore.config.Config` to allow
+        type checking and prevent spelling errors.
+        
+        Returns
+        -------
+            config : Config
+                If ``kwargs`` is already a :class:`cdxcore.config.Config` it is returned. Otherwise,
+                create a new :class:`cdxcore.config.Config` from ``kwargs`` named using ``config_name``.
+        """
+        return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
+
     # for uniqueHash
     # --------------
 
@@ -1141,7 +1843,7 @@ class Config(OrderedDict):
         This function is required because by default uniqueHash() ignores members starting with '_', which
         in the case of Config means that no children are hashed.
         """
-        return self.unique_id( uniqueHash=uniqueHash, debug_trace=debug_trace, )
+        return self.unique_hash( uniqueHash=uniqueHash, debug_trace=debug_trace )
 
     # Comparison
     # -----------
@@ -1154,6 +1856,14 @@ class Config(OrderedDict):
             return False
         return OrderedDict.__eq__(self, other)
 
+    def __neq__(self, other):
+        """ Equality operator comparing 'name' and standard dictionary content """        
+        if type(self).__name__ == type(other).__name__:  # allow comparison betweenn different imports
+            return False
+        if self._name == other._name:
+            return False
+        return OrderedDict.__neq__(self, other)
+
     def __hash__(self):
         return hash(self._name) ^ OrderedDict.__hash__(self)
         
@@ -1162,114 +1872,65 @@ config_kwargs = Config.config_kwargs
 Config.no_default = no_default
 
 # ==============================================================================
-# New in version 0.1.45
-# Support for conditional types, e.g. we can write
 #
-#  x = config(x, 0.1, Float >= 0., "An 'x' which cannot be negative")
+# Exceptions
+#
 # ==============================================================================
 
-class ConfigField(object):
+class NotDoneError( RuntimeError ):
     """
-    Simplististc 'read only' wrapper for Config objects.
-    Useful for Flax
-
-        import dataclasses as dataclasses
-        import jax.numpy as jnp
-        import jax as jax
-        from cdxbasics.config import Config, ConfigField
-        import types as types
-        
-        class A( nn.Module ):
-            config : ConfigField = ConfigField.Field()
-        
-            def setup(self):
-                self.dense = nn.Dense(1)
-        
-            def __call__(self, x):
-                a = self.config("y", 0.1 ,float)
-                return self.dense(x)*a
-        
-        print("Default")
-        a = A()
-        key1, key2 = jax.random.split(jax.random.key(0))
-        x = jnp.zeros((10,10))
-        param = a.init( key1, x )
-        y = a.apply( param, x )
-        
-        print("Value")
-        w = ConfigField(y=1.)
-        a = A(config=w)
-        
-        key1, key2 = jax.random.split(jax.random.key(0))
-        x = jnp.zeros((10,10))
-        param = a.init( key1, x )
-        y = a.apply( param, x )
-        
-        class A( nn.Module ):
-            config : ConfigField = ConfigField.field()
-        
-            @nn.compact
-            def __call__(self, x):
-                a = self.config.x("y", 0.1 ,float)
-                self.config.done()
-                return nn.Dense(1)(x)*a
-                
-        print("Config")
-        c = Config()
-        c.x.y = 1.
-        w = ConfigField(c)
-        a = A(config=w)
-        
-        key1, key2 = jax.random.split(jax.random.key(0))
-        x = jnp.zeros((10,10))
-        param = a.init( key1, x )
-        y = a.apply( param, x )
-        y = a.apply( param, x )    
-    """
-    def __init__(self, config : Config = None, **kwargs):
-        if not config is None:
-            config = config if type(config).__name__ != type(self).__name__ else config.__config        
-        self.__config = Config.config_kwargs( config, kwargs )
-    def __call__(self, *kargs, **kwargs):
-        return self.__config(*kargs,**kwargs)
-    def __getattr__(self, key):
-        if key[:2] == "__":
-            return object.__getattr__(self, key)
-        return getattr(self.__config, key)
-    def __getitem__(self, key):
-        return self.__config[key]
-    def __eq__(self, other):
-        if type(other).__name__ == "Config":
-            return self.__config == other
-        else:
-            return self.__config == other.config
-    def __hash__(self):
-        h = 0
-        for k, v in self.items():
-            h ^= hash(k) ^ hash(v)
-        return h
-    def __unique_hash__(self, *kargs, **kwargs):
-        return self.__config.__unique_hash__(*kargs, **kwargs)
-    def __str__(self):
-        return self.__pdct.__str__()
-    def __repr__(self):
-        return self.__pdct.__repr__()
-    def as_dict(self):
-        return self.__config.as_dict(mark_done=False)
-    def done(self):
-        return self.__config.done()
-
-    @property
-    def config(self) -> Config:
-        return self.__config
-
-    @staticmethod
-    def default():
-        return ConfigField()
+    Raised when :meth:`cdxcore.config.Config.done` finds that some config parameters have not been read.
     
-    @staticmethod
-    def Field() -> dataclasses.Field:
-        return dataclasses.field( default_factory=ConfigField )
+    The set of those arguments is accessible via
+    :attr:`cdxcore.config.NotDoneError.not_done`.
+    """
+    def __init__(self, not_done : set[str], config_name : str, message : str):
+        #: The oarameter keys which were not read when :meth:`cdxcore.config.Config.done` was called.
+        self.not_done = not_done
+        #: Hierarchical name of the config.
+        self.config_name = config_name
+        RuntimeError.__init__(self, message)
+
+class InconsistencyError( RuntimeError ):
+    """
+    Raised when :meth:`cdxcore.config.Config.__call__`
+    used inconsistently between function calls for a given parameter.
+    
+    The ``Config`` semantics require that parameters are accessed used with consistent
+    `default` and `help` values between :meth:`cdxcore.config.Config.__call__` calls.
+
+    For *raw* access to any paramters, use ``[]``.
+    """
+    def __init__(self, key : str, config_name : str, message : str):
+        #: The offending parameter key.
+        self.key = key
+        #: Hierarchical name of the config.
+        self.config_name = config_name
+        RuntimeError.__init__(self, message)
+        
+class CastError( RuntimeError ):
+    """
+    Raised when :meth:`cdxcore.config.Config.__call__` could not cast a
+    value provided by the user to the specified type.
+    """
+    def __init__(self, key : str, config_name : str, exception : Exception):
+        """
+        Parameters
+        ----------
+            key : str
+                Key name of the parameter which failed to cast.
+            config_name : str
+                Name of the `config`.
+            exception : Exception
+                Orginal exception raised by the cast.
+        """        
+        #: Key of the parameter which failed to cast.
+        self.key         = key
+        #: Hierarchical name of the config.
+        self.config_name = config_name
+        header = f"Error in cast definition for key '{key}' in config '{config_name}': " if len(config_name) > 0 else f"Error in cast definition for key '{key}': "
+        RuntimeError.__init__(self, header+str(exception))
+
 
 # ==============================================================================
 # New in version 0.1.45
@@ -1460,31 +2121,30 @@ class _CastCond(_Cast): # NOQA
 
 Float = _CastCond(float)
 """
-Allows to apply conditions to float's as part of config's.
-For example
-```
-timeout = config("timeout", 0.5, Float>=0., "Timeout")
-```
+Allows to apply basic range conditions to ``float`` parameters.
 
-In combination with `&` we can limit a float to a range:
-```
-probability = config("probability", 0.5, (Float>=0.) & (Float <= 1.), "Probability")
-```
+For example::
+
+    timeout = config("timeout", 0.5, Float>=0., "Timeout")
+
+In combination with ``&`` we can limit a float to a range::
+
+    probability = config("probability", 0.5, (Float>=0.) & (Float <= 1.), "Probability")
 """
 
 
 Int   = _CastCond(int)
 """
-Allows to apply conditions to int' as part of config's.
-For example
-```
-num_steps = config("num_steps", 1, Int>0., "Number of steps")
-```
+Allows to apply basic range conditions to ``int`` parameters.
 
-In combination with `&` we can limit an int to a range:
-```
-bus_days_per_year = config("bus_days_per_year", 255, (Int > 0) & (Int < 365), "Business days per year")
-```
+For example::
+
+    num_steps = config("num_steps", 1, Int>0., "Number of steps")
+
+In combination with ``&`` we can limit an int to a range:
+
+    bus_days_per_year = config("bus_days_per_year", 255, (Int > 0) & (Int < 365), "Business days per year")
+
 """
 
 # ================================

@@ -27,7 +27,7 @@ import jsonpickle.ext.numpy as jsonpickle_numpy
 import gzip as gzip
 import blosc as blosc
 
-from .err import verify, warn_if, error
+from .err import verify, warn_if, error, warn
 from .prettydict import pdct
 from .verbose import Context
 from .version import Version, version as version_decorator
@@ -2033,6 +2033,15 @@ class SubDir(object):
         """ Silently delete a key with member notation. """
         verify( key[:1] != "_", "Deleting protected or private members disabled. Fix __delattr__ to support this")
         return self.delete( key=key, raiseOnError=False )
+
+    # convenient path ops
+    # -------------------
+    
+    def __add__(self, directory : str) -> str:
+        """
+        Returns a the subdirectory ``directory`` of ``self``.
+        """
+        return SubDir(directory,parent=self)
 
     # pickling
     # --------

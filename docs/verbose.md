@@ -1,3 +1,0 @@
-# verbose module
-
-::: cdxcore.verbose

@@ -1,3 +1,0 @@
-# err module
-
-::: cdxcore.err

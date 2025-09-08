@@ -1,4 +1,0 @@
-# crman module
-
-::: cdxcore.crman
-

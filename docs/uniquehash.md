@@ -1,4 +1,0 @@
-# uniquehash module
-
-::: cdxcore.uniquehash
-

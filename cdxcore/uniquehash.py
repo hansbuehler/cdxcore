@@ -452,7 +452,7 @@ class UniqueHash( object ):
                 return                        
             debug_trace = None if debug_trace is None else debug_trace._update_topic( x, msg="__unique_hash__ function" )
             try:
-                unique_hash = unique_hash( self.clone(), debug_trace=debug_trace )
+                unique_hash = unique_hash( unique_hash=self.clone(), debug_trace=debug_trace )
             except Exception as e:
                 raise type(e)( e, f"Exception encountered while calling '__unique_hash__' of object of type {type(x)}.")
             if unique_hash is None:
@@ -777,17 +777,17 @@ class DebugTraceCollect(DebugTrace):
     def _update( self, x, msg : str = None ):
         """ Notify processing of `x`, with an optional process `msg`
         :meta private: """#@private
-        self._mupdate( x, msg, None )
+        self._mupdate( x=x, msg=msg, child=None )
     def _update_topic( self, x, msg : str = None ):
         """ Notify and return a sub-trace context
         :meta private: """#@private
         child = DebugTraceCollect(tostr=self.tostr)
-        self._mupdate( x, msg, child )
+        self._mupdate( x=x, msg=msg, child=child )
         return child
     def _warning( self, msg : str):
         """ Issue warning
         :meta private: """
-        self._update( None, msg, None )
+        self._mupdate( x=None, msg=msg, child=None )
         
     # results
     # -------

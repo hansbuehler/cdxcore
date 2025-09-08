@@ -559,7 +559,7 @@ class Context(object):
     # uniqueHash
     # ----------
 
-    def __unique_hash__( self, uniqueHash, debug_trace ) -> str:
+    def __unique_hash__( self, unique_hash, debug_trace ) -> str:
         """
         Do not compute a hash for Context objects when [UniqueHash][cdxcore.uniquehash.UniqueHash]() is called.
         This function always returns an empty string, which means that the object is never hashed.

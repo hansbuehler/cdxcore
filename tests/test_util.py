@@ -33,7 +33,7 @@ def import_local():
             imp.reload(mdata)
 import_local()
 
-from cdxcore.util import isFunction, isAtomic, isFloat
+from cdxcore.util import is_function, is_atomic, is_float
 from cdxcore.util import fmt, fmt_seconds, fmt_list, fmt_dict, fmt_big_number, fmt_digits, fmt_big_byte_number, fmt_datetime, fmt_date, fmt_time, fmt_timedelta, fmt_filename, DEF_FILE_NAME_MAP
 
 class Test(unittest.TestCase):
@@ -230,20 +230,34 @@ class Test(unittest.TestCase):
         self.assertEqual( fmt_filename("K:X;Z"), "K;X;Z" )
         self.assertEqual( fmt_filename("*"), "@" )
         self.assertEqual( fmt_filename("."), "." )  # technically a valid filename, but a reserved name at that
+
+        with self.assertRaises(ValueError):
+            self.assertEqual( fmt_filename("2*2/4=x", by="wrong"), "2@2_4=x" )
+
+        BLANK =   {      '/' : "",
+                         '\\': "",
+                         '|' : "",
+                         ':' : "",
+                         '>' : "",
+                         '<' : "",
+                         '?' : "",
+                         '*' : "",
+                         } 
+        self.assertEqual( fmt_filename("2*2/4=x", by=BLANK), "224=x" )
         
     def test_basics(self):
 
-        # isFunction
-        self.assertFalse( isFunction(1) )
-        self.assertFalse( isFunction("text") )        
-        self.assertTrue( isFunction(self.test_basics) )
-        self.assertTrue( isFunction(lambda x: x) )
+        # is_function
+        self.assertFalse( is_function(1) )
+        self.assertFalse( is_function("text") )        
+        self.assertTrue( is_function(self.test_basics) )
+        self.assertTrue( is_function(lambda x: x) )
         
         def f(x,y):
             return x
-        self.assertTrue( isFunction(f) )
+        self.assertTrue( is_function(f) )
         def ff():
-            self.assertTrue( isFunction(ff) )
+            self.assertTrue( is_function(ff) )
         ff()
 
         class A(object):
@@ -268,79 +282,79 @@ class Test(unittest.TestCase):
         a = A()
         b = B()
         c = C()
-        self.assertFalse( isFunction(A) )
-        self.assertFalse( isFunction(B) )
-        self.assertFalse( isFunction(C) )
-        self.assertFalse( isFunction(a) )
-        self.assertFalse( isFunction(b) )
-        self.assertFalse( isFunction(c) )
-        self.assertTrue( isFunction(A.__init__) )
-        self.assertTrue( isFunction(A.f) )
-        self.assertFalse( isFunction(A.square) )
-        self.assertTrue( isFunction(A.g) )
-        self.assertTrue( isFunction(a.__init__) )
-        self.assertTrue( isFunction(a.f) )
-        self.assertFalse( isFunction(a.square) )  # <-- properties are not considered as function
-        self.assertTrue( isFunction(a.g) )
-        self.assertTrue( isFunction(B.__init__) )
-        self.assertTrue( isFunction(B.__call__ ) )
-        self.assertTrue( isFunction(b.__init__) )
-        self.assertTrue( isFunction(b.__call__ ) )
-        self.assertFalse( isFunction(b) )         # <-- properties are not considered as function
+        self.assertFalse( is_function(A) )
+        self.assertFalse( is_function(B) )
+        self.assertFalse( is_function(C) )
+        self.assertFalse( is_function(a) )
+        self.assertFalse( is_function(b) )
+        self.assertFalse( is_function(c) )
+        self.assertTrue( is_function(A.__init__) )
+        self.assertTrue( is_function(A.f) )
+        self.assertFalse( is_function(A.square) )
+        self.assertTrue( is_function(A.g) )
+        self.assertTrue( is_function(a.__init__) )
+        self.assertTrue( is_function(a.f) )
+        self.assertFalse( is_function(a.square) )  # <-- properties are not considered as function
+        self.assertTrue( is_function(a.g) )
+        self.assertTrue( is_function(B.__init__) )
+        self.assertTrue( is_function(B.__call__ ) )
+        self.assertTrue( is_function(b.__init__) )
+        self.assertTrue( is_function(b.__call__ ) )
+        self.assertFalse( is_function(b) )         # <-- properties are not considered as function
         self.assertTrue( callable(b) )
-        self.assertFalse( isFunction(c) )
-        self.assertTrue( isFunction(i for i in c) )
-        self.assertTrue( isFunction(lambda x : x*x) )
+        self.assertFalse( is_function(c) )
+        self.assertTrue( is_function(i for i in c) )
+        self.assertTrue( is_function(lambda x : x*x) )
 
-        # isAtomic
-        self.assertTrue( isAtomic(0) )
-        self.assertTrue( isAtomic(0.1) )
-        self.assertTrue( isAtomic("c") )
-        self.assertFalse( isAtomic(b'\x02') )
-        self.assertTrue( isAtomic("text") )
-        self.assertFalse( isAtomic(complex(0.,-1)) )
-        self.assertTrue( isAtomic(True) )
-        self.assertTrue( isAtomic(1==0) )
-        self.assertTrue( isAtomic(datetime.date(year=2005, month=2, day=1)) )
-        self.assertFalse( isAtomic(datetime.time(hour=4)) )
-        self.assertFalse( isAtomic(datetime.datetime(year=2005, month=2, day=1, hour=4)) )
-        self.assertTrue( isAtomic(1==0) )
-        self.assertTrue( isAtomic(1==0) )
-        self.assertFalse( isAtomic(A) )
-        self.assertFalse( isAtomic(a) )
-        self.assertFalse( isAtomic(f) )
-        self.assertFalse( isAtomic([1,2]) )
-        self.assertFalse( isAtomic([]) )
-        self.assertFalse( isAtomic({}) )
-        self.assertFalse( isAtomic({'x':2}) )
-        self.assertFalse( isAtomic({'x':2}) )
+        # is_atomic
+        self.assertTrue( is_atomic(0) )
+        self.assertTrue( is_atomic(0.1) )
+        self.assertTrue( is_atomic("c") )
+        self.assertFalse( is_atomic(b'\x02') )
+        self.assertTrue( is_atomic("text") )
+        self.assertFalse( is_atomic(complex(0.,-1)) )
+        self.assertTrue( is_atomic(True) )
+        self.assertTrue( is_atomic(1==0) )
+        self.assertTrue( is_atomic(datetime.date(year=2005, month=2, day=1)) )
+        self.assertFalse( is_atomic(datetime.time(hour=4)) )
+        self.assertFalse( is_atomic(datetime.datetime(year=2005, month=2, day=1, hour=4)) )
+        self.assertTrue( is_atomic(1==0) )
+        self.assertTrue( is_atomic(1==0) )
+        self.assertFalse( is_atomic(A) )
+        self.assertFalse( is_atomic(a) )
+        self.assertFalse( is_atomic(f) )
+        self.assertFalse( is_atomic([1,2]) )
+        self.assertFalse( is_atomic([]) )
+        self.assertFalse( is_atomic({}) )
+        self.assertFalse( is_atomic({'x':2}) )
+        self.assertFalse( is_atomic({'x':2}) )
         
-        self.assertEqual( isAtomic(np.int_(0)), True  )
-        self.assertEqual( isAtomic(np.int32(0)), True  )
-        self.assertEqual( isAtomic(np.int64(0)), True  )
-        self.assertEqual( isAtomic(np.complex128(0)), True  )
-        self.assertEqual( isAtomic(np.datetime64()), True  )
-        self.assertEqual( isAtomic(np.timedelta64()), True  )
-        self.assertEqual( isAtomic(np.ushort(0)), True  )
-        self.assertEqual( isAtomic(np.float32(0)), True  )
-        self.assertEqual( isAtomic(np.float64(0)), True  )
-        self.assertEqual( isAtomic(np.ulonglong(0)), True  )
-        self.assertEqual( isAtomic(np.longdouble(0)), True  )
-        self.assertEqual( isAtomic(np.half(0)), True  )
+        self.assertEqual( is_atomic(np.int_(0)), True  )
+        self.assertEqual( is_atomic(np.int32(0)), True  )
+        self.assertEqual( is_atomic(np.int64(0)), True  )
+        self.assertEqual( is_atomic(np.complex128(0)), True  )
+        self.assertEqual( is_atomic(np.datetime64()), True  )
+        self.assertEqual( is_atomic(np.timedelta64()), True  )
+        self.assertEqual( is_atomic(np.ushort(0)), True  )
+        self.assertEqual( is_atomic(np.float32(0)), True  )
+        self.assertEqual( is_atomic(np.float64(0)), True  )
+        self.assertEqual( is_atomic(np.ulonglong(0)), True  )
+        self.assertEqual( is_atomic(np.longdouble(0)), True  )
+        self.assertEqual( is_atomic(np.half(0)), True  )
 
-        # isFloat
-        self.assertFalse( isFloat(0) )
-        self.assertTrue( isFloat(0.1) )
-        self.assertFalse( isFloat(1==2) )
-        self.assertFalse( isFloat("0.1") )
-        self.assertFalse( isFloat(complex(0.,-1.)) )
-        self.assertTrue( isFloat(np.float16(0.1)) )
-        self.assertTrue( isFloat(np.float32(0.1)) )
-        self.assertTrue( isFloat(np.float64(0.1)) )
-        self.assertFalse( isFloat(np.int16(0.1)) )
-        self.assertFalse( isFloat(np.int32(0.1)) )
-        self.assertFalse( isFloat(np.int64(0.1)) )
-        self.assertFalse( isFloat(np.complex64(0.1)) )
+        # is_float
+        self.assertFalse( is_float(0) )
+        self.assertTrue( is_float(0.1) )
+        self.assertFalse( is_float(1==2) )
+        self.assertFalse( is_float("0.1") )
+        self.assertFalse( is_float(complex(0.,-1.)) )
+        self.assertTrue( is_float(np.float16(0.1)) )
+        self.assertTrue( is_float(np.float32(0.1)) )
+        self.assertTrue( is_float(np.float64(0.1)) )
+        self.assertFalse( is_float(np.int16(0.1)) )
+        self.assertFalse( is_float(np.int32(0.1)) )
+        self.assertFalse( is_float(np.int64(0.1)) )
+        self.assertFalse( is_float(np.complex64(0.1)) )
         
 if __name__ == '__main__':
     unittest.main()

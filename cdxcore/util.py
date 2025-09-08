@@ -642,7 +642,10 @@ def fmt_filename( s : str , by : str | Mapping = "default" ) -> str:
         Filename
     """
     if not isinstance(by, Mapping):
-        assert isinstance(by, str) and str == "default", ("by: must be a Mapping or 'default'")
+        if not isinstance(by, str):
+            raise ValueError(f"'by': must be a Mapping or 'default'. Found type {type(by).__qualname__}")
+        if by != "default":
+            raise ValueError(f"'by': must be a Mapping or 'default'. Found string '{by}'")                            
         by = DEF_FILE_NAME_MAP
 
     for c in INVALID_FILE_NAME_CHARCTERS:

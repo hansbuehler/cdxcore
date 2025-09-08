@@ -1114,6 +1114,12 @@ class Config(OrderedDict):
         """
         return self(*kargs, **kwargs)
 
+    def get_default(self, *kargs, **kwargs ):
+        """
+        Returns :meth:`cdxcore.config.Config.__call__` ``(*kargs, **kwargs)``.
+        """
+        return self(*kargs, **kwargs)
+
     def get_raw(self, key : str, default = no_default ):
         """
         Reads the raw value for ``key`` without any casting,
@@ -1445,7 +1451,7 @@ class Config(OrderedDict):
         def ireport(self, inputs):
             for key in self:
                 value      = self.get_raw(key)
-                report_key = f"{self._name}[{key}] = {max_value(value)}"
+                report_key = f"{self._name}[{key}] = {max_value(str(value))}"
                 inputs.append( report_key )
             for c in self._children.values():
                 ireport(c, inputs)
@@ -1544,7 +1550,8 @@ class Config(OrderedDict):
         to specify one on the fly using ``unique_hash_parameters``. 
         That means instead of::
                 
-            self.unique_hash( uniqueHash=UniqueHashExt(**p) )
+            from cdxcore.uniquehash import UniqueHash
+            self.unique_hash( unique_hash=UniqueHash(**p) )
                 
         we can directly call::
             
@@ -1643,7 +1650,7 @@ class Config(OrderedDict):
         ----------
         unique_hash_parameters : dict
         
-            If ``uniqueHash`` is ``None`` these parameters are passed to
+            If ``unique_hash`` is ``None`` these parameters are passed to
             :meth:`cdxcore.uniquehash.UniqueHash.__call__` to obtain
             the corrsponding hashing function.
             
@@ -1679,7 +1686,7 @@ class Config(OrderedDict):
         if unique_hash is None:
             unique_hash = UniqueHash( **unique_hash_parameters )
         else:
-            if len(unique_hash_parameters) != 0: raise ValueError("Cannot provide 'unique_hash_parameters' if 'uniqueHashExt' is provided")
+            if len(unique_hash_parameters) != 0: raise ValueError("Cannot provide 'unique_hash_parameters' if 'unique_hash' is provided")
         
         if not input_only:
             uid = unique_hash( self.usage_value_dict() )
@@ -1837,13 +1844,14 @@ class Config(OrderedDict):
     # for uniqueHash
     # --------------
 
-    def __unique_hash__(self, uniqueHash : UniqueHash, debug_trace : DebugTrace  ) -> str:
+    def __unique_hash__(self, unique_hash : UniqueHash, debug_trace : DebugTrace  ) -> str:
         """
-        Returns a unique hash for this object
+        Returns a unique hash for this object.
+
         This function is required because by default uniqueHash() ignores members starting with '_', which
         in the case of Config means that no children are hashed.
         """
-        return self.unique_hash( uniqueHash=uniqueHash, debug_trace=debug_trace )
+        return self.unique_hash( unique_hash=unique_hash, debug_trace=debug_trace )
 
     # Comparison
     # -----------

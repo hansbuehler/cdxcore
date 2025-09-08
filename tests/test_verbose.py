@@ -32,7 +32,7 @@ def import_local():
 import_local()
 
 from cdxcore.verbose import Context
-from cdxcore.uniquehash import uniqueHash
+from cdxcore.uniquehash import unique_hash32 as unique_hash
 
 class Test(unittest.TestCase):
 
@@ -90,7 +90,7 @@ class Test(unittest.TestCase):
         verbose1.level = 2
         verbose2 = Context(2,indent=3)
         verbose2.level = 3
-        self.assertEqual( uniqueHash( verbose1 ), uniqueHash( verbose2 ) )    
+        self.assertEqual( unique_hash( verbose1 ), unique_hash( verbose2 ) )    
         
         verbose = Context("all")
         self.assertEqual( verbose.fmt(0,"test {x}", x=1),   "00: test 1")

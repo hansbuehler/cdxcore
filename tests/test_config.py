@@ -376,7 +376,7 @@ class Test(unittest.TestCase):
         self.assertEqual(id2,id3)
         
         idempty = Config().unique_hash()
-        self.assertEqual(idempty,"xx")
+        self.assertEqual(idempty,"64550d6ffe2c0a01a14aba1eade0200c")
         self.assertNotEqual(idempty,id3)
 
         # pickle test

@@ -49,11 +49,11 @@ from cdxcore.version import version
 """
 import inspect as inspect
 from .util import fmt_list
-from .uniquehash import uniqueLabelExt
+from .uniquehash import UniqueLabel
 
-uniqueLabel64 = uniqueLabelExt(max_length=64,id_length=8)
-uniqueLabel60 = uniqueLabelExt(max_length=60,id_length=8)
-uniqueLabel48 = uniqueLabelExt(max_length=48,id_length=8)
+uniqueLabel64 = UniqueLabel(max_length=64,id_length=8)
+uniqueLabel60 = UniqueLabel(max_length=60,id_length=8)
+uniqueLabel48 = UniqueLabel(max_length=48,id_length=8)
 
 class VersionError(RuntimeError):
     """
@@ -165,7 +165,7 @@ class Version(object):
         """
         assert max_len >= 4,("'max_len' must be at least 4", max_len)
         id_len = 8 if max_len > 16 else 4
-        uniqueHashVersion = uniqueLabelExt(max_length=max_len, id_length=id_len)
+        uniqueHashVersion = UniqueLabel(max_length=max_len, id_length=id_len)
         return uniqueHashVersion(self.full)
 
     @property
@@ -347,9 +347,9 @@ class Version(object):
     # uniqueHash
     # ----------
 
-    def __unique_hash__( self, uniqueHash, debug_trace ) -> str:
+    def __unique_hash__( self, unique_hash, debug_trace ) -> str:
         """
-        Compute non-hash for use with [uniqueHashExt][cdxcore.uniquehash.uniqueHashExt]().
+        Compute hash for use with :class:`cdxcore.uniquehash.UniqueHash`.
         """
         return self.unique_id(max_len=uniqueHash.length)
     

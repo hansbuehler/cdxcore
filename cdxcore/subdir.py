@@ -1786,7 +1786,7 @@ class SubDir(object):
         # write to temp file, then rename into target file
         # this reduces collision when i/o operations are slow
         full_file_name = self.full_file_name(file,ext=ext)
-        tmp_file     = unique_hash48( [ file, uuid.getnode(), os.getpid(), threading.get_ident(), datetime.datetime.now() ] )
+        tmp_file     = unique_hash48( file, uuid.getnode(), os.getpid(), threading.get_ident(), datetime.datetime.now() )
         tmp_i        = 0
         fullTmpFile  = self.full_file_name(tmp_file,ext="tmp" if not ext=="tmp" else "_tmp")
         while os.path.exists(fullTmpFile):

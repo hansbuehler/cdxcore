@@ -147,7 +147,10 @@ class CRMan(object):
         """
         return self._current
         
-    def write(self, text : str, end : str = '', flush : bool = True, channel : Callable = None ):
+    def write(self, text : str, 
+                    end : str = '', 
+                    flush : bool = True, 
+                    channel : Callable = None ):
         r"""
         Write to a ``channel``,
         

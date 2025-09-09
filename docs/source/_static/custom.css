@@ -1,0 +1,18 @@
+/* Option 1: prefix on the <code> element */
+code.xref.py.py-dec::before {
+  content: "@";
+  margin-right: .1em;
+}
+
+/* Option 2: prefix on the inner <span> */
+/*
+code.xref.py.py-dec > span.pre::before {
+  content: "@";
+  margin-right: .1em;
+}
+&/
+
+/* Optional: make decorators pop a bit */
+code.xref.py.py-dec {
+  font-weight: 600;
+}

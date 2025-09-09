@@ -2,8 +2,8 @@
 Overview
 --------
 
-A simple extension to standard dictionaries which allows accessing elements of the dictionary with "."
-notation. The purpose is a functional-programming style pattern for generating complex objects::
+A simple :class:`cdxcore.pretty.PrettyObject` class which mimics directory access to its members.
+The purpose is a functional-programming style pattern for generating complex objects::
 
     from cdxbasics.prettydict import PrettyObject
     pdct = PrettyObject(z=1)
@@ -12,49 +12,56 @@ notation. The purpose is a functional-programming style pattern for generating c
     pdct.num_batches = 100
     pdct.method = "signature"
     
-This, of course, works just with using any derived calss of ``object``.
-The class :class:`cdxcore.pretty.PrettyObject` adds:
+The object allows accessing members via ``[]``:
     
-* Implements all relevant dictionary protocols, so objects of type :class:`cdxcore.pretty.PrettyObject` can
-  (nearly always) be passed where dictionaries are expected:
+    print( pdct['num_samples'] )   # -> 1000
+    print( pdct['num_batches'] )   # -> 100
+    
+Features
+^^^^^^^^
+    
+:class:`cdxcore.pretty.PrettyObject` implements all relevant dictionary protocols, so objects of type :class:`cdxcore.pretty.PrettyObject` can
+(nearly always) be passed where dictionaries are expected:
                                                                                                              
-  * A :class:`cdxcore.pretty.PrettyObject` object supports standard dictionary semantics in addition to member attribute
-    access.
-    That means you can use ``pdct['num_samples']`` as well as ``pdc.num_samples``.
-    You can mix standard dictionary notation with member attribute notation::
+* A :class:`cdxcore.pretty.PrettyObject` object supports standard dictionary semantics in addition to member attribute
+  access.
+  That means you can use ``pdct['num_samples']`` as well as ``pdc.num_samples``.
+  You can mix standard dictionary notation with member attribute notation::
 
-      print(pdct["num_samples"]) # -> prints "1000"
-      pdct["test"] = 1           # sets pdct.test to 1     
-  
-  * Iterations work just like for dictionaries; for example::
-      
-      for k,v in pdct.items():
-          print( k, v)
-          
-  * Applying ``str`` and ``repr`` to objects of type :class:`cdxcore.pretty.PrettyObject` will return dictionary-type
-    results, so for example ``print(pdct)`` of the above will return ``{'z': 1, 'num_samples': 1000, 'num_batches': 100, 'method': 'signature'}``.
+    print(pdct["num_samples"]) # -> prints "1000"
+    pdct["test"] = 1           # sets pdct.test to 1     
+
+* Iterations work just like for dictionaries; for example::
     
-* The :attr:`cdxcore.pretty.PrettyObject.at_pos` attribute allows accessing element of the ordered dictionary
-  by positon:
+    for k,v in pdct.items():
+        print( k, v)
+        
+* Applying ``str`` and ``repr`` to objects of type :class:`cdxcore.pretty.PrettyObject` will return dictionary-type
+  results, so for example ``print(pdct)`` of the above will return ``{'z': 1, 'num_samples': 1000, 'num_batches': 100, 'method': 'signature'}``.
+    
+The :attr:`cdxcore.pretty.PrettyObject.at_pos` attribute allows accessing elements of the ordered dictionary
+by positon:
   
-  * ``cdxcore.pretty.PrettyObject.at_pos[i]`` returns the `i` th element.
+* ``cdxcore.pretty.PrettyObject.at_pos[i]`` returns the `i` th element.
 
-  * ``cdxcore.pretty.PrettyObject.at_pos.keys[i]`` returns the `i` th key.
+* ``cdxcore.pretty.PrettyObject.at_pos.keys[i]`` returns the `i` th key.
 
-  * ``cdxcore.pretty.PrettyObject.at_pos.items[i]`` returns the `i` th item.
+* ``cdxcore.pretty.PrettyObject.at_pos.items[i]`` returns the `i` th item.
 
-  For example::
-      
-      print(pdct.at_pos[3])      # -> prints "signature"
-      print(pdct.at_pos.keys[3]) # -> prints "method"
+For example::
+    
+    print(pdct.at_pos[3])      # -> prints "signature"
+    print(pdct.at_pos.keys[3]) # -> prints "method"
 
-* You can assign member functions. The following works as expected::
+You can also assign member functions to a :class:`cdxcore.pretty.PrettyObject`.
+The following works as expected::
     
       pdct.f = lambda self, y: return self.y*x
       
-  (to assign a static function which does not refer to ``self``, use ``pdct['g'] = lambda z : return z``).
+(to assign a static function which does not refer to ``self``, use ``pdct['g'] = lambda z : return z``).
 
-**Dataclasses**
+Dataclasses
+^^^^^^^^^^^
 
 :mod:`dataclasses` rely on default values of any member being "frozen" objects, which most user-defined objects and
 :class:`cdxcore.pretty.PrettyObject` objects are not.
@@ -70,16 +77,19 @@ To use non-frozen default values, use the
     	data : PrettyObject = PrettyObject(x=2).as_field()
     
     	def f(self):
-    		return self.data.x
+            return self.data.x
     
     d = Data()   # default constructor used.
-    f.f()
+    d.f()        # -> returns 2
 
 Import
 ------
 .. code-block:: python
 
     from cdxcore.pretty import PrettyObject as pdct
+    
+Documentation
+-------------
 """
 
 from collections import OrderedDict
@@ -94,7 +104,7 @@ no_default = __No_Default_dummy()
 
 class PrettyObject(MutableMapping):
     """
-    Ordered dictionary which allows accessing its members with member notation.
+    Class mimicing an ordered dictionary.
     
     Example::    
         
@@ -125,7 +135,7 @@ class PrettyObject(MutableMapping):
         pdct.__x = 1    # fine
         _ = pdct['__x'] # <- throws an exception
         
-    **Access by Index Position**"
+    **Access by Index Position**
     
     :class:`cdxcore.pretty.PrettyObject` retains order of construction. To access its members
     by index position, use the :attr:`cdxcore.pretty.PrettyObject.at_pos` attribute::
@@ -178,22 +188,18 @@ class PrettyObject(MutableMapping):
       means in all but trivial cases ``a|b != b|a``.
       
       The ``|=`` operator is a short-cut for :meth:`cdxcore.pretty.PrettyObject.update`.
+
+    Parameters
+    ----------
+        copy : Mapping, optional
+            If present, assign elements of ``copy`` to ``self``.
+
+        ** kwargs:
+            Key/value pairs to be added to ``self``.
     """
     def __init__(self, copy : Mapping = None, **kwargs):
         """
-        Construct the object with same sematics as dictionary construction.
-        
-        Since Python 3.6 `dictionaries preserve the order <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__
-        in which they were constructed; so does therefore PrettyObject.
-
-        However, Python semantics remain otherwise order-invariant, i.e. ``{'x':1, 'y':2}`` tests equal to ``{'y':2',x':1}``.
-        
-        Parameters
-        ----------
-            copy : Mapping or `None`
-                If present, shallow copy elements of this mapping.
-            **kwargs
-                Add key/value pairs directly provided to the constructor.
+        :meta private:
         """
         if not copy is None:
             self.update(copy)            
@@ -251,8 +257,12 @@ class PrettyObject(MutableMapping):
     
     # dictionary
     def copy(self, **kwargs):
-        """ Copy `self`. """
+        """ Return a shallow copy; optionally add further key/value pairs. """
         return PrettyObject(self,**kwargs)
+    def clear(self):
+        """ Delete all elements. """
+        self.__dict__.clear()
+
     def get(self, key, default = no_default ):
         """ Equivalent to :meth:`dict.get`. """
         try:
@@ -358,7 +368,8 @@ class PrettyObject(MutableMapping):
         with ``PrettyObject`` default values.
         
         When adding
-        a field with a non-frozen default value to a ``@dataclass`` class,
+        a `field <https://docs.python.org/3/library/dataclasses.html#dataclasses.field>`__
+        with a non-frozen default value to a ``@dataclass`` class,
         a ``default_factory`` has to be provided.
         The function ``as_field`` returns the corresponding :class:`dataclasses.Field`
         element by returning simply::
@@ -386,24 +397,25 @@ class PrettyObject(MutableMapping):
     @property
     def at_pos(self):
         """
-        Elementary access to the data contained in `self` by ordinal position. The ordinal
+        Elementary access to the data contained in ``self`` by ordinal position.
+        The ordinal
         position of an element is determined by the order of addition to the dictionary.
         
         * ``at_pos[position]`` returns an element or elements at an ordinal position:
             
-          * It returns a single element if 'position' refers to only one field.
-          * If 'position' is a slice then the respecitve list of fields is returned
+          * It returns a single element if ``position`` refers to only one field.
+          * If ``position`` is a slice then the respecitve list of fields is returned.
 
-        * ``at_pos.keys[position]`` returns the key or keys at 'position'
+        * ``at_pos.keys[position]`` returns the key or keys at ``position``.
         
-        * ``at_pos.items[position]`` returns the tuple ``(key, element)`` or a list thereof for `position`            
+        * ``at_pos.items[position]`` returns the tuple ``(key, element)`` or a list thereof for ``position``.
 
         You can also write data using the `attribute` notation:
 
-        * ``at_pos[position] = item`` assigns an item or an ordinal position:
+        * ``at_pos[position] = item`` assigns an item to an ordinal position:
             
-          * If 'position' refers to a single element, 'item' must be that item
-          * If 'position' is a slice then 'item' must resolve to a list of the required size        
+          * If ``position`` refers to a single element, ``item`` must be the value to be assigned to this element.
+          * If ``position`` is a slice then '``item`` must resolve to a list (or generator) of the required size.
          """
 
         class Access(Sequence):

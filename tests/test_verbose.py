@@ -29,7 +29,7 @@ def import_local():
         if name[:len(me)] == me:
             imp.reload(mdata)
             print("Reloaded", name)
-import_local()
+#import_local()
 
 from cdxcore.verbose import Context
 from cdxcore.uniquehash import unique_hash32 as unique_hash

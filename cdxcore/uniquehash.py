@@ -108,9 +108,10 @@ class DebugTrace(object):
 class UniqueHash( object ):
     """
     A calculator class which computes unique hashes of a fixed length. 
+    
     There are a number of parameters which control the exact semantics
     of the hashing algorithm as it iterates through collections and objects which are are
-    discussed with :meth:`cdxcore.uniquehash.UniqueHash.__init__`.
+    discussed with :class:`cdxcore.uniquehash.UniqueHash`.
     
     The base use case is to only specify the length of the unique ID string to be computed::
     
@@ -125,6 +126,91 @@ class UniqueHash( object ):
         print( uniqueHash(a) ) # --> "2d1dc3767730"
 
     The callable ``uniquehash`` can be applied to "any" Python construct.
+
+    **Private and Protected members**
+
+    When an object is passed to this functional its members are iterated using ``__dict__`` or ``__slots__``, respectively.
+    By default this process ignores any fields in objects or dictionaries which starts with "_". The idea here is
+    that "functional" parameters are stored as members, but any derived data is stored in protected members.
+    This behaviour can be changed with `parse_underscore`.
+
+    Objects can optionally implement their own hashing scheme by implementing:
+
+    .. code-block:: python
+
+        __unique_hash__( self, uniqueHash : UniqueHash, debug_trace : DebugTrace  )
+        
+    This function may return a unique string, or any other non-None Python object which will then again be hashed.
+    A common use case is to ignore the parameters to this function and return a tuple of members of the class which are
+    pertinent for hashing.
+            
+    **Dictionaries**
+    
+    Since Python 3.6 `dictionaries preserve the order <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__
+    in which they were constructed.
+    However, Python semantics remain otherwise order-invariant, i.e. ``{'x':1, 'y':2}`` tests equal to ``{'y':2',x':1}``.
+    For this reasom the default behaviour here for dictonaries is to sort them before hasing their content. This also applies
+    to objects processed via their ``__dict__``.
+
+    This can be turned off with `sort_dicts`.
+    OrderedDicts or any classes derived from them (such as :class:`cdxcore.prettydict.pdct`)
+    are processed in order and not sorted in any case.
+
+    **Functions**
+
+    By default function members of objects and dictionaries (which include @properties) are
+    ignored. You can set `parse_functions` to True to parse a reduced text of the function code.
+    There are a number of additional expert settings for handling functions, see below.
+    
+    **Numpy, Pandas**
+
+    Hashing of large datasets is not advised. Use hashes on the generating parameter set instead
+    where possible.
+    
+    Parameters
+    ----------
+        length : int, optional
+            Intended length of the hash function. Default is ``32``.
+            
+        parse_underscore : bool, optional
+            How to handle object members starting with "_".
+            
+            * ``"none"`` : ignore members starting with "_" (the default).                       
+            * ``"protected"`` : ignore 'private' members declared starting with "_" and containing "__".
+            * ``"private"`` : consider all members.
+            
+            Default is ``none``.
+             
+        sort_dicts : bool, optional
+            Since Python 3.6 `dictionaries are ordered <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__.
+            That means that strictly speaking
+            the two dictionaries ``{'x':1, 'y':2}`` and ``{'y':2, 'x':1}`` are not indentical;
+            however Python will sematicallly still assume they are as ``==`` between the two will return True.
+            Accordingly, by default this hash function assumes the order of dictionaries does _not_ 
+            matter unless the are, or are derived from, :class:`OrderedDict` (as is :class:`cdxcore.prettydict.pdct`).
+            Practically that means the function first sorts the keys of mappings before
+            hashing their items. 
+            
+            This can be turned off by setting `sort_dicts=False`. Default is ``True``.
+            
+        parse_functions : bool, optional 
+            If True, then the function will attempt to generate unique hashes for functions. Default is ``False``.
+                
+        pd_ignore_column_order : bool, optional
+            (Advanced parameter).
+            Whether to ingore the order of panda columns. The default is ``True``.
+        np_nan_equal : bool, optional
+            (Advanced parameter).
+            Whether to ignore the specific type of a NaN. The default is ``False``.
+        f_include_defaults : bool, optional
+            (Advanced parameter).
+            When parsing functions whether to include default values. Default is `True``.
+        f_include_closure : bool, optional
+            (Advanced parameter).
+            When parsing functions whether to include the function colusure. This can be expensive. Default is `True``.
+        f_include_globals : bool, optional
+            (Advanced parameter).
+            When parsing functions whether to include globals used by the function. This can be expensicve. Default is ``False``.
     """
     
     def __init__(self, length                 : int = 32, *,
@@ -139,93 +225,8 @@ class UniqueHash( object ):
                        f_include_globals      : bool = True,
                        ):
         """
-        :meta public:
-
         Initializes the hash calculator which can iteratively generate hashes of a given length for arbitrary input.
-        The algorithm is meant to be mostly hands-off, but there are a few important design choices to be aware of:
-            
-        **Private and Protected members**
-
-        When an object is passed to this functional its members are iterated using ``__dict__`` or ``__slots__``, respectively.
-        By default this process ignores any fields in objects or dictionaries which starts with "_". The idea here is
-        that "functional" parameters are stored as members, but any derived data is stored in protected members.
-        This behaviour can be changed with `parse_underscore`.
-
-        Objects can optionally implement their own hashing scheme by implementing:
-
-        .. code-block:: python
-
-            __unique_hash__( self, uniqueHash : UniqueHash, debug_trace : DebugTrace  )
-            
-        This function may return a unique string, or any other non-None Python object which will then again be hashed.
-        A common use case is to ignore the parameters to this function and return a tuple of members of the class which are
-        pertinent for hashing.
-                
-        **Dictionaries**
-        
-        Since Python 3.6 `dictionaries preserve the order <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__
-        in which they were constructed.
-        However, Python semantics remain otherwise order-invariant, i.e. ``{'x':1, 'y':2}`` tests equal to ``{'y':2',x':1}``.
-        For this reasom the default behaviour here for dictonaries is to sort them before hasing their content. This also applies
-        to objects processed via their ``__dict__``.
-
-        This can be turned off with `sort_dicts`.
-        OrderedDicts or any classes derived from them (such as :class:`cdxcore.prettydict.pdct`)
-        are processed in order and not sorted in any case.
-
-        **Functions**
-
-        By default function members of objects and dictionaries (which include @properties) are
-        ignored. You can set `parse_functions` to True to parse a reduced text of the function code.
-        There are a number of additional expert settings for handling functions, see below.
-        
-        **Numpy, Pandas**
-
-        Hashing of large datasets is not advised. Use hashes on the generating parameter set instead
-        where possible.
-        
-        Parameters
-        ----------
-        length : int
-            Intended length of the hash function.
-            
-        parse_underscore : bool
-            How to handle object members starting with "_".
-            
-            * ``"none"`` : ignore members starting with "_" (the default).                       
-            * ``"protected"`` : ignore 'private' members declared starting with "_" and containing "__".
-            * ``"private"`` : consider all members.
-             
-        sort_dicts : bool
-            Since Python 3.6 `dictionaries are ordered <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__.
-            That means that strictly speaking
-            the two dictionaries ``{'x':1, 'y':2}`` and ``{'y':2, 'x':1}`` are not indentical;
-            however Python will sematicallly still assume they are as ``==`` between the two will return True.
-            Accordingly, by default this hash function assumes the order of dictionaries does _not_ 
-            matter unless the are, or are derived from, :class:`OrderedDict` (as is :class:`cdxcore.prettydict.pdct`).
-            Practically that means the function first sorts the keys of mappings before
-            hashing their items. 
-            
-            This can be turned off by setting `sort_dicts=False`.
-            
-        parse_functions : bool
-            If True, then the function will attempt to generate unique hashes for functions.
-                
-        pd_ignore_column_order : bool
-            (Advanced parameter).
-            Whether to ingore the order of panda columns. The default is True.
-        np_nan_equal : bool
-            (Advanced parameter).
-            Whether to ignore the specific type of a NaN. The default is False.
-        f_include_defaults : bool
-            (Advanced parameter).
-            When parsing functions whether to include default values. Default is True.
-        f_include_closure : bool
-            (Advanced parameter).
-            When parsing functions whether to include the function colusure. This can be expensive. Default is True.
-        f_include_globals : bool
-            (Advanced parameter).
-            When parsing functions whether to include globals used by the function. This can be expensicve. Default is False.
+        :meta public:
         """
         self.length             = int(length)
 
@@ -729,19 +730,19 @@ class DebugTraceCollect(DebugTrace):
     
     Note that `DebugTraceCollect` itself implements :class:`Collection` and :class:`Sequence` semantics
     so you can iterate it directly.
-    """
-    def __init__(self, tostr : int = None ):
-        """
-        Initialize data collection
-        
-        Parameters
-        ----------
+    
+    Parameters
+    ----------
         tostr: int
             If set to a positive integer, then any object encountered will be represented as a string with :func:`repr`,
             and the length of the string will be limited to `tostr`. This avoids generation of large amounts
             of data if the objects hashed are large (e.g. numpy arrays).
             
-            If set to None then the function collects the actual elements.
+            If set to ``None`` then the function collects the actual elements.
+    """
+    def __init__(self, tostr : int = None ):
+        """
+        Initialize data collection
         """
         if tostr and tostr<=0: raise ValueError("'tostr' must be None or a positive integer")
         self.tostr = tostr
@@ -809,17 +810,20 @@ class DebugTraceVerbose(DebugTrace):
     Live printing of tracing information with :class:`cdxcore.verbose.Context`.
     for some formatting. All objects will be reported by type and
     their string representation, sufficiently reduced if necessary.
+
+    Parameters
+    ----------
+        strsize : int, optional
+            Maximum string size when using :func:`repr` on reported objects.
+            Default is ``50``.
+            
+        verbose : :class:`cdxcore.verbose.Context`, optional
+            Context object or ``None`` for a new context object
+            with full visibility (it prints everything).
     """
     def __init__(self, strsize : int = 50, verbose : Context = None ):
         """
         Initialize tracer.
-
-        Parameters
-        ----------
-        strsize : int
-            Maximum string size when using :func:`repr` on reported objects.
-        verbose : :class:`cdxcore.verbose.Context`
-            Context object or ``None`` for a new context object.
         """                
         from .verbose import Context
         if strsize<=3: ValueError("'strsize' must exceed 3")
@@ -887,27 +891,31 @@ def NamedUniqueHash( max_length       : int = 60,
     **Important**
 
     It is *strongly recommended* to read the documentation for
-    :meth:`cdxcore.uniquehash.UniqueHash.__init__` for details on hashing logic
+    :class:`cdxcore.uniquehash.UniqueHash` for details on hashing logic
     and the available parameters
 
     Parameters
     ----------
-    max_length : int
+    max_length : int, optional
         Total length of the returned string including the ID.
-        Defaults to 60 to allow file names with extensions with three letters.
-    id_length : int
-        Intended length of the hash `ID`, default 16
-    separator : str
+        Defaults to ``60`` to allow file names with extensions of up to three letters.
+        
+    id_length : int, optional
+        Intended length of the hash `ID`, default ``16``.
+        
+    separator : str, optional
         Separator between `label` and `id_length`.
         Note that the separator will be included in the ID calculation, hence different separators
-        lead to different IDs.
-    filename_by : str
+        lead to different IDs. Default ``' '``.
+        
+    filename_by : str, optional
         If not ``None``, use :class:`cdxcore.util.fmt_filename` with ``by=filename_by`` to ensure the returned string is a valid
         filename for both windows and linux, of at most `max_length` size.
         If set to the string ``default``, use :data:`cdxcore.util.DEF_FILE_NAME_MAP`
         as the default mapping for :func:`cdxcore.util.fmt_filename`.
-    **unique_hash_arguments:
-        Parameters passed to :meth:`cdxcore.uniquehash.UniqueHash.__init__`.
+        
+    ** unique_hash_arguments, optional
+        Parameters passed to :class:`cdxcore.uniquehash.UniqueHash`.
 
     Returns
     -------
@@ -946,42 +954,48 @@ def UniqueLabel(     max_length       : int = 60,
         
         f( unique_label )
 
-    which generates strings of at most `max_length`
-    based on a provided `unique_label`; essentially:
+    which generates strings of at most ``max_length``
+    based on a provided ``unique_label``; essentially::
     
-    .. code-block:: python
-
         If len(unique_label) <= max_length:
             unique_label
         else:
             unique_label + separator + ID
 
-    where ``ID`` is a unqiue hash computed from `unique_label` of maximum length `id_length`.
+    where ``ID`` is a unqiue hash computed from ``unique_label`` of maximum length ``id_length``.
 
-    This function assumes that `unique_label` is unique, hence the ID is dropped if `unique_label` is less than `max_length`.
+    This function assumes that ``unique_label`` is unique, hence the ID is dropped if ``unique_label``
+    is less than ``max_length``.
     Use :func:`cdxcore.uniquehash.NamedUniqueHash` if the label is not unique, and which therefore always appends the 
     dynamically calculated unique ID.
 
-    Note that if `filename_by` conversion is used, then this function will always attach the unique ID to the filename because
-    after the conversion of the label to a filename it is no longer guaranteed that the result is unique. If your label is unique as a filename, do not
-    use `filename_by`. The function will return valid file names if `label` is a valid file name.
+    Note that if ``filename_by`` conversion is used, then this function will always attach the unique ID
+    to the filename because
+    after the conversion of the label to a filename it is no longer guaranteed that the result is unique.
+    If your label is unique as a filename, do not
+    use ``filename_by``. The function will return valid file names if ``label`` is a valid file name.
 
     Parameters
     ----------
     max_length : int
         Total length of the returned string including the ID.
         Defaults to 60 to allow file names with extensions with three letters.
+        
     id_length : int
         Indicative length of the hash function, default 8.
         id_length will be reduced to `max_length` if neccessary.
+        
     separator : str
-        Separator between `label` and `id_length`.
+        Separator between the label and the unique ID.
+        
         Note that the separator will be included in the ID calculation, hence different separators
         lead to different IDs.
+        
     filename_by : str
-        If not ``None``, use :func:`cdxcore.util.fmt_filename`( *, by=filename_by ) to ensure the returned string is a valid
-        filename for both windows and linux, of at most `max_length` size.
-        If set to the string "default", :data:`cdxcore.util.DEF_FILE_NAME_MAP`
+        If not ``None``, use :func:`cdxcore.util.fmt_filename` with ``by=filename_by``
+        to ensure the returned string is a valid
+        filename for both windows and linux, of at most ``max_length`` size.
+        If set to the string ``"default"``, :data:`cdxcore.util.DEF_FILE_NAME_MAP`
         as the default mapping for :func:`cdxcore.util.fmt_filename`.
 
     Returns
@@ -1027,7 +1041,7 @@ def unique_hash8( *args, **kwargs ) -> str:
     with parameter ``length=8``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
+    discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
     
     :meta private:
@@ -1040,7 +1054,7 @@ def unique_hash16( *args, **kwargs ) -> str:
     with parameter ``length=16``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
+    discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
     """
     return UniqueHash(16)(*args,**kwargs)
@@ -1051,7 +1065,7 @@ def unique_hash32( *args, **kwargs ) -> str:
     with parameter ``length=32``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
+    discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
     """
     return UniqueHash(32)(*args,**kwargs)
@@ -1062,7 +1076,7 @@ def unique_hash48( *args, **kwargs ) -> str:
     with parameter ``length=48``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
+    discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
     """
     return UniqueHash(48)(*args,**kwargs)
@@ -1073,7 +1087,7 @@ def unique_hash64( *args, **kwargs ) -> str:
     with parameter ``length=64``.
     
     *Important* please make sure you aware of the functional considerations
-    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
+    discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
     """
     return UniqueHash(64)(*args,**kwargs)
@@ -1101,7 +1115,7 @@ def named_unique_filename48_8( label : str, *args, **kwargs ) -> str:
     with parameters ``max_length=48, id_length=8, filename_by="default"``.
 
     *Important* please make sure you aware of the functional considerations
-    discussed in :meth:`cdxcore.uniquehash.UniqueHash.__init__` around
+    discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
     """
     return NamedUniqueHash( max_length=48, id_length=8, filename_by="default" )

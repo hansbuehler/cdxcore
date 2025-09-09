@@ -56,6 +56,7 @@ html_theme_options = {
 }
 
 html_static_path = ['_static']
+html_css_files = ["custom.css"]
 
 # Autodoc / autosummary: NumPy-like API pages
 autosummary_generate = True
@@ -95,4 +96,28 @@ source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
 }
+
+from docutils import nodes
+from sphinx.roles import XRefRole
+
+def decorator_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
+    """Custom role to display decorators with @ prefix."""
+    # Create a pending_xref node like other Sphinx cross-references
+    node = nodes.literal(text, f"@{text}", classes=["xref", "dec"])
+    node["reftype"] = "func"     # decorators are functions
+    node["reftarget"] = text
+    node["refdomain"] = "py"     # Python domain
+    return [node], []
+
+from sphinx.domains.python import PyXRefRole
+
+def setup(app):
+    # Make :dec: behave exactly like :py:func:
+    app.add_role_to_domain("py", "dec", PyXRefRole("func"))
+    return {"parallel_read_safe": True}
+
+#def setup(app):
+#    app.add_role("dec", decorator_role)
+#    return {"parallel_read_safe": True}
+
 

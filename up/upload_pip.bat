@@ -9,7 +9,7 @@ REM https://packaging.python.org/tutorials/packaging-projects/
 cd C:\Users\hans\OneDrive\Python3\packages\cdxcore
 if exist dist rmdir /Q /S dist
 
-# run tests
+REM ** run tests **
 if not exist .vcdxcore call python -m venv .vcdxcore
 call .vcdxcore\Scripts\activate
 call python -m pip install -U pip pytest twine build
@@ -17,7 +17,7 @@ call pip uninstall -qq cdxcore
 call pip install -e .
 call pytest
 
-# create distribution
+REM ** create distribution **
 mkdir dist
 call pip install -q -U twine build
 call python up\pip_modify_setup.py 
@@ -25,7 +25,7 @@ call python -m build
 call python -m twine upload dist\*
 rmdir /Q /S dist
 
-# test pip install
+REM test pip install
 call pip uninstall -q cdxcore
 pip install --upgrade cdxcore
 

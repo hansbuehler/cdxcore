@@ -4,7 +4,6 @@ Created on Tue Apr 14 21:24:52 2020
 @author: hansb
 """
 
-
 import unittest as unittest
 import dataclasses as dataclasses
 import sys as sys
@@ -12,7 +11,6 @@ import os as os
 import pickle as pickle
 import tempfile as tempfile
 import shutil as shutil
-sys.setrecursionlimit(100)
 
 def import_local():
     """
@@ -37,7 +35,7 @@ def import_local():
         if name[:len(me)] == me:
             imp.reload(mdata)
             print("Reloaded", name)
-import_local()
+#import_local()
 
 from cdxcore.config import Config, Int, Float
 from cdxcore.pretty import PrettyObject as pdct

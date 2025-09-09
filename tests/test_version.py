@@ -28,7 +28,7 @@ def import_local():
     for name, mdata in modules.items():
         if name[:len(me)] == me:
             imp.reload(mdata)
-import_local()
+#import_local()
     
 """
 Imports
@@ -86,6 +86,25 @@ bA = baseA()
 def baf(x):
     return x
 
+class AA(object):
+    def __init__(self, x=2):
+        self.x = x
+    @version(version="0.4.1")
+    def h(self, y):
+        return self.x*y
+
+@version(version="0.3.0")
+def Ah(x,y):
+    return x+y
+
+@version(version="0.0.2", dependencies=[Ah])
+def Af(x,y):
+    return Ah(y,x)
+
+@version(version="0.0.1", dependencies=["Af", AA.h])
+def Ag(x,z):
+    a = AA()
+    return Af(x*2,z)+a.h(z)
 
 class Test(unittest.TestCase):
     
@@ -120,6 +139,13 @@ class Test(unittest.TestCase):
         self.assertEqual( bA.version.full, "0.0.1")
         self.assertEqual( bB.version.full, "0.0.2 { baseA: 0.0.1 }")
         self.assertEqual( bC.version.full, "0.0.3")
+
+        Ag(1,2)
+        
+        self.assertEqual( Ag.version.input, "0.0.1")
+        self.assertEqual( Ag.version.full, "0.0.1 { AA.h: 0.4.1, Af: 0.0.2 { Ah: 0.3.0 } }")
+        self.assertEqual( Ag.version.unique_id48, "0.0.1 { AA.h: 0.4.1, Af: 0.0.2 { Ah: 0.3.0 } }")
+        self.assertEqual( Ag.version.dependencies,('0.0.1', {'AA.h': '0.4.1', 'Af': ('0.0.2', {'Ah': '0.3.0'})}) )
             
 if __name__ == '__main__':
     unittest.main()

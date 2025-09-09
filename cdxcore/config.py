@@ -18,7 +18,8 @@ Aimed at machine learning programs to ensure consistency of code accross experim
         num_batches = config("num_batches", 10, Int>=2, "Number of batches. Must be at least 2")
         ...
     
-**Key features:**
+Key features
+^^^^^^^^^^^^
 
 * Detect misspelled parameters by checking that all parameters provided via a  `config` by a user have been read.
 
@@ -414,6 +415,9 @@ Import
 .. code-block:: python
 
     from cdxcore.config import Config
+    
+Documentation
+-------------
 """
 
 from collections import OrderedDict
@@ -444,41 +448,27 @@ class Config(OrderedDict):
     missspelled parameters, and simple built-in help.
 
     See :mod:`cdxcore.config` for an extensive discussion of features.
+
+    Parameters
+    ----------
+        *args : list
+            List of ``Mapping`` to iteratively create a new config with.
+            
+            If the first element is a ``Config``, and no other parameters are passed,
+            then this object will be a shallow copy of that ``Config``.
+            It then shares all usage recording. See :meth:`cdxcore.config.Config.shallow_copy`.
+            
+        config_name : str, optional
+            Name of the configuration for report_usage. Default is ``"config"``.
+            
+        ** kwargs : dict
+            Additional key/value pairs to initialize the config with, e.g.``Config(a=1, b=2)``.
+
     """
 
     def __init__(self, *args, config_name : str = None, **kwargs):
         """
         Create a :class:`cdxcore.config.Config`.
-        
-        See ``help(Config)`` for a description of this class 
-        and :mod:`cdxcore.config` for an extensive discussion of its features.
-        
-        Two patterns::
-            
-            __init__(config):
-                is the copy constructor; see shallow_copy()
-                
-        or::
-            __init__( dict, x=1, y=2 ):
-                creates a new config by first iteratively loading all positional dictionary arguments,
-                and then copying the keyword arguments as provided.
-            
-        See also :func:`cdxcore.config.Config.config_kwargs`.
-
-        Parameters
-        ----------
-            *args : list
-                List of dictionaries to create a new config with, iteratively.
-                
-                If the first element is a config, and no other parameters are passed,
-                then this object will be a shallow copy of that config.
-                It then shares all usage recording. See :meth:`cdxcore.config.Config.shallow_copy`.
-                
-            config_name : str, optional
-                Name of the configuration for report_usage. Default is 'config'
-                
-            **kwargs : dict
-                Additional key/value pairs to initialize the config with, e.g.``Config(a=1, b=2)``.
         """
         if len(args) == 1 and isinstance(args[0], Config) and config_name is None and len(kwargs) == 0:
             source               = args[0]
@@ -1557,7 +1547,7 @@ class Config(OrderedDict):
             
             self.unique_hash( **p )            
         
-        The purpose of this function is to allow indexing results of heavy computations with were
+        The purpose of this function is to allow indexing results of heavy computations which were
         configured with ``Config`` with a simple hash key. A typical application is caching of results
         based on the relevant user-configuration.
 
@@ -1920,17 +1910,20 @@ class CastError( RuntimeError ):
     """
     Raised when :meth:`cdxcore.config.Config.__call__` could not cast a
     value provided by the user to the specified type.
+
+    Parameters
+    ----------
+        key : str
+            Key name of the parameter which failed to cast.
+        config_name : str
+            Name of the ``Config``.
+            
+        exception : :class:`Exception`
+            Orginal exception raised by the cast.
     """
     def __init__(self, key : str, config_name : str, exception : Exception):
         """
-        Parameters
-        ----------
-            key : str
-                Key name of the parameter which failed to cast.
-            config_name : str
-                Name of the `config`.
-            exception : Exception
-                Orginal exception raised by the cast.
+        :meta private:
         """        
         #: Key of the parameter which failed to cast.
         self.key         = key

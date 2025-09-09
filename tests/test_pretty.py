@@ -37,7 +37,7 @@ def import_local():
         if name[:len(me)] == me:
             imp.reload(mdata)
             print("Reloaded", name)
-import_local()
+#import_local()
 
 from cdxcore.pretty import PrettyObject, Sequence
 

@@ -32,7 +32,7 @@ def import_local():
     for name, mdata in modules.items():
         if name[:len(me)] == me:
             imp.reload(mdata)
-import_local()
+#import_local()
     
 """
 Imports

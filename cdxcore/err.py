@@ -1,24 +1,70 @@
 # -*- coding: utf-8 -*-
 """
-## Overview
-Basic error handling and reporting functions
+Overview
+--------
 
-The main purpose of this module are the functions [verify][cdxcore.err.verify]() and [warn_if][cdxcore.err.warn_if](). Both test a runtime condition and will either
-raise an Exception or issue a Warning. In both cases, required string formatting is only performed if the event is actually triggered, 
-much like an _assert_ with a message tuple as argument.
+Basic error handling and reporting functions.
 
-This way we are able to write neat code which produces robust, informative errors and warnings without impeding runtime performance.
+The main use of this module are the functions
+:func:`cdxcore.err.verify` and :func:`cdxcore.err.warn_if`.
+Both test some runtime condition and will either
+raise an ``Exception`` or issue a ``Warning`` if triggered. In both cases, required string formatting is only performed
+if the event is actually triggered.
 
-## Import
-```
-from cdxcore.err import verify, warn_if, error, warn #NOQA
-```
+This way we are able to write neat code which produces robust,
+informative errors and warnings without impeding runtime performance.
+
+Example::
+    
+    from cdxcore.err import verify, warn_if
+    import numpy as np
+    
+    def f( x : np.ndarray ):
+        std = np.std(x,axis=0,keepdims=True)
+        verify( np.all( std>1E-8 ), "Cannot normalize 'x' by standard deviation: standard deviations are {std}", std=std )
+        x /= std        
+        
+    f( np.zeros((10,10)) )
+    
+raises a :class:`RuntimeError`
+
+.. code-block:: python
+
+    Cannot normalize 'x' by standard deviation: standard deviations are [[0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]]
+
+For warnings, we can use ``warn_if``::
+
+    from cdxcore.err import verify, warn_if
+    import numpy as np
+    
+    def f( x : np.ndarray ):
+        std = np.std(x,axis=0,keepdims=True)
+        warn_if( not np.all( std>1E-8 ), lambda : f"Normalizing 'x' by standard deviation: standard deviations are {std}" )
+        x   = np.where( std<1E-8, 0., x/np.where( std<1E-8, 1., std ) )
+        
+    f( np.zeros((10,10)) )
+    
+issues a warning::
+
+    RuntimeWarning: Normalizing 'x' by standard deviation: standard deviations are [[0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]]
+      warn_if( not np.all( std>1E-8 ), "Normalizing 'x' by standard deviation: standard deviations are {std}", std=std )    
+
+Note that though we used two different approaches for message formatting, the the error messages in both cases
+are only formatted if the condition in ``verify`` is not met.
+
+Import
+------
+.. code-block:: python
+
+    from cdxcore.err import verify, warn_if, error, warn
+    
+Documentation
+-------------
 """
 
 import warnings as warnings
 import os as os
 from collections.abc import Callable
-import inspect as inspect
 
 def _fmt( text : str, args = None, kwargs = None, f : Callable =  None ) -> str:
     """ Utility function. See [cdxcore.err.fmt][]() . 'f' not currently used.':meta private: """
@@ -31,7 +77,7 @@ def _fmt( text : str, args = None, kwargs = None, f : Callable =  None ) -> str:
         # we pass args and kwargs as provided
         if not args is None:
             if not kwargs is None:
-                return text(*args, **kwargs)
+                return text(* args, ** kwargs)
             else:
                 return text(*args)
         elif not kwargs is None :
@@ -45,7 +91,10 @@ def _fmt( text : str, args = None, kwargs = None, f : Callable =  None ) -> str:
         # args are only valid for c-style %d, %s
         if not kwargs is None:
             raise ValueError("Cannot specify both 'args' and 'kwargs'", text)
-        return text % tuple(args)
+        try:    
+            return text % tuple(args)
+        except TypeError as e:
+            raise TypeError(e, text, args)
     # text
     # python 2 and 3 mode
     kwargs = dict() if kwargs is None else kwargs
@@ -54,243 +103,261 @@ def _fmt( text : str, args = None, kwargs = None, f : Callable =  None ) -> str:
     else:
         return text % kwargs
     
+def fmt(text : str|Callable, * args, ** kwargs) -> str:
     """
-    try:
-        if text.find("%(") == -1:
-            return text.format(**kwargs)
-        else:
-            return text % kwargs
-    except KeyError as e:
-        if f is None:
-            raise e
-    # get closure and globals
-    f = inspect.unwrap( getattr(f, "__func__", f))
-    assert not f is None
-    closure = dict( f.__closure__ ) if not f.__closure__ is None else {}
-    globs   = dict( f.__globals__ ) if not f.__globals__ is None else {}
-    kwargs  = closure | globs
-    print(list(kwargs))
-    if text.find("%(") == -1:
-        return text.format(**kwargs)
-    else:
-        return text % kwargs
-    """
-
-def fmt(text : str, *args, **kwargs) -> str:
-    """
-    Basic delayed string formatting made easy.
+    Basic tool for delayed string formatting.
     
     The main use case is that formatting is not executed until this function is called,
     hence potential error messages are not generated until an error actually occurs.
-    See, for example, [verify][cdxcore.err.verify]().
+    See, for example, :func:`cdxcore.err.verify`.
     
-    Examples
-    ```
-    fmt("one %ld", 1)              # using c-style
-    fmt("one %{one}ld", one=1)     # using python 2 style
-    fmt("one {one:d}", one=1)      # using python 3 string.format()
-    ```
+    The follwing example illustrates all four supported modi operandi::
+        
+        from cdxcore.err import fmt
+        one = 1
+        fmt(lambda : f"one {one:d})   # using a lambda function
+        fmt("one {one:d}", one=one)   # using python 3 string.format()
+        fmt("one %{one}ld", one=one)  # using python 2 style
+        fmt("one %ld", one)           # using c-style
     
-    Do not use f-strings directly as they are executed in the scope they are typed in.
-    Use instead
-    ```
-    fmt( lambda : f"one {one:d}" ) # f-style with lambda
-    ```
+    As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
+    but wrap them with a ``lambda`` function.
     
     Parameters
-    ----------
-    text : str
-        Error text which may contain one parameter pattern. See examples above.
+    ----------    
+    text : str | Callable
+        Error text which may contain one of the following string formatting patterns:
         
-        * Classic C-stype ```%d, %s, %f```: in this case the positional `args` of the function are used.
+        * Python 3 ```{parameter:d}```, in which case ``message.fmt(kwargs)`` for :meth:`str.format` is used
+          to obtain the output message.
         
-        * Python 2 ```%(parameter)d```: in this case `kwargs` are used.
+        * Python 2 ```%(parameter)d``` in which case ``message % kwargs`` is used to obtain the output message.
         
-        * Python 3 ```{parameter:d}``` [str.format](https://docs.python.org/3/library/stdtypes.html#str.format)() format: in this case `kwargs` are used.
+        * Classic C-stype ```%d, %s, %f``` in which case ``message % args`` is used to obtain the output message.
         
-        * lambda functions: if `text` is not a string but a callable this is called.
+        * If ``message`` is a ``Callable`` such as a ``lambda`` function, then ``message( * args, ** kwargs )``
+          is called to obtain the output message.
+          
+          A common use case is using an f-string wrapped in a ``lambda`` function; see example above.
         
-    args, **kwargs:
+    * args, ** kwargs:
         See above
+
+    Returns
+    -------
+    Text : str
+        The formatted message.
     """
     return _fmt(text=text,args=args,kwargs=kwargs,f=fmt)
 
-def error( text : str, *args, exception : Exception = RuntimeError, **kwargs ):
+def error( text : str|Callable, *args, exception : Exception = RuntimeError, **kwargs ):
     """
-    Raise an exception of type `exception` with basic formatting.
-    See also [fmt][cdxcore.err.fmt]() for formatting comments.
-    The point of this function is to have a consistent interface to [verify][cdxcore.err.verify]().
-
-    Examples
-    ```
-    error("one %ld", 1)              # using c-style
-    error("one %{one}ld", one=1)     # using python 2 style
-    error("one {one:d}", one=1)      # using python 3 string.format()
-    ```
+    Raise an exception with string formatting.
     
-    Do not use f-strings directly as they are executed in the scope they are typed in.
-    Use instead
-    ```
-    error( lambda : f"one {one:d}" ) # f-style with lambda
-    ```
+    See also :func:`cdxcore.err.fmt` for formatting comments.
+    The point of this function is to have an interface which is consistent with
+    :func:`cdxcore.err.verify`.
+
+    Examples::
+
+        from cdxcore.err import error
+        one = 1
+        error(lambda : f"one {one:d}")  # wrapped f-string
+        error("one {one:d}", one=one)   # using python 3 string.format()
+        error("one %{one}ld", one=one)  # using python 2 style
+        error("one %ld", one)           # using c-style
+    
+    As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
+    but wrap them with a ``lambda`` function.
 
     Parameters
     ----------
-    text : str
-        Error text which may contain one parameter pattern. See examples above.
+    text : str | Callable
+        Error text which may contain one of the following string formatting patterns:
         
-        * Classic C-stype ```%d, %s, %f```: in this case the positional `args` of the function are used.
+        * Python 3 ```{parameter:d}```, in which case ``message.fmt(kwargs)`` for :meth:`str.format` is used
+          to obtain the output message.
         
-        * Python 2 ```%(parameter)d```: in this case `kwargs` are used.
+        * Python 2 ```%(parameter)d``` in which case ``message % kwargs`` is used to obtain the output message.
         
-        * Python 3 ```{parameter:d}``` [str.format](https://docs.python.org/3/library/stdtypes.html#str.format)() format: in this case `kwargs` are used.
+        * Classic C-stype ```%d, %s, %f``` in which case ``message % args`` is used to obtain the output message.
         
-        * lambda functions: if `text` is not a string but a callable this is called.
-    exception : Exception
-        Which type of exception to raise.
-    args, **kwargs:
+        * If ``message`` is a ``Callable`` such as a ``lambda`` function, then ``message( * args, ** kwargs )``
+          is called to obtain the output message.
+          
+          A common use case is using an f-string wrapped in a ``lambda`` function; see example above.
+        
+    exception : Exception, optional
+        Which type of exception to raise. Defaults to :class:`RuntimeError`.
+
+    * args, ** kwargs:
         See above
 
     Raises
     ------
-    exception
+    exception : exception
     """
     text = _fmt(text=text,args=args,kwargs=kwargs,f=error)
-    raise exception( fmt(text, *args, **kwargs) )
+    raise exception( text )
     
-def verify( cond : bool, text : str, *args, exception : Exception = RuntimeError, **kwargs ):
+def verify( cond : bool, text : str|Callable, *args, exception : Exception = RuntimeError, **kwargs ):
     """
-    Validate a condition `cond` and raise an exception of type `exception` if `cond` is not True.
-    In that case `text` will be formatted using `args` and `kwargs`.
-    The point of this function is to only format the error message if the condition `cond` is not True
-    and an error is raised.
-
-    Examples
-    ```
-    verify( good, "one %ld", 1)              # using c-style
-    verify( good, "one %{one}ld", one=1)     # using python 2 style
-    verify( good, "one {one:d}", one=1)      # using python 3 string.format()
-    ```
+    Raise an exception using delayed error string formatting if a condition is not met.
     
-    Do not use f-strings directly as they are executed in the scope they are typed in.
-    Use instead
-    ```
-    verify( good, lambda : f"one {one:d}" )  # f-style with lambda
-    ```
+    The point of this function is to only format an error message if a condition ``cond`` is not met
+    and an error is to be raised.
 
+    Examples::
+        
+        from cdxcore.err import verify
+        one = 1
+        good = False                           # some condition
+        verify(good, lambda : f"one {one:d}")  # wrapped f-string
+        verify(good, "one {one:d}", one=one)   # using python 3 string.format()
+        verify(good, "one %{one}ld", one=one)  # using python 2 style
+        verify(good, "one %ld", one)           # using c-style
+    
+    As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
+    but wrap them with a ``lambda`` function.
+    
     Parameters
     ----------
     cond : bool
-        Condition to be True. If False, an exception is raised.
-    text : str
-        Error text which may contain one parameter pattern. See examples above.
+        Condition to test.
+    
+    text : str | Callable
+        Error text which may contain one of the following string formatting patterns:
         
-        * Classic C-stype ```%d, %s, %f```: in this case the positional `args` of the function are used.
+        * Python 3 ```{parameter:d}```, in which case ``message.fmt(kwargs)`` for :meth:`str.format` is used
+          to obtain the output message.
         
-        * Python 2 ```%(parameter)d```: in this case `kwargs` are used.
+        * Python 2 ```%(parameter)d``` in which case ``message % kwargs`` is used to obtain the output message.
         
-        * Python 3 ```{parameter:d}``` [str.format](https://docs.python.org/3/library/stdtypes.html#str.format)() format: in this case `kwargs` are used.
+        * Classic C-stype ```%d, %s, %f``` in which case ``message % args`` is used to obtain the output message.
         
-        * lambda functions: if `text` is not a string but a callable this is called.
-    exception : Exception
-        Which type of exception to raise if 'cond' is False
-    args, **kwargs:
+        * If ``message`` is a ``Callable`` such as a ``lambda`` function, then ``message( * args, ** kwargs )``
+          is called to obtain the output message.
+          
+          A common use case is using an f-string wrapped in a ``lambda`` function; see example above.
+        
+    exception : Exception, optiona
+        Which type of exception to raise. Defaults to :class:`RuntimeError`.
+
+    * args, ** kwargs:
         See above
 
     Raises
     ------
-    exception
+    exception : exception
     """
     if not cond:
         text = _fmt(text=text,args=args,kwargs=kwargs,f=verify)
-        raise exception( fmt(text, *args, **kwargs) )
+        raise exception( fmt(text, * args, ** kwargs) )
 
 _warn_skips = (os.path.dirname(__file__),)
 
-def warn( text : str, *args, warning = RuntimeWarning, stack_level : int = 1, **kwargs ):
+def warn( text : str|Callable, *args, warning = RuntimeWarning, stack_level : int = 1, **kwargs ):
     """
-    Issue a warning of type `warning` with basic formatting.
-    The point of this function is to have a consistent interface to warn_if().
-
-    Examples
-    ```
-    warn("one %ld", 1)              # using c-style
-    warn("one %{one}ld", one=1)     # using python 2 style
-    warn("one {one:d}", one=1)      # using python 3 string.format()
-    ```
+    Issue a warning.
     
-    Do not use f-strings directly as they are executed in the scope they are typed in.
-    Use instead
-    ```
-    warn( lambda : f"one {one:d}" ) # f-style with lambda
-    ```
+    The point of this function is to have an interface consistent with :func:`cdxcore.err.warn_if`.
 
+    Examples::
+        
+        from cdxcore.err import warn
+        one = 1        
+        warn(lambda : f"one {one:d}")  # wrapped f-string
+        warn("one {one:d}", one=one)   # using python 3 string.format()
+        warn("one %{one}ld", one=one)  # using python 2 style
+        warn("one %ld", one)           # using c-style
+    
+    As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
+    but wrap them with a ``lambda`` function.
+    
     Parameters
     ----------
-    text : str
-        Error text which may contain one parameter pattern. See examples above.
+    text : str | Callable
+        Error text which may contain one of the following string formatting patterns:
         
-        * Classic C-stype ```%d, %s, %f```: in this case the positional `args` of the function are used.
+        * Python 3 ```{parameter:d}```, in which case ``message.fmt(kwargs)`` for :meth:`str.format` is used
+          to obtain the output message.
         
-        * Python 2 ```%(parameter)d```: in this case `kwargs` are used.
+        * Python 2 ```%(parameter)d``` in which case ``message % kwargs`` is used to obtain the output message.
         
-        * Python 3 ```{parameter:d}``` [str.format](https://docs.python.org/3/library/stdtypes.html#str.format)() format: in this case `kwargs` are used.
+        * Classic C-stype ```%d, %s, %f``` in which case ``message % args`` is used to obtain the output message.
         
-        * lambda functions: if `text` is not a string but a callable this is called.
-    warning :
-        Which type of warning to issue.
-        This is the `category` parameter to [warnings.warn](https://docs.python.org/3/library/warnings.html#available-functions)().
-    stack_level :
-        What stack to report. See [warnings.warn](https://docs.python.org/3/library/warnings.html#available-functions)().
-    args, **kwargs:
+        * If ``message`` is a ``Callable`` such as a ``lambda`` function, then ``message( * args, ** kwargs )``
+          is called to obtain the output message.
+          
+          A common use case is using an f-string wrapped in a ``lambda`` function; see example above.
+        
+    warning : optional
+        Which type of warning to issue. 
+        This corresponds to the ``category`` parameter for :func:`warnings.warn`.
+        Default is :class:`RuntimeWarning`.
+
+    stack_level : int, optional
+        What stack to report; see :func:`warnings.warn`.
+        Default is 1, which means ``warn`` itself is not reported as part of the stack trace.
+
+    * args, ** kwargs:
         See above
     """
-    text = _fmt(text=text,args=args,kwargs=kwargs,f=warn)
     warnings.warn( message=text,
                    category=warning,
                    stacklevel=stack_level,
                    skip_file_prefixes=_warn_skips )
 
-def warn_if( cond : bool, text : str, *args, warning = RuntimeWarning, stack_level : int = 1, **kwargs ):    
+def warn_if( cond : bool, text : str|Callable, *args, warning = RuntimeWarning, stack_level : int = 1, **kwargs ):    
     """
-    Test `cond` and issue a warning of type `warning` if True.
-    In that case `text` will be formatted using `args` and `kwargs`.
-    The point of this function is to only format the error message if the condition `cond` is True
-    and a warning is generated.
-
-    Examples
-    ```
-    warn_if( bad, "one %ld", 1)              # using c-style
-    warn_if( bad, "one %{one}ld", one=1)     # using python 2 style
-    warn_if( bad, "one {one:d}", one=1)      # using python 3 string.format()
-    ```
+    Issue a warning with delayed string formatting if a condition is met.
     
-    Do not use f-strings directly as they are executed in the scope they are typed in.
-    Use instead
-    ```
-    warn_if( bad, lambda : f"one {one:d}" ) # f-style with lambda
-    ```
+    The point of this function is to only format an error message if a condition ``cond`` is met
+    and a warning is to be issued.
 
+    Examples::
+            
+        from cdxcore.err import warn_if
+        one = 1       
+        bad = True                            # some conditon
+        warn_if(bad,lambda : f"one {one:d}")  # wrapped f-string
+        warn_if(bad,"one {one:d}", one=one)   # using python 3 string.format()
+        warn_if(bad,"one %{one}ld", one=one)  # using python 2 style
+        warn_if(bad,"one %ld", one)           # using c-style
+    
+    As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
+    but wrap them with a ``lambda`` function.
+    
     Parameters
     ----------
     cond : bool
         Condition to test.
-    text : str
-        Error text which may contain one parameter pattern. See examples above.
         
-        * Classic C-stype ```%d, %s, %f```: in this case the positional `args` of the function are used.
+    text : str | Callable
+        Error text which may contain one of the following string formatting patterns:
         
-        * Python 2 ```%(parameter)d```: in this case `kwargs` are used.
+        * Python 3 ```{parameter:d}```, in which case ``message.fmt(kwargs)`` for :meth:`str.format` is used
+          to obtain the output message.
         
-        * Python 3 ```{parameter:d}``` [str.format](https://docs.python.org/3/library/stdtypes.html#str.format)() format: in this case `kwargs` are used.
+        * Python 2 ```%(parameter)d``` in which case ``message % kwargs`` is used to obtain the output message.
         
-        * lambda functions: if `text` is not a string but a callable this is called.
-    warning :
-        Which type of warning to issue.
-        This is the `category` parameter to [warnings.warn](https://docs.python.org/3/library/warnings.html#available-functions)().
-    stack_level :
-        What stack to report. See [warnings.warn](https://docs.python.org/3/library/warnings.html#available-functions)().
-    args, **kwargs:
+        * Classic C-stype ```%d, %s, %f``` in which case ``message % args`` is used to obtain the output message.
+        
+        * If ``message`` is a ``Callable`` such as a ``lambda`` function, then ``message( * args, ** kwargs )``
+          is called to obtain the output message.
+          
+          A common use case is using an f-string wrapped in a ``lambda`` function; see example above.
+        
+    warning : optional
+        Which type of warning to issue. 
+        This corresponds to the ``category`` parameter for :func:`warnings.warn`.
+        Default is :class:`RuntimeWarning`.
+
+    stack_level : int, optional
+        What stack to report; see :func:`warnings.warn`.
+        Default is 1, which means ``warn`` itself is not reported as part of the stack trace.
+
+    * args, ** kwargs:
         See above
     """
     if cond:

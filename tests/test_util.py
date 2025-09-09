@@ -31,9 +31,9 @@ def import_local():
     for name, mdata in modules.items():
         if name[:len(me)] == me:
             imp.reload(mdata)
-import_local()
+#import_local()
 
-from cdxcore.util import is_function, is_atomic, is_float
+from cdxcore.util import is_function, is_atomic, is_float, is_filename
 from cdxcore.util import fmt, fmt_seconds, fmt_list, fmt_dict, fmt_big_number, fmt_digits, fmt_big_byte_number, fmt_datetime, fmt_date, fmt_time, fmt_timedelta, fmt_filename, DEF_FILE_NAME_MAP
 
 class Test(unittest.TestCase):
@@ -244,6 +244,12 @@ class Test(unittest.TestCase):
                          '*' : "",
                          } 
         self.assertEqual( fmt_filename("2*2/4=x", by=BLANK), "224=x" )
+        
+        # is_filename
+        self.assertTrue( is_filename("hans") )
+        self.assertFalse( is_filename("h/ans") )
+        self.assertFalse( is_filename("h?ans") )
+        
         
     def test_basics(self):
 

@@ -80,14 +80,21 @@ def types_functions() -> tuple[type]:
 
 def is_function(f) -> bool:
     """
-    Checks whether `f` is a function in an extended sense.
+    Checks whether ``f`` is a function in an extended sense.
+    
     Check :func:`cdxcore.util.types_functions` for what is tested against.
-    In particular it does not test positive for properties.    
+    In particular ``is_function`` does not test positive for properties.    
     """
     return isinstance(f,types_functions())
 
 def is_atomic( o ):
-    """ Returns true if `o` is a ``string``, ``int``, ``float``, :class:`datedatime.date` or ``bool``, or a :class:`numpy.generic` """
+    """
+    Whether an element is atomic.
+    
+    Returns ``True`` if ``o`` is a
+    ``string``, ``int``, ``float``, :class:`datedatime.date`, ``bool``, 
+    or a :class:`numpy.generic`
+    """
     if type(o) in [str,int,bool,float,datetime.date]:
         return True
     if isinstance(o,np.generic):
@@ -144,8 +151,10 @@ def _get_recursive_size(obj, seen=None):
 
 def getsizeof(obj):
     """
-    Approximates the size of 'obj'.
-    In addition to calling :func:`sys.getsizeof` this function also iterates embedded containers, numpy arrays, and dataframes.
+    Approximates the size of an object.
+    
+    In addition to calling :func:`sys.getsizeof` this function
+    also iterates embedded containers, numpy arrays, and panda dataframes.
     :meta private: 
     """
     return _get_recursive_size(obj,None)    
@@ -156,18 +165,19 @@ def getsizeof(obj):
 
 def fmt_seconds( seconds : float, *, eps : float = 1E-8 ) -> str:
     """
-    Generate format string for seconds, e.g. "23s"" for `seconds=23`, or "1:10" for `seconds=70`.
+    Generate format string for seconds, e.g. "23s"" for ``seconds=23``, or "1:10" for ``seconds=70``.
     
     Parameters
     ----------
     seconds : float
         Seconds as a float.
+        
     eps : float
-        anything below `eps` is considered zero.
+        anything below ``eps`` is considered zero. Default ``1E-8``.
 
     Returns
     -------
-    String.    
+    Seconds : string
     """
     assert eps>=0., ("'eps' must not be negative")
     if seconds < -eps:
@@ -189,18 +199,19 @@ def fmt_seconds( seconds : float, *, eps : float = 1E-8 ) -> str:
 def fmt_list( lst : list, *, none : str = "-", link : str = "and", sort : bool = False ) -> str:
     """
     Returns a formatted string of a list, its elements separated by commas and (by default) a final 'and'.
-    If the list is `[1,2,3]` then the function will return "1, 2 and 3".
+    
+    If the list is ``[1,2,3]`` then the function will return ``"1, 2 and 3"``.
     
     Parameters
     ----------
     lst  : list.
-        The `list()` operator is applied to `lst`, so it will resolve dictionaries and generators.
-    none : str
-        string used when list was empty.
-    link : str
-        string used to connect the last item. Default is "and".        
-    sort : bool
-        whether to sort the list.
+        The ``list()`` operator is applied to ``lst``, so it will resolve dictionaries and generators.
+    none : str, optional
+        String to be used when ``list`` is empty. Default is ``"-"``.
+    link : str, optional
+        String to be used to connect the last item. Default is ``"and"``.
+    sort : bool, optional
+        Whether to sort the list. Default is ``False``.
 
     Returns
     -------
@@ -232,21 +243,22 @@ def fmt_list( lst : list, *, none : str = "-", link : str = "and", sort : bool =
 
 def fmt_dict( dct : dict, *, sort : bool = False, none : str = "-", link : str = "and" ) -> str:
     """
-    Return a readable representation of a dictionary
+    Return a readable representation of a dictionary.
+    
     This assumes that the elements of the dictionary itself can be formatted well with :func:`str()`.
-
-    For a dictionary ``dict(a=1,b=2,c=3)`` this function will return ``a: 1, b: 2, and c: 3``.
+    
+    For a dictionary ``dict(a=1,b=2,c=3)`` this function will return ``"a: 1, b: 2, and c: 3"``.
 
     Parameters
     ----------
     dct : dict
         The dictionary to format.
-    sort : bool
-        whether to sort the keys.
-    none :  str
-        string to be used if dictionary is empty.
-    link : str
-        string to be used to link the last element to the previous string.
+    sort : bool, optional
+        Whether to sort the keys. Default is ``False``.
+    none :  str, optional
+        String to be used if dictionary is empty. Default is ``"-"``.
+    link : str, optional
+        String to be used to link the last element to the previous string. Default is ``"and"``.
 
     Returns
     -------
@@ -264,7 +276,7 @@ def fmt_dict( dct : dict, *, sort : bool = False, none : str = "-", link : str =
 
 def fmt_digits( integer : int, sep : str = "," ):
     """
-    String representation of `integer` with 1000 separators: 10000 becomes "10,000".
+    String representation of an integer with 1000 separators: 10000 becomes "10,000".
     
     Parameters
     --------
@@ -272,8 +284,9 @@ def fmt_digits( integer : int, sep : str = "," ):
         The number. The function will :func:`int()` the input which allows
         for processing of a number of inputs (such as strings) but
         might cut off floating point numbers.
+        
     sep : str
-        Separator, "," by default.
+        Separator; ``","`` by default.
 
     Returns
     -------
@@ -294,6 +307,7 @@ def fmt_digits( integer : int, sep : str = "," ):
 def fmt_big_number( number : int ) -> str:
     """
     Return a formatted big number string, e.g. 12.35M instead of all digits.
+    
     Uses decimal system and "B" for billions.
     Use :func:`cdxcore.util.fmt_big_byte_number` for byte sizes i.e. 1024 units.
 
@@ -337,7 +351,7 @@ def fmt_big_number( number : int ) -> str:
         return "%gK" % number
     return str(number)
 
-def fmt_big_byte_number( byte_cnt : int, str_B = True ) -> str:
+def fmt_big_byte_number( byte_cnt : int, str_B : bool = True ) -> str:
     """
     Return a formatted big byte string, e.g. 12.35MB.
     Uses 1024 as base for KB.
@@ -349,10 +363,14 @@ def fmt_big_byte_number( byte_cnt : int, str_B = True ) -> str:
     ----------
     byte_cnt : int
         Number of bytes.
+        
     str_B : bool
-        If true, return GB, MB and KB. If False, return G, M, K
-        If `byte_cnt` is less than 10KB, then this will add 'bytes'
-        e.g. '1024 bytes'.
+        If ``True``, return ``"GB"``, ``"MB"`` and ``"KB"`` units.
+        Moreover, if ``byte_cnt` is less than 10KB, then this will add ``"bytes"``
+        e.g. ``"1024 bytes"``.
+
+        If ``False``, return ``"G"``, ``"M"`` and ``"K"`` only, and do not
+        add ``"bytes"`` to smaller ``byte_cnt``.
 
     Returns
     -------
@@ -392,35 +410,40 @@ def fmt_big_byte_number( byte_cnt : int, str_B = True ) -> str:
         return str(byte_cnt) if not str_B else f"{byte_cnt} bytes"
     return s if not str_B else s+"B"
 
-def fmt_datetime(dt        : datetime.datetime, *, 
+def fmt_datetime(dt        : datetime.datetime|datetime.date|datetime.time, *, 
                  sep       : str = ':', 
                  ignore_ms : bool = False,
                  ignore_tz : bool = True
                  ) -> str:
     """
-    Returns string for `dt` of the form "YYYY-MM-DD HH:MM:SS" if `dt` is a datetime,
-    or a the respective version for time or date.
+    Convert :class:`datetime.datetime` to a string of the form "YYYY-MM-DD HH:MM:SS".
     
-    Microseconds are added as digits:
+    If present, microseconds are added as digits::
         
-    ``YYYY-MM-DD HH:MM:SS,MICROSECONDS``
+        YYYY-MM-DD HH:MM:SS,MICROSECONDS
         
-    Optinally a time zone is added via:
+    Optinally a time zone is added via::
         
-    ``YYYY-MM-DD HH:MM:SS+HH``
-    ``YYYY-MM-DD HH:MM:SS+HH:MM``
+        YYYY-MM-DD HH:MM:SS+HH
+        YYYY-MM-DD HH:MM:SS+HH:MM
         
+    Output is reduced accordingly if ``dt`` is a :class:`datetime.time`
+    or :class:`datetime.date`.
+    
     Parameters
     ----------
-    dt : :class:`datetime.datetime`, :class:`datetime.date`, or :class:`datetime.time`.
-        String represent this.
-    sep : str
-        Seperator for hours, minutes, seconds. The default ':' looks better
+    dt : :class:`datetime.datetime`, :class:`datetime.date`, or :class:`datetime.time`
+        Input.
+
+    sep : str, optional
+        Seperator for hours, minutes, seconds. The default ``':'`` is most appropriate for viusalization
         but is not suitable for filenames.
-    ignore_ms : bool
-        Whether to ignore microseconds. Default False.
-    ignore_tz : bool
-        Whether to ignore the time zone. Default True.
+
+    ignore_ms : bool, optional
+        Whether to ignore microseconds. Default ``False``.
+
+    ignore_tz : bool, optional
+        Whether to ignore the time zone. Default ``True``.
 
     Returns
     -------
@@ -461,8 +484,9 @@ def fmt_datetime(dt        : datetime.datetime, *,
     
 def fmt_date(dt : datetime.date) -> str:
     """
-    Returns string representation for date `dt` of the form "YYYY-MM-DD".
-    If passed a datetime, it will extract its :func:`datetime.datetime.date`.
+    Returns string representation for a date of the form "YYYY-MM-DD".
+    
+    If passed a :class:`datetime.datetime`, it will format its :func:`datetime.datetime.date`.
     """
     if isinstance(dt, datetime.datetime):
         dt = dt.date()
@@ -474,30 +498,41 @@ def fmt_time(dt        : datetime.time, *,
              ignore_ms : bool = False
              ) -> str:
     """
-    Returns string for `dt` of the form "HH:MM:SS".
+    Convers a time to a string with format "HH:MM:SS".
     
-    Microseconds are added as digits:
-        "HH:MM:SS,MICROSECONDS"
-        
-    Optinally a time zone is added via:
-        "HH:MM:SS+HH"
+    Microseconds are added as digits::
 
-    If passed a datetime, it will extract its `time()`.
+        HH:MM:SS,MICROSECONDS
+        
+    If passed a :class:`datetime.datetime`, then this function will format
+    only its :func:`datetime.datetime.time` part.
+
+    **Time Zones**
+    
     Note that while :class:`datetime.time` objects may carry a ``tzinfo`` time zone object,
-    the corresponding :func:`datetime.time.otcoffset()` function returns ``None`` without
-    providing a 'dt' parameter, see `tzinfo documentation <https://docs.python.org/3/library/datetime.html#tzinfo-objects>`__.
-    We bypass this inconsistency by not allowing `dt` to contain
+    the corresponding :func:`datetime.time.otcoffset` function returns ``None`` if we donot
+    provide a ``dt`` parameter, see
+    `tzinfo documentation <https://docs.python.org/3/library/datetime.html#tzinfo-objects>`__.
+    That means :func:`datetime.time.otcoffset` is only useful if we have :class:`datetime.datetime`
+    object at hand. 
+    That makes sense as a time zone can chnage date as well.
+    
+    We therefore here do not allow ``dt`` to contain
     a time zone.
+        
+    Use :func:`cdxcore.util.fmt_datetime` for time zone support
         
     Parameters
     ----------
     dt : :class:`datetime.time`
-        String represent this.
-    sep : str
-        Seperator for hours, minutes, seconds. The default ':' looks better
+        Input.
+    sep : str, optional
+    
+        Seperator for hours, minutes, seconds. The default ``':'`` is most appropriate for viusalization
         but is not suitable for filenames.
+        
     ignore_ms : bool
-        Whether to ignore microseconds. Default False.
+        Whether to ignore microseconds. Default is ``False``.
             
     Returns
     -------
@@ -522,6 +557,7 @@ def fmt_timedelta(dt      : datetime.timedelta, *,
     ----------
     dt : :class:`datetime.timedelta`
         Timedelta.
+        
     sep :
         Identify the three separators: between days, and HMS and between microseconds:
         
@@ -530,18 +566,18 @@ def fmt_timedelta(dt      : datetime.timedelta, *,
             DD*HH*MM*SS*MS
               0  1  1  2
 
-        * `sep` can be a string, in which case:
-            * If it is an empty string, all separators are ''.
+        * ``sep`` can be a string, in which case:
+            * If it is an empty string, all separators are ``''``.
             * A single character will be reused for all separators.
-            * If the string has length 2, then the last character is used for '2'.
+            * If the string has length 2, then the last character is used for ``'2'``.
             * If the string has length 3, then the chracters are used accordingly.
 
-        * `sep` can also be a collection ie a ``tuple`` or ``list``. In this case each element is used accordingly.
+        * ``sep`` can also be a collection ie a ``tuple`` or ``list``. In this case each element is used accordingly.
             
     Returns
     -------
     Text : str
-        String with leading sign. Returns "" if `timedelta` is 0.
+        String with leading sign. Returns "" if ``timedelta`` is 0.
     """
     assert isinstance(dt, datetime.timedelta), "'dt' must be datetime.timedelta. Found %s" % type(dt)
 
@@ -604,10 +640,9 @@ def fmt_timedelta(dt      : datetime.timedelta, *,
     return f"{sign}{days}d{rest}"
 
 def fmt_now() -> str:
-    """ Returns the :func:`cdxcore.util.fmt_datetime` string for :func:`datetime.datetime.now` """
+    """ Returns the :func:`cdxcore.util.fmt_datetime` applied to :func:`datetime.datetime.now` """
     return fmt_datetime(datetime.datetime.now())
 
-#: Default map from characters which cannot be used for filenames under either Windows or Linux to valid characters
 DEF_FILE_NAME_MAP = {  
                  '/' : "_",
                  '\\': "_",
@@ -618,9 +653,12 @@ DEF_FILE_NAME_MAP = {
                  '?' : "!",
                  '*' : "@",
                  }
-INVALID_FILE_NAME_CHARCTERS = set(DEF_FILE_NAME_MAP)
+"""
+Default map from characters which cannot be used for filenames under either
+Windows or Linux to valid characters.
+"""
 
-def fmt_filename( s : str , by : str | Mapping = "default" ) -> str:
+def fmt_filename( filename : str , by : str | Mapping = "default" ) -> str:
     r"""
     Replaces invalid filename characters such as `\\', ':', or '/' by a differnet character.
     The returned string is technically a valid file name under both windows and linux.
@@ -629,10 +667,10 @@ def fmt_filename( s : str , by : str | Mapping = "default" ) -> str:
     
     Parameters
     ----------
-    s : str
+    filename : str
         Input string.
         
-    by : str, default="default"
+    by : str | Mapping, optional.
         A dictionary of characters and their replacement.
         The default value ``"default"`` leads to using :data:`cdxcore.util.DEF_FILE_NAME_MAP`.
     
@@ -648,40 +686,71 @@ def fmt_filename( s : str , by : str | Mapping = "default" ) -> str:
             raise ValueError(f"'by': must be a Mapping or 'default'. Found string '{by}'")                            
         by = DEF_FILE_NAME_MAP
 
-    for c in INVALID_FILE_NAME_CHARCTERS:
-        s = s.replace(c, by[c])
-    return s
+    for c, cby in by.items():
+        filename = filename.replace(c, cby)
+    return filename
 fmt_filename.DEF_FILE_NAME_MAP = DEF_FILE_NAME_MAP
+
+def is_filename( filename : str , by : str | Collection = "default" ) -> bool:
+    """
+    Tests whether a filename is indeed a valid filename.
+
+    Parameters
+    ----------
+    filename : str
+        Supposed filename.
+        
+    by : str | Collection, optional
+        A collection of invalid characters.
+        The default value ``"default"`` leads to using
+        they keys of :data:`cdxcore.util.DEF_FILE_NAME_MAP`.
+    
+    Returns
+    -------
+    Validity : vool 
+        ``True`` if ``filename`` does not contain any invalid characters contained in ``by``.
+    """
+    
+    if not isinstance(by, Mapping):
+        if not isinstance(by, str):
+            raise ValueError(f"'by': must be a Mapping or 'default'. Found type {type(by).__qualname__}")
+        if by != "default":
+            raise ValueError(f"'by': must be a Mapping or 'default'. Found string '{by}'")                            
+        by = DEF_FILE_NAME_MAP
+
+    for c in by:
+        if c in filename:
+            return False
+    return True
 
 # =============================================================================
 # Conversion of arbitrary python elements into re-usable versions
 # =============================================================================
 
-# deprecated
 def plain( inn, *, sorted_dicts : bool = False,
                    native_np    : bool = False,
                    dt_to_str    : bool = False):
     """
     Converts a python structure into a simple atomic/list/dictionary collection such
     that it can be read without the specific imports used inside this program.
-    or example, objects are converted into dictionaries of their data fields.
+
+    For example, objects are converted into dictionaries of their data fields.
 
     Parameters
     ----------
     inn :
         some object.
-    sorted_dicts : bool
+    sorted_dicts : bool, optional
         use SortedDicts instead of dicts. Since Python 3.7 all dictionaries are sorted anyway.
-    native_np : bool
+    native_np : bool, optional
         convert numpy to Python natives.
-    dt_to_str : bool
-        convert date times to strings.
+    dt_to_str : bool, optional
+        convert dates, times, and datetimes to strings.
 
     Returns
     -------
     Text : str
         Filename
-    :meta::private: 
     """
     def rec_plain( x ):
         return plain( x, sorted_dicts=sorted_dicts, native_np=native_np, dt_to_str=dt_to_str )
@@ -740,6 +809,7 @@ def is_jupyter() -> bool:
 class TrackTiming(object):
     """
     Simplistic class to track the time it takes to run sequential tasks.
+
     Usage::
 
         from cdxcore.util import TrackTiming
@@ -752,8 +822,6 @@ class TrackTiming(object):
         timer += "Job 2 done"
 
         print( timer.summary() )
-        
-    :meta private:
     """
 
     def __init__(self):
@@ -801,10 +869,13 @@ class TrackTiming(object):
 
         Parameters
         ----------
-        fmat : str
-            Format string. Arguments are `text`, `seconds` (as int) and :func:`cdxcore.util.fmt_seconds` (a string).
-        jn_fmt : str
-            String to be used between two texts.
+        fmat : str, optional
+            Format string using ``%()``. Arguments are ```text``, ``seconds`` (as int) and ``fmt_seconds`` (a string).
+            
+            Default is ``"%(text)s: %(fmt_seconds)s"``.
+
+        jn_fmt : str, optional
+            String to be used between two texts. Default ``", " ``.
             
         Returns
         -------
@@ -823,7 +894,9 @@ class TrackTiming(object):
 
 class Timer(object):
     """
-    Micro utility which allows keeing track of time using `with`::
+    Micro utility to measure passage of time.
+
+    Example::
 
         from cdxcore.util import Timer
         with Timer() as t:

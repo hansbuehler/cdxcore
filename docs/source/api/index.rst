@@ -12,14 +12,15 @@ API Reference
    :toctree: generated
    :recursive:
 
-   config
-
-   pretty
+   subdir
+   version
    uniquehash
-   pretty
+   config
+   verbose
 
+   pretty 
    util
-
+   err
    crman
 
 

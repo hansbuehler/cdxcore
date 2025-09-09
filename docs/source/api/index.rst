@@ -18,6 +18,8 @@ API Reference
    config
    verbose
 
+   jcpool
+
    pretty 
    util
    err

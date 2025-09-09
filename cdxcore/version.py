@@ -498,7 +498,7 @@ class Version(object):
         """
         Compute hash for use with :class:`cdxcore.uniquehash.UniqueHash`.
         """
-        return self.unique_id(max_len=uniqueHash.length)
+        return self.unique_id(max_len=unique_hash.length)
     
 # =======================================================
 # @version

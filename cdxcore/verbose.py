@@ -592,8 +592,12 @@ class Context(object):
             See above 
         """
         message = self.fmt( level, message, *args, head=head, **kwargs )
+        self._raw(message,end=end,flush=True)
+            
+    def _raw( self, message : str, end : str, flush : bool ):
+        """ :meta private: used in JCPool """
         if not message is None:
-            self.crman.write(message,end=end,flush=True, channel=self.channel )
+            self.crman.write(message,end=end,flush=flush,channel=self.channel )
 
     def fmt( self, level : int, message : str|Callable, *args, head : bool = True, **kwargs ) -> str:
         """
@@ -808,6 +812,16 @@ class Context(object):
         but pointing to ``channel``.
         """
         return Context( self, channel=channel ) if channel != self.channel else self
+    
+    # Dummy context
+    # -------------
+    
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *kargs, **kwargs):
+        return False#raise exceptions
+
     
     
 quiet         = Context(Context.QUIET)

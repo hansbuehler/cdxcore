@@ -29,15 +29,7 @@ def import_local():
     assert cwd[-5:] == "tests",("Expected current working directory to be in a 'tests' directory", cwd[-5:], "from", cwd)
     assert cwd[-6] in ['/', '\\'],("Expected current working directory 'tests' to be lead by a '\\' or '/'", cwd[-6:], "from", cwd)
     sys.path.insert( 0, cwd[:-6] )
-
-    # reload modules
-    import importlib as imp
-    modules = sys.modules.copy()
-    for name, mdata in modules.items():
-        if name[:len(me)] == me:
-            imp.reload(mdata)
-            print("Reloaded", name)
-#import_local()
+import_local()
 
 from cdxcore.pretty import PrettyObject, Sequence
 
@@ -47,8 +39,7 @@ class A1(PrettyObject):
 class A2(PrettyObject):
     def __init__(self, x): # mandatory argument
         self.x=x
-
-
+        
 class Test(unittest.TestCase):
     
 

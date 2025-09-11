@@ -95,6 +95,11 @@ def _fmt( text : str, args = None, kwargs = None, f : Callable =  None ) -> str:
             return text % tuple(args)
         except TypeError as e:
             raise TypeError(e, text, args)
+    
+    # no keyword arguments --> must be plain text
+    if kwargs is None:
+        return text
+
     # text
     # python 2 and 3 mode
     kwargs = dict() if kwargs is None else kwargs
@@ -117,7 +122,7 @@ def fmt(text : str|Callable, * args, ** kwargs) -> str:
         one = 1
         fmt(lambda : f"one {one:d})   # using a lambda function
         fmt("one {one:d}", one=one)   # using python 3 string.format()
-        fmt("one %{one}ld", one=one)  # using python 2 style
+        fmt("one %(one)ld", one=one)  # using python 2 style
         fmt("one %ld", one)           # using c-style
     
     As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
@@ -164,7 +169,7 @@ def error( text : str|Callable, *args, exception : Exception = RuntimeError, **k
         one = 1
         error(lambda : f"one {one:d}")  # wrapped f-string
         error("one {one:d}", one=one)   # using python 3 string.format()
-        error("one %{one}ld", one=one)  # using python 2 style
+        error("one %(one)ld", one=one)  # using python 2 style
         error("one %ld", one)           # using c-style
     
     As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
@@ -214,7 +219,7 @@ def verify( cond : bool, text : str|Callable, *args, exception : Exception = Run
         good = False                           # some condition
         verify(good, lambda : f"one {one:d}")  # wrapped f-string
         verify(good, "one {one:d}", one=one)   # using python 3 string.format()
-        verify(good, "one %{one}ld", one=one)  # using python 2 style
+        verify(good, "one %(one)ld", one=one)  # using python 2 style
         verify(good, "one %ld", one)           # using c-style
     
     As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
@@ -268,7 +273,7 @@ def warn( text : str|Callable, *args, warning = RuntimeWarning, stack_level : in
         one = 1        
         warn(lambda : f"one {one:d}")  # wrapped f-string
         warn("one {one:d}", one=one)   # using python 3 string.format()
-        warn("one %{one}ld", one=one)  # using python 2 style
+        warn("one %(one)ld", one=one)  # using python 2 style
         warn("one %ld", one)           # using c-style
     
     As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in
@@ -322,7 +327,7 @@ def warn_if( cond : bool, text : str|Callable, *args, warning = RuntimeWarning, 
         bad = True                            # some conditon
         warn_if(bad,lambda : f"one {one:d}")  # wrapped f-string
         warn_if(bad,"one {one:d}", one=one)   # using python 3 string.format()
-        warn_if(bad,"one %{one}ld", one=one)  # using python 2 style
+        warn_if(bad,"one %(one)ld", one=one)  # using python 2 style
         warn_if(bad,"one %ld", one)           # using c-style
     
     As shown, do not use f-strings directly as they are immediately executed in the scope they are typed in

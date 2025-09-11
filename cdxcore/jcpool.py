@@ -51,7 +51,7 @@ class ParallelContextChannel( Context ):
         printing.
         """
         if get_thread_id() == self._maintid:
-            self._f_verbose.write(msg, end='', flush=flush)
+            self._f_verbose._raw(msg,end='',flush=flush)
         else:
             return self._queue.put( (msg, flush) )
 
@@ -125,13 +125,12 @@ class _ParallelContextOperator( object ):
                 raise r
             msg, flush = r
             if tme.interval_test(verbose_interval):
-                f_verbose.write(msg, end='', flush=flush)
+                f_verbose._raw(msg,end='',flush=flush)
 
     def __enter__(self):
         return self.mp_context
 
     def __exit__(self, *kargs, **kwargs):
-        #self.terminate()
         return False#raise exceptions
 
 class _DIF(object):

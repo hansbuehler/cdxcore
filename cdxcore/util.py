@@ -159,6 +159,77 @@ def getsizeof(obj):
     """
     return _get_recursive_size(obj,None)    
 
+def qualified_name( x, module : bool = False ):
+    """
+    Return qualified name including module name of some Python element.
+    
+    For the most part, this function will try to :func:`getattr` the ``__qualname__``
+    and ``__name__`` of ``x`` or its type. If all of these fail, an attempt is
+    made to convert ``type(x)`` into a string.
+    
+    **Class Properties**
+    
+    When reporting qualified names for a :dec:`property`, there is a nuance:
+    at class level, a property will be identified by its underlying function
+    name. Once an object is created, though, the property will be identified
+    by the return type of the property::
+        
+        class A(object):
+            @property
+                def p(self):
+                    return x
+
+        qualified_name(A.p)    # -> "A.p"
+        qualified_name(A().p)  # -> "int"
+           
+    Parameters
+    ----------
+        x : any
+            Some Python element.
+            
+        module : bool, optional
+            Whether to also return the containing module if available.
+    Returns
+    -------
+        qualified name : str
+            The name, if ``module`` is ``False``.
+            
+        (qualified name, module) : tuple
+            The name, if ``module`` is ``True``.
+            Note that the module name returned might be ``""`` if no module
+            name could be determined.
+            
+    Raises
+    ------
+        :class:`RuntimeError` if not qualfied name for ``x`` or its type could be found.
+    """
+    if x is None:
+        if not module:
+            return "None"
+        else:
+            return "None", ""
+    
+    # special cases
+    if isinstance(x, property):
+        x = x.fget
+    
+    name = getattr(x, "__qualname__", None)
+    if name is None:
+        name = getattr(x, "__name__", None)
+    if name is None:
+        name = getattr(type(x), "__qualname__", None)
+    if name is None:
+        name = getattr(type(x), "__name__", None)
+    if name is None:
+        name = str(type(x))
+    if not module:
+        return name
+
+    module = getattr(x, "__module__", None)
+    if module is None:
+        module = getattr(type(x), "__module__", "")
+    return name, module    
+
 # =============================================================================
 # string formatting
 # =============================================================================
@@ -279,7 +350,7 @@ def fmt_digits( integer : int, sep : str = "," ):
     String representation of an integer with 1000 separators: 10000 becomes "10,000".
     
     Parameters
-    --------
+    ----------
     integer : int
         The number. The function will :func:`int()` the input which allows
         for processing of a number of inputs (such as strings) but

@@ -18,6 +18,8 @@ API Reference
    config
    verbose
 
+   deferred
+
    jcpool
 
    pretty 

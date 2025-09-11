@@ -24,17 +24,35 @@ def import_local():
     assert cwd[-5:] == "tests",("Expected current working directory to be in a 'tests' directory", cwd[-5:], "from", cwd)
     assert cwd[-6] in ['/', '\\'],("Expected current working directory 'tests' to be lead by a '\\' or '/'", cwd[-6:], "from", cwd)
     sys.path.insert( 0, cwd[:-6] )
+import_local()
 
-    # reload modules
-    import importlib as imp
-    modules = sys.modules.copy()
-    for name, mdata in modules.items():
-        if name[:len(me)] == me:
-            imp.reload(mdata)
-#import_local()
-
-from cdxcore.util import is_function, is_atomic, is_float, is_filename
+from cdxcore.util import is_function, is_atomic, is_float, is_filename, qualified_name
 from cdxcore.util import fmt, fmt_seconds, fmt_list, fmt_dict, fmt_big_number, fmt_digits, fmt_big_byte_number, fmt_datetime, fmt_date, fmt_time, fmt_timedelta, fmt_filename, DEF_FILE_NAME_MAP
+
+class qA(object):
+
+    M = 0
+
+    def __init__(self):
+        self.m = 1
+    
+    def f(self):
+        pass
+    
+    @property
+    def g(self):
+        return 1
+
+    @staticmethod
+    def h():
+        pass
+
+    @classmethod
+    def j(cls):
+        pass
+        
+    def __iter__(self):
+        yield 1
 
 class Test(unittest.TestCase):
 
@@ -361,6 +379,77 @@ class Test(unittest.TestCase):
         self.assertFalse( is_float(np.int32(0.1)) )
         self.assertFalse( is_float(np.int64(0.1)) )
         self.assertFalse( is_float(np.complex64(0.1)) )
+
+        # qualified
+
+        class qB(object):
+        
+            M = 0
+        
+            def __init__(self):
+                self.m = 1
+            
+            def f(self):
+                pass
+            
+            @property
+            def g(self):
+                return 1
+        
+            @staticmethod
+            def h():
+                pass
+        
+            @classmethod
+            def j(cls):
+                pass
+                
+            def __iter__(self):
+                yield 1
+                
+        qa = qA()
+        qb = qB()
+
+        self.assertEqual( qualified_name(qualified_name,True), ("qualified_name", "cdxcore.util"))
+        self.assertEqual( qualified_name(is_atomic,True), ("is_atomic", "cdxcore.util"))
+        self.assertEqual( qualified_name(datetime.datetime,True), ("datetime", "datetime"))
+        self.assertEqual( qualified_name(datetime.datetime.date,True), ("datetime.date", "builtins"))
+        self.assertEqual( qualified_name(datetime.datetime.now(),True), ("datetime", "datetime"))
+        self.assertEqual( qualified_name(datetime.datetime.now().date(),True), ("date", "datetime"))
+        
+        self.assertEqual( qualified_name(qA), "qA")
+        self.assertEqual( qualified_name(qA,True), ("qA","__main__") )
+        self.assertEqual( qualified_name(qA.M,True), ("int","builtins") )
+        self.assertEqual( qualified_name(qA.f,True), ("qA.f","__main__") )
+        self.assertEqual( qualified_name(qA.g,True), ("qA.g","__main__") ) # <-- property function
+        self.assertEqual( qualified_name(qA.h,True), ("qA.h","__main__") )
+        self.assertEqual( qualified_name(qA.j,True), ("qA.j","__main__") )
+        
+        self.assertEqual( qualified_name(qa), "qA")
+        self.assertEqual( qualified_name(qa,True), ("qA","__main__") )
+        self.assertEqual( qualified_name(qa.M,True), ("int","builtins") )
+        self.assertEqual( qualified_name(qa.m,True), ("int","builtins") )
+        self.assertEqual( qualified_name(qa.f,True), ("qA.f","__main__") )
+        self.assertEqual( qualified_name(qa.g,True), ("int","builtins") )   # <-- property type
+        self.assertEqual( qualified_name(qa.h,True), ("qA.h","__main__") )
+        self.assertEqual( qualified_name(qa.j,True), ("qA.j","__main__") )
+        
+        self.assertEqual( qualified_name(qB), "Test.test_basics.<locals>.qB")
+        self.assertEqual( qualified_name(qB,True), ("Test.test_basics.<locals>.qB","__main__") )
+        self.assertEqual( qualified_name(qB.M,True), ("int","builtins") )
+        self.assertEqual( qualified_name(qB.f,True), ("Test.test_basics.<locals>.qB.f","__main__") )
+        self.assertEqual( qualified_name(qB.g,True), ("Test.test_basics.<locals>.qB.g","__main__") ) # <-- property function
+        self.assertEqual( qualified_name(qB.h,True), ("Test.test_basics.<locals>.qB.h","__main__") )
+        self.assertEqual( qualified_name(qB.j,True), ("Test.test_basics.<locals>.qB.j","__main__") )
+        
+        self.assertEqual( qualified_name(qb), "Test.test_basics.<locals>.qB")
+        self.assertEqual( qualified_name(qb,True), ("Test.test_basics.<locals>.qB","__main__") )
+        self.assertEqual( qualified_name(qb.M,True), ("int","builtins") )
+        self.assertEqual( qualified_name(qb.m,True), ("int","builtins") )
+        self.assertEqual( qualified_name(qb.f,True), ("Test.test_basics.<locals>.qB.f","__main__") )
+        self.assertEqual( qualified_name(qb.g,True), ("int","builtins") )   # <-- property type
+        self.assertEqual( qualified_name(qb.h,True), ("Test.test_basics.<locals>.qB.h","__main__") )
+        self.assertEqual( qualified_name(qb.j,True), ("Test.test_basics.<locals>.qB.j","__main__") )
         
 if __name__ == '__main__':
     unittest.main()

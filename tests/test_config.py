@@ -15,7 +15,6 @@ def import_local():
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
-    We also force reloading all modules to make sure we are not running old code.
     """
     me = "cdxcore"
     import os

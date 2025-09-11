@@ -13,7 +13,6 @@ def import_local():
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
-    We also force reloading all modules to make sure we are not running old code.
     """
     me = "cdxcore"
     import os
@@ -409,6 +408,8 @@ class Test(unittest.TestCase):
                 
         qa = qA()
         qb = qB()
+        
+        modname = __name__
 
         self.assertEqual( qualified_name(qualified_name,True), ("qualified_name", "cdxcore.util"))
         self.assertEqual( qualified_name(is_atomic,True), ("is_atomic", "cdxcore.util"))
@@ -418,38 +419,38 @@ class Test(unittest.TestCase):
         self.assertEqual( qualified_name(datetime.datetime.now().date(),True), ("date", "datetime"))
         
         self.assertEqual( qualified_name(qA), "qA")
-        self.assertEqual( qualified_name(qA,True), ("qA","__main__") )
+        self.assertEqual( qualified_name(qA,True), ("qA",modname) )
         self.assertEqual( qualified_name(qA.M,True), ("int","builtins") )
-        self.assertEqual( qualified_name(qA.f,True), ("qA.f","__main__") )
-        self.assertEqual( qualified_name(qA.g,True), ("qA.g","__main__") ) # <-- property function
-        self.assertEqual( qualified_name(qA.h,True), ("qA.h","__main__") )
-        self.assertEqual( qualified_name(qA.j,True), ("qA.j","__main__") )
+        self.assertEqual( qualified_name(qA.f,True), ("qA.f",modname) )
+        self.assertEqual( qualified_name(qA.g,True), ("qA.g",modname) ) # <-- property function
+        self.assertEqual( qualified_name(qA.h,True), ("qA.h",modname) )
+        self.assertEqual( qualified_name(qA.j,True), ("qA.j",modname) )
         
         self.assertEqual( qualified_name(qa), "qA")
-        self.assertEqual( qualified_name(qa,True), ("qA","__main__") )
+        self.assertEqual( qualified_name(qa,True), ("qA",modname) )
         self.assertEqual( qualified_name(qa.M,True), ("int","builtins") )
         self.assertEqual( qualified_name(qa.m,True), ("int","builtins") )
-        self.assertEqual( qualified_name(qa.f,True), ("qA.f","__main__") )
+        self.assertEqual( qualified_name(qa.f,True), ("qA.f",modname) )
         self.assertEqual( qualified_name(qa.g,True), ("int","builtins") )   # <-- property type
-        self.assertEqual( qualified_name(qa.h,True), ("qA.h","__main__") )
-        self.assertEqual( qualified_name(qa.j,True), ("qA.j","__main__") )
+        self.assertEqual( qualified_name(qa.h,True), ("qA.h",modname) )
+        self.assertEqual( qualified_name(qa.j,True), ("qA.j",modname) )
         
         self.assertEqual( qualified_name(qB), "Test.test_basics.<locals>.qB")
-        self.assertEqual( qualified_name(qB,True), ("Test.test_basics.<locals>.qB","__main__") )
+        self.assertEqual( qualified_name(qB,True), ("Test.test_basics.<locals>.qB",modname) )
         self.assertEqual( qualified_name(qB.M,True), ("int","builtins") )
-        self.assertEqual( qualified_name(qB.f,True), ("Test.test_basics.<locals>.qB.f","__main__") )
-        self.assertEqual( qualified_name(qB.g,True), ("Test.test_basics.<locals>.qB.g","__main__") ) # <-- property function
-        self.assertEqual( qualified_name(qB.h,True), ("Test.test_basics.<locals>.qB.h","__main__") )
-        self.assertEqual( qualified_name(qB.j,True), ("Test.test_basics.<locals>.qB.j","__main__") )
+        self.assertEqual( qualified_name(qB.f,True), ("Test.test_basics.<locals>.qB.f",modname) )
+        self.assertEqual( qualified_name(qB.g,True), ("Test.test_basics.<locals>.qB.g",modname) ) # <-- property function
+        self.assertEqual( qualified_name(qB.h,True), ("Test.test_basics.<locals>.qB.h",modname) )
+        self.assertEqual( qualified_name(qB.j,True), ("Test.test_basics.<locals>.qB.j",modname) )
         
         self.assertEqual( qualified_name(qb), "Test.test_basics.<locals>.qB")
-        self.assertEqual( qualified_name(qb,True), ("Test.test_basics.<locals>.qB","__main__") )
+        self.assertEqual( qualified_name(qb,True), ("Test.test_basics.<locals>.qB",modname) )
         self.assertEqual( qualified_name(qb.M,True), ("int","builtins") )
         self.assertEqual( qualified_name(qb.m,True), ("int","builtins") )
-        self.assertEqual( qualified_name(qb.f,True), ("Test.test_basics.<locals>.qB.f","__main__") )
+        self.assertEqual( qualified_name(qb.f,True), ("Test.test_basics.<locals>.qB.f",modname) )
         self.assertEqual( qualified_name(qb.g,True), ("int","builtins") )   # <-- property type
-        self.assertEqual( qualified_name(qb.h,True), ("Test.test_basics.<locals>.qB.h","__main__") )
-        self.assertEqual( qualified_name(qb.j,True), ("Test.test_basics.<locals>.qB.j","__main__") )
+        self.assertEqual( qualified_name(qb.h,True), ("Test.test_basics.<locals>.qB.h",modname) )
+        self.assertEqual( qualified_name(qb.j,True), ("Test.test_basics.<locals>.qB.j",modname) )
         
 if __name__ == '__main__':
     unittest.main()

@@ -1,4 +1,4 @@
-"""
+r"""
 Overview
 --------
 
@@ -117,12 +117,12 @@ Decorated Function Information
 A decorated function or class has a member ``version`` of type :class:`cdxcore.version.Version` which has the following
 key properties:
 
-* :attr:`cdxcore.version.Version.input`: the input version as defined with :dec:`cdxcore.version.version.
+* :attr:`cdxcore.version.Version.input`: the input version as defined with :dec:`cdxcore.version.version`.
 * :attr:`cdxcore.version.Version.full`: a fully qualified version with all dependent functions and classes in human readable form.
 * :attr:`cdxcore.version.Version.unique_id48`,
   :attr:`cdxcore.version.Version.unique_id64`:
   unique hashes of :attr:`cdxcore.version.Version.full` of 48 or 64 characters,
-  respectively. You can use the function :meth:`cdxcore.version.Version.unique_id
+  respectively. You can use the function :meth:`cdxcore.version.Version.unique_id`
   to compute hash IDs of any length.
 * :attr:`cdxcore.version.Version.dependencies`: a hierarchical list of dependencies for systematic inspection.
 

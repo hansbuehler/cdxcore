@@ -142,7 +142,7 @@ class CRMan(object):
         """
         Return current string.
         
-        This is the string that ``CRMan``is currently visible to the user
+        This is the string that ``CRMan`` is currently visible to the user
         since the last time a new line was printed.
         """
         return self._current

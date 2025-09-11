@@ -24,8 +24,8 @@ python -m twine upload dist\*
 rmdir /Q /S dist
 REM ** Install from pypi **
 
+:: pip uninstall -qq cdxcore --no-input creates a wired error message
 @echo on
-pip uninstall -qq cdxcore --no-input
 pip install --upgrade cdxcore --no-input
 @echo off
 

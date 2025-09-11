@@ -31,7 +31,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
-    #"sphinx_autodoc_typehints",
+    "sphinx_autodoc_typehints",
     "numpydoc",
     "sphinx_automodapi.automodapi",
     "sphinx_copybutton",
@@ -68,7 +68,6 @@ autodoc_default_options = {
     "special-members": "__call__"
 }
 autodoc_typehints = 'signature'  # types shown in the doc body, like NumPy
-#numpydoc_show_class_members = True
 
 # numpydoc tweaks (keeps class doc at top, avoids member spam)
 numpydoc_show_class_members = True
@@ -115,9 +114,5 @@ def setup(app):
     # Make :dec: behave exactly like :py:func:
     app.add_role_to_domain("py", "dec", PyXRefRole("func"))
     return {"parallel_read_safe": True}
-
-#def setup(app):
-#    app.add_role("dec", decorator_role)
-#    return {"parallel_read_safe": True}
 
 

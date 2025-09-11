@@ -935,13 +935,13 @@ class TrackTiming(object):
         return self._tracked
 
     def summary(self, fmat : str = "%(text)s: %(fmt_seconds)s", jn_fmt : str = ", " ) -> str:
-        """
+        r"""
         Generate summary string by applying some formatting
 
         Parameters
         ----------
         fmat : str, optional
-            Format string using ``%()``. Arguments are ```text``, ``seconds`` (as int) and ``fmt_seconds`` (a string).
+            Format string using ``%()``. Arguments are ``text``, ``seconds`` (as int) and ``fmt_seconds`` (a string).
             
             Default is ``"%(text)s: %(fmt_seconds)s"``.
 
@@ -997,7 +997,7 @@ class Timer(object):
     
     def interval_test( self, interval : float ) -> bool:
         r"""
-        Tests if `interval` seconds have passed.
+        Tests if ``interval`` seconds have passed.
         If yes, reset timer and return True. Otherwise return False.
         
         Usage::
@@ -1006,8 +1006,8 @@ class Timer(object):
             tme = Timer()
             for i in range(n):
                 if tme.test_dt_seconds(2.):
-                    print(f"\r{i+1}/{n} done. Time taken so far {tme}.", end='', flush=True)
-            print("\rDone. This took {tme}.")
+                    print(f"\\r{i+1}/{n} done. Time taken so far {tme}.", end='', flush=True)
+            print("\\rDone. This took {tme}.")
 
         """
         if interval is None:

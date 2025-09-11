@@ -23,7 +23,7 @@ def import_local():
     sys.path.insert( 0, cwd[:-6] )
 import_local()
 
-from cdxcore.deferred import Deferred, ResolutionDependencyError
+from cdxcore.deferred import Deferred, ResolutionDependencyError, NotSupportedError
 
 class qB(object):
     def __init__(self):
@@ -150,7 +150,7 @@ class Test(unittest.TestCase):
         deferred_b.deferred_resolve( qA() )
         deferred_a.deferred_resolve( qA() )
         
-        results_tst = { k: v.deferred_action_result for k,v in results_drf.items() }
+        results_tst = { k: v.deferred_result for k,v in results_drf.items() }
 
         self.assertEqual( list(results_tst), list(results_act) )
         for k, tst in results_tst.items():
@@ -241,13 +241,33 @@ class Test(unittest.TestCase):
         deferred_a.deferred_resolve( np.full((4,2),3,dtype=np.int32) )
 
         results_act = { k: v.astype(np.int32) for k,v in results_act.items() }
-        results_tst = { k: v.deferred_action_result.astype(np.int32) for k,v in results_drf.items() }
+        results_tst = { k: v.deferred_result.astype(np.int32) for k,v in results_drf.items() }
 
         self.assertEqual( list(results_tst), list(results_act) )
         for k, tst in results_tst.items():
             act = results_act[k]
             self.assertEqual( act.shape, tst.shape, msg=k )
             self.assertTrue( np.all( tst == act ), msg=f"Step 2 {k} '{tst}' != '{act}'" )
+
+        # abs
+        
+        a = Deferred("a")
+        b = abs(a)
+        a.deferred_resolve(int(-11))
+        self.assertEqual( b.deferred_result, 11 )
+
+        # unsupported
+
+        with self.assertRaises(NotSupportedError):
+            a = Deferred("a")
+            bool(a)
+        with self.assertRaises(NotSupportedError):
+            a = Deferred("a")
+            a.__index__()
+        a = Deferred("a")
+        a = abs(a)*3
+        self.assertEqual(str(a), "(|$a|*3)" )
+        self.assertEqual(repr(a), "DeferredAction[(|$a|*3) <- $a]" )
 
         # info test
         

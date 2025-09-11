@@ -94,10 +94,6 @@ class qA(object):
 def some_function(x):
     return x.m
 
-def test_iadd(a):
-    a+=1
-
-
 # for detecting collisions
 class AX(object):
     def __init__(self):
@@ -159,7 +155,7 @@ class Test(unittest.TestCase):
         self.assertEqual( list(results_tst), list(results_act) )
         for k, tst in results_tst.items():
             act = results_act[k]
-            self.assertEqual( tst, act, msg=k )
+            self.assertEqual( tst, act, msg=f"Step 1 {k} '{tst}' != '{act}'" )
         
         # ops
 
@@ -251,7 +247,7 @@ class Test(unittest.TestCase):
         for k, tst in results_tst.items():
             act = results_act[k]
             self.assertEqual( act.shape, tst.shape, msg=k )
-            self.assertTrue( np.all( tst == act ), msg=k )
+            self.assertTrue( np.all( tst == act ), msg=f"Step 2 {k} '{tst}' != '{act}'" )
 
         # info test
         

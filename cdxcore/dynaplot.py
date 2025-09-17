@@ -2,13 +2,13 @@
 Overview
 --------
 
-Basic utilities for Python such as type management, formatting, some trivial timers.
+Dynamic plotting with :mod:`matplotlib`.
 
 Import
 ------
 .. code-block:: python
 
-    import cdxcore.util as util
+    fronm cdxcore.dynaplot import figure
     
 Documentation
 -------------
@@ -27,14 +27,46 @@ from .deferred import Deferred
 from .util import verify, warn
 from .dynaplotlimits import AutoLimits
 
-class DynamicAx(Deferred):
+class MODE:
     """
-    Wrapper around a matplotlib axis returned by DynamicFig (which in turn is returned by figure()).
+    How to draw the graphs. Best mode depends on the output IPython implementation.
+    """ 
+    HDISPLAY = 0x01
+    #: Call :func:`IPython.display.display`.
+    
+    CANVAS_IDLE = 0x02
+    #: call :meth:`matplotlib.pyplot.figure.canvas.draw_idle`.
+    
+    CANVAS_DRAW = 0x04
+    #: call :meth:`matplotlib.pyplot.figure.canvas.draw`.
+
+    PLT_SHOW = 0x80
+    #: call :func:matplotlib.pyplot.show`.
+       
+    JUPYTER = HDISPLAY
+    #: Setting which works for Jupyter lab as far as we can tell.
+    
+    VSCODE = HDISPLAY|PLT_SHOW
+    #: Setting which works for VSCode it seems.
+         
+class DynaDeferred( Deferred ):
+    __setitem__ = Deferred._deferred_handle("__setitem__", num_args=2, fmt="{parent}[{arg0}]={arg1}")
+    __getitem__ = Deferred._deferred_handle("__getitem__", num_args=1, fmt="{parent}[{arg0}]")
+    
+    def deferred_create_action( self, **kwargsa ):
+        """
+        Creates a deferred action created during another deferred action.
+        """
+        return DynaDeferred( **kwargsa )
+
+class DynaAx(DynaDeferred):
+    """
+    Wrapper around a matplotlib axis returned by DynaFig (which in turn is returned by figure()).
 
     All calls to the returned axis are delegated to matplotlib.
     The results of deferred function calls are again deferred objects, allowing (mostly) to keep working in deferred mode.
     
-    DynamicAx has a number of additional features:
+    DynaAx has a number of additional features:
             
 
     Example
@@ -66,7 +98,6 @@ class DynamicAx(Deferred):
         else:
             assert not col is None and args is None, "Consistency error"
             
-        Deferred.__init__(self,f"subplot({row},{col})" if not row is None else "axes()")
         self.fig_id      = fig_id
         self.fig_list    = fig_list
         self.row         = row
@@ -74,12 +105,16 @@ class DynamicAx(Deferred):
         self.spec_pos    = spec_pos
         self.title       = title
         self.plots       = {}
-        self.args        = args
-        self.kwargs      = kwargs
+        self.args        = list(args) if not args is None else None
+        self.kwargs      = dict(kwargs)
         self.ax          = None
         self.__auto_lims = None
         assert not self in fig_list
+        DynaDeferred.__init__(self,f"subplot#{len(fig_list)}({row},{col})" if not row is None else "subplot#{len(fig_list)}()")   # no more item assignments without tracking
         fig_list.append( self )
+        
+    def __str__(self):
+        return self.deferred_info[1:]
 
     def initialize( self, plt_fig, rows : int, cols : int):
         """
@@ -94,7 +129,7 @@ class DynamicAx(Deferred):
                 return
             if isinstance( v, Axes ):
                 self.kwargs[kw] = v
-            assert isinstance( v, DynamicAx ), ("Cannot",kw,"with type:", type(v))
+            assert isinstance( v, DynaAx ), ("Cannot",kw,"with type:", type(v))
             assert not v.ax is None, ("Cannot", kw, "with provided axis: it has bnot been creatred yet. That usually means that you mnixed up the order of the plots")
             self.kwargs[kw] = v.ax
             
@@ -107,7 +142,7 @@ class DynamicAx(Deferred):
             self.ax = plt_fig.add_subplot( rows, cols, num, **self.kwargs )
         elif not self.spec_pos is None:
             # add_subplot with grid spec
-            self.ax = plt_fig.add_subplot( self.spec_pos.cdx_deferred_result, **self.kwargs )            
+            self.ax = plt_fig.add_subplot( self.spec_pos.deferred_result, **self.kwargs )            
         else:
             # add_subplot with auto-numbering
             self.ax = plt_fig.add_axes( *self.args, **self.kwargs )
@@ -120,7 +155,7 @@ class DynamicAx(Deferred):
         ref_ax    = self.ax
         ax_sharex = ref_ax.sharex
         def sharex(self, other):
-            if isinstance(other, DynamicAx):
+            if isinstance(other, DynaAx):
                 verify( not other.ax is None, "Cannot sharex() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
                 other = other.ax
             return ax_sharex(other)
@@ -128,14 +163,14 @@ class DynamicAx(Deferred):
 
         ax_sharey = ref_ax.sharey
         def sharey(self, other):
-            if isinstance(other, DynamicAx):
+            if isinstance(other, DynaAx):
                 verify( not other.ax is None, "Cannot sharey() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
                 other = other.ax
             return ax_sharey(other)
         ref_ax.sharey = types.MethodType(sharey,ref_ax)
 
         # call all deferred operations
-        self._dereference( self.ax )
+        self.deferred_resolve( self.ax )
         
     def remove(self):
         """ Equivalent of the respective Axes remove() function """
@@ -145,11 +180,6 @@ class DynamicAx(Deferred):
         self.ax = None
         gc.collect()
         
-    def __eq__(self, ax):
-        if type(ax).__name__ != type(self).__name__:
-            return False
-        return self.fig_id == ax.fig_id and self.row == ax.row and self.col == ax.col
-    
     # automatic limit handling
     # -------------------------
     
@@ -162,7 +192,7 @@ class DynamicAx(Deferred):
         If automatic limits are used, then this will process the limits accordingly.        
         Does not support the 'data' interface into matplotlib.axes.plot()
         """
-        plot = Deferred.__getattr__(self,"plot") 
+        plot = DynaDeferred.__getattr__(self,"plot") 
         if self.__auto_lims is None:
             return plot( *args, scalex=scalex, scaley=scaley, data=data, **kwargs )
         
@@ -225,15 +255,18 @@ class DynamicAx(Deferred):
         assert not self.__auto_lims is None, ("Automatic limits not set. Use auto_limits()")
         self.__auto_lims.set_lims( *args, ax=self, **kwargs)
     
-class DynamicGridSpec(Deferred):
-    """ Deferred GridSpec """
+class DynaGridSpec(DynaDeferred):
+    """ DynaDeferred GridSpec """
      
-    def __init__(self, nrows, ncols, kwargs):    
-        Deferred.__init__(self,f"gridspec({nrows},{ncols})")
+    def __init__(self, nrows : int, ncols : int, cnt : int, kwargs : dict):
         self.grid   = None
         self.nrows  = nrows
         self.ncols  = ncols
         self.kwargs = dict(kwargs)
+        DynaDeferred.__init__(self,f"gridspec#{cnt}({nrows},{ncols})")
+
+    def __str__(self):
+        return self.deferred_info[1:]
         
     def initialize( self, plt_fig ):
         """ Lazy initialization """
@@ -246,16 +279,16 @@ class DynamicGridSpec(Deferred):
                 self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols, **self.kwargs )
             except TypeError as e:
                 estr = str(e)
-                print(estr)
                 if estr != "GridSpec.__init__() got an unexpected keyword argument 'kwargs'":
                     raise e
                 warn("Error calling matplotlib GridSpec() with **kwargs: %s; will attempt to ignore any kwargs.", estr)
                 self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols )
-        self._dereference( self.grid )
+        self.deferred_resolve( self.grid )
 
-class DynamicFig(Deferred):
+class DynaFig(DynaDeferred):
     """
     Figure.
+    
     Wraps matplotlib figures.
     Main classic use are the functions
 
@@ -305,17 +338,18 @@ class DynamicFig(Deferred):
     Note that this wrapper will have its own 'axes' funtions.
     """
 
-    MODE = 'hdisplay'  # switch to 'canvas' if it doesn't work
-
     def __init__(self, title    : str = None, *,
                        row_size : int = 5,
                        col_size : int = 4,
-                       col_nums : int = 5,
+                       fig_size : tuple[int] = None,
+                       columns  : int = 5,
                        tight    : bool = True,
+                       draw_mode: int = MODE.JUPYTER,
                        **fig_kwargs ):
         """
         Setup object with a given output geometry.
-        By default the "figsize" of the figure will be derived from the number of plots vs col_nums, row_size and col_size.
+        
+        By default the "figsize" of the figure will be derived from the number of plots vs ``cols``, ``row_size`` and ``col_size``.
         If 'figsize' is specificed as part of fig_kwargs, then ow_size and col_size are ignored.
 
         Once the figure is constructed,
@@ -331,41 +365,56 @@ class DynamicFig(Deferred):
             Size for a row for matplot lib. Default is 5.
             This is ignored if 'figsize' is specified as part of fig_kwargs
         col_size : int, optional
-            Size for a column for matplot lib. Default is 4
+            Size for a column for matplot lib. Default is 4.
             This is ignored if 'figsize' is specified as part of fig_kwargs
-        col_nums : int, optional
+        columns : int, optional
             How many columns to use when add_subplot() is used.
             If omitted, and grid_spec is not specified in fig_kwargs, then the default is 5.
             This is ignored if 'figsize' is specified as part of fig_kwargs
         tight : bool, optional (False)
             Short cut for tight_layout
+        draw_mode : int, optional
+            A combination of :class:`cdxcore.dynaplot.MODE` flags on how to draw plots
+            once they were rendered. The required function call differs by IPython platform.
+            The default, :attr:`cdxcore.dynaplot.MODE.JUPYTER` draws well on Jupyter notebooks.
             
         fig_kwargs :
-            matplotlib oarameters for creating the figure
-            https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
+            Other matplotlib parameters for :func:`matplotlib.pyplot.figure` to
+            create the figure. 
 
-            By default, 'figsize' is derived from col_size and row_size. If 'figsize' is specified,
+            By default, ``figsize`` is derived from ``col_size`` and ``row_size``. If ``figsize`` is specified,
             those two values are ignored.
         """
-        Deferred.__init__(self, "figure")
         self.hdisplay   = None
         self.axes       = []
         self.grid_specs = []
         self.fig        = None
         self.row_size   = int(row_size)
         self.col_size   = int(col_size)
-        self.col_nums   = int(col_nums)
+        self.cols       = int(columns)
         self.tight      = bool(tight)
         self.tight_para = None
         self.fig_kwargs = dict(fig_kwargs)
         if self.tight:
             self.fig_kwargs['tight_layout'] = True
-        verify( self.row_size > 0 and self.col_size > 0 and self.col_nums > 0, "Invalid input.")
+        verify( self.row_size > 0 and self.col_size > 0 and self.cols > 0, "Invalid input.", exception=ValueError)
         self.this_row  = 0
         self.this_col  = 0
         self.max_col   = 0
         self.fig_title = title
         self.closed    = False
+        self.draw_mode = draw_mode
+
+        verify( not 'cols' in fig_kwargs, "Unknown keyword 'cols'. Did you mean 'columns'?", exception=ValueError)
+        
+        if not fig_size is None:
+            verify( not 'figsize' in fig_kwargs, "Cannot specify both `figsize` and `fig_size`", exception=ValueError)
+            fig_kwargs['figsize'] = fig_size
+        
+        DynaDeferred.__init__(self, "figure('{title}')")
+
+    def __str__(self):
+        return self.deferred_info[1:]
 
     def __del__(self): # NOQA
         """ Ensure the figure is closed """
@@ -374,9 +423,10 @@ class DynamicFig(Deferred):
     def add_subplot(self, title    : str = None, *,
                           new_row  : bool = None,
                           spec_pos = None,
-                          **kwargs) -> DynamicAx:
+                          **kwargs) -> DynaAx:
         """
         Add a subplot.
+        
         This function will return a wrapper which defers the creation of the actual sub plot until self.render() or self.close() is called.
         Thus function cannot be called after render() was called. Use add_axes() in that case.
 
@@ -405,16 +455,16 @@ class DynamicFig(Deferred):
             
         if not spec_pos is None:
             assert new_row is None, ("Cannot specify 'new_row' when 'spec_pos' is specified")
-            ax = DynamicAx( fig_id=hash(self), fig_list=self.axes, row=None, col=None, title=title, spec_pos=spec_pos, args=None, kwargs=dict(kwargs) )
+            ax = DynaAx( fig_id=hash(self), fig_list=self.axes, row=None, col=None, title=title, spec_pos=spec_pos, args=None, kwargs=dict(kwargs) )
             
         else:
             new_row = bool(new_row) if not new_row is None else False
-            if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
+            if (self.this_col >= self.cols) or ( new_row and not self.this_col == 0 ):
                 self.this_col = 0
                 self.this_row = self.this_row + 1
             if self.max_col < self.this_col:
                 self.max_col = self.this_col
-            ax = DynamicAx( fig_id=hash(self), fig_list=self.axes, row=self.this_row, col=self.this_col, spec_pos=None, title=title, args=None, kwargs=dict(kwargs) )
+            ax = DynaAx( fig_id=hash(self), fig_list=self.axes, row=self.this_row, col=self.this_col, spec_pos=None, title=title, args=None, kwargs=dict(kwargs) )
             self.this_col += 1
         assert ax in self.axes
         return ax
@@ -438,7 +488,7 @@ class DynamicFig(Deferred):
 
         title   = str(title) if not title is None else None
         
-        ax = DynamicAx( fig_id=hash(self), fig_list=self.axes, row=None, col=None, title=title, spec_pos=None, args=list(args), kwargs=dict(kwargs) )
+        ax = DynaAx( fig_id=hash(self), fig_list=self.axes, row=None, col=None, title=title, spec_pos=None, args=list(args), kwargs=dict(kwargs) )
         assert ax in self.axes
         if not self.fig is None:
             ax.initialize( self.fig, rows=self.this_row+1, cols=self.max_col+1 )        
@@ -448,7 +498,7 @@ class DynamicFig(Deferred):
         """
         Wrapper for https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.add_gridspec.html#matplotlib.figure.Figure.add_gridspec
         """
-        grid = DynamicGridSpec( ncols=ncols, nrows=nrows, kwargs=kwargs )
+        grid = DynaGridSpec( ncols=ncols, nrows=nrows, cnt=len(self.grid_specs), kwargs=kwargs )
         self.grid_specs.append( grid )
         return grid
 
@@ -460,9 +510,10 @@ class DynamicFig(Deferred):
         self.this_col = 0
         self.this_row = self.this_row + 1
 
-    def render(self, draw : bool = True):
+    def render(self, draw : bool = True ):
         """
         Plot all axes.
+        
         Once called, no further plots can be added, but the plots can be updated in place
 
         Parameters
@@ -472,7 +523,7 @@ class DynamicFig(Deferred):
                 This is used in savefig() and to_buytes().
         """
         verify( not self.closed, "Cannot call render() after close() was called")
-        if self.this_row == 0 and self.this_col == 0:
+        if len(self.axes) == 0:
             return
         if self.fig is None:
             # create figure
@@ -491,20 +542,21 @@ class DynamicFig(Deferred):
             for ax in self.axes:
                 ax.initialize( self.fig, rows=self.this_row+1, cols=self.max_col+1 )
             # execute all deferred calls to fig()
-            self._dereference( self.fig )
+            self.deferred_resolve( self.fig )
             
         if not draw:
             return
-        if self.MODE == 'hdisplay':
+        if self.draw_mode & MODE.HDISPLAY:
             if self.hdisplay is None:
                 self.hdisplay = display.display(display_id=True)
-                verify( not self.hdisplay is None, "Could not optain current IPython display ID from IPython.display.display(). Set DynamicFig.MODE = 'canvas' for an alternative mode")
+                verify( not self.hdisplay is None, "Could not optain current IPython display ID from IPython.display.display(). Set DynaFig.MODE = 'canvas' for an alternative mode")
             self.hdisplay.update(self.fig)
-        elif self.MODE == 'canvas_idle':
+        if self.draw_mode & MODE.CANVAS_IDLE:
             self.fig.canvas.draw_idle()
-        else:
-            verify( self.MODE == "canvas", "DynamicFig.MODE must be 'hdisplay', 'canvas_idle' or 'canvas'. Found %s", self.MODE, exception=ValueError )
+        if self.draw_mode & MODE.CANVAS_DRAW:
             self.fig.canvas.draw()
+        if self.draw_mode & MODE.PLT_SHOW:
+            plt.show()
         gc.collect() # for some unknown reason this is required in VSCode
 
     def savefig(self, fname, silent_close : bool = True, **kwargs ):
@@ -556,7 +608,7 @@ class DynamicFig(Deferred):
         return FigStore()
 
     def close(self, render          : bool = True, 
-                    clear           : bool = False):
+                    clear           : bool = False ):
         """
         Closes the figure. Does not clear the figure.
         Call this to avoid a duplicate in jupyter output cells.
@@ -575,7 +627,7 @@ class DynamicFig(Deferred):
                     self.fig._repr_html_ = types.MethodType(repr_magic,self.fig)
                     self.delaxes( self.axes, render=render )
             elif render:
-                self.render()
+                self.render(draw=True)
             if not self.fig is None:
                 plt.close(self.fig)
         self.fig      = None
@@ -593,9 +645,9 @@ class DynamicFig(Deferred):
         while len(self.axes) > 0:
             self.axes[0].remove()
         if render:
-            self.render()
+            self.render(draw=True)
         
-    def delaxes( self, ax : DynamicAx, *, render : bool = False ):
+    def delaxes( self, ax : DynaAx, *, render : bool = False ):
         """
         Equivalent of https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.delaxes.html#matplotlib.figure.Figure.delaxes
         Can also take a list
@@ -614,11 +666,11 @@ class DynamicFig(Deferred):
 def figure( title    : str = None, *, 
             row_size : int = 5, 
             col_size : int = 4, 
-            col_nums : int = 5, 
+            columns  : int = 5, 
             tight    : bool = True,
-            **fig_kwargs ) -> DynamicFig:
+            **fig_kwargs ) -> DynaFig:
     """
-    Generates a 'DynamicFig' dynamic figure using matplot lib.
+    Generates a 'DynaFig' dynamic figure using matplot lib.
     It has the following main functions
 
         add_subplot():
@@ -656,7 +708,7 @@ def figure( title    : str = None, *,
         object; most useful for: suptitle, supxlabel, supylabel
         https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_title.html
 
-        By default the "figsize" of the figure will be derived from the number of plots vs col_nums, row_size and col_size.
+        By default the "figsize" of the figure will be derived from the number of plots vs cols, row_size and col_size.
         If 'figsize' is specificed as part of fig_kwargs, then ow_size and col_size are ignored.
         
     Paraneters
@@ -669,7 +721,7 @@ def figure( title    : str = None, *,
         col_size : int, optional
             Size for a column for matplot lib. Default is 4
             This is ignored if 'figsize' is specified as part of fig_kwargs
-        col_nums : int, optional
+        columns : int, optional
             How many columns to use when add_subplot() is used.
             If omitted, and grid_spec is not specified in fig_kwargs, then the default is 5.
             This is ignored if 'figsize' is specified as part of fig_kwargs
@@ -685,10 +737,10 @@ def figure( title    : str = None, *,
 
     Returns
     -------
-        DynamicFig
+        DynaFig
             A figure wrapper; see above.
     """
-    return DynamicFig( title=title, row_size=row_size, col_size=col_size, col_nums=col_nums, tight=tight, **fig_kwargs )
+    return DynaFig( title=title, row_size=row_size, col_size=col_size, columns=columns, tight=tight, **fig_kwargs )
 
 # ----------------------------------------------------------------------------------
 # Utility class for animated content
@@ -744,7 +796,7 @@ class FigStore( object ):
         if isinstance(element, Artist):
             self._elements.append( element )
             return self
-        if isinstance(element, Deferred):
+        if isinstance(element, DynaDeferred):
             self._elements.append( element )
             return self
         if not isinstance(element,Collection):
@@ -770,10 +822,10 @@ class FigStore( object ):
                 for l in e:
                     rem(l)
                 return
-            if isinstance(e, Deferred):
+            if isinstance(e, DynaDeferred):
                 if not e._was_executed:
                     raise RuntimeError("Error: remove() was called before the figure was rendered. Call figure.render() before removing elements.")
-                rem( e.cdx_deferred_result )
+                rem( e.deferred_result )
                 return
             if not e is None:
                 raise RuntimeError("Cannot remove() element of type '{type(e).__name__}' as it is not derived from matplotlib.artist.Artist, nor is it a Collection")

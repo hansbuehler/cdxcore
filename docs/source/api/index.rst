@@ -18,6 +18,7 @@ API Reference
    config
    verbose
 
+   dynaplot
    deferred
 
    jcpool

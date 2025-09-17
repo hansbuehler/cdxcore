@@ -3,13 +3,12 @@ Overview
 --------
 
 Framework for delayed execution of a Python code tree.
-
-Used by :mod:`cdxcore.dnaplot`. 
+Used by :mod:`cdxcore.dnaplot`. *Most users will not need to use this module. Advanced users only.*
 
 Illustation
 ^^^^^^^^^^^
 
-**The Deferred Dependency Graph**
+**The Top Dependency Graph**
 
 Assume we have a class ``A`` and a function ``F``
 operates on instances ``a`` of ``A``:
@@ -31,18 +30,18 @@ operates on instances ``a`` of ``A``:
         _ = _+a(3)  
         return _, _ == 1
     
-Deferred execution means that instead of using an instance of ``A`` to evaluate
-``F``, we use a :class:`cdxcore.deferred.Deferred` object:
+Create execution means that instead of using an instance of ``A`` to evaluate
+``F``, we use a :func:`cdxcore.deferred.Deferred.Create` object:
 
 .. code-block:: python
 
-    from cdxcore.defer1ed import Deferred
+    from cdxcore.deferred import Create
     
-    a      = Deferred("a")    # <- name "a" is arbitrary but important for error messages
+    a      = Create("a")    # <- name "a" is arbitrary but important for error messages
     r1, r2 = F(a)
     
-The returned ``r1`` and ``r2`` are of type :class:`cdxcore.deferred.DeferredAction`. We can print
-the overall dependency tree from ``a`` using :meth:`cdxcore.deferred.DeferredAction.deferred_print_dependency_tree`:
+The returned ``r1`` and ``r2`` are of type :class:`cdxcore.deferred.Deferred`. We can print
+the overall dependency tree from ``a`` using :meth:`cdxcore.deferred.Deferred.deferred_print_dependency_tree`:
 
 .. code-block:: python
     
@@ -60,14 +59,14 @@ yields::
 The ``$`` sign indicates top level source elements.
 Note that this tree shows the depth of the dependencies, not execution dependencies: the term ``$a(3)``
 must be executed before ``$a.f(2)+=$a(3)``.
-This order of terms a seen from the top level ``a`` can be retrieved using :meth:`cdxcore.deferred.DeferredAction.deferred_source_dependants`:
+This order of terms a seen from the top level ``a`` can be retrieved using :meth:`cdxcore.deferred.Deferred.deferred_source_dependants`:
 calling ``print( [ _.deferred_info for _ in a.deferred_source_dependants ] )`` prints::
 
     ['$a.f', '$a.f(2)', '$a(3)', '$a.f(2)+=$a(3)', '($a.f(2)==2)']
 
 **Evaluating the Graph**
 
-To execute the graph, use :meth:`cdxcore.deferred.Deferred.deferred_resolve` at top level (note that graphs can only
+To execute the graph, use :meth:`cdxcore.deferred.Create.deferred_resolve` at top level (note that graphs can only
 be resolved once):
 
 .. code-block:: python
@@ -85,7 +84,7 @@ Validation by directly execution ``F`` with an object of type ``A`` confirms the
 Limitations
 ^^^^^^^^^^^
 
-The framework relies on replacing any Python element by a :class:`cdxcore.deferred.DeferredAction` object and then
+The framework relies on replacing any Python element by a :class:`cdxcore.deferred.Deferred` object and then
 catche and track all actions applied to it, be that reading an attribute, an item, calling ``__call__`` or accessing
 any of the standard Python attributes such as ``__eq__``.
 
@@ -98,10 +97,10 @@ This appraoch has a number of short comings:
 * **Core Python Operators:** some Python operators
   must return a certain type: ``__bool__``, ``__str__``, ``__repr__`` and ``__index__`` as far as we are aware.
   That means we cannot wrap the result into a 
-  :class:`cdxcore.deferred.DeferredAction`.
+  :class:`cdxcore.deferred.Deferred`.
   
   Considering ``__str__`` and ``__repr__`` are used throughtout the Python stack 
-  a ``DeferredAction`` will return strings describing itself. Be aware of
+  a ``Deferred`` will return strings describing itself. Be aware of
   corresponding error messages.
   
   If ``__bool__`` or ``__index__`` is called a :class:`cdxcore.deferred.NotSupportedError`
@@ -115,7 +114,7 @@ This appraoch has a number of short comings:
       
   .. code-block:: python
   
-      a = Deferred("a")
+      a = Create("a")
       a += 1
       a.deferred_resolve(int(1))      
 
@@ -140,10 +139,23 @@ Some Python functionality requires more complexity: catching and tracing core
 operatores like ``__bool__``, ``is_`` etc does not add value to the use cases we have in mind, and complicate the framework
 considerably.
 
+Deriving your own Classes
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A common usage pattern is to mix deferred actions with actual actions.
+To derive from :func:`cdxcore.deferred.Deferred.Create` it is recommended that you overwrite any operators that your
+class relies on, explicitly or implicitly.
+
+For example:
+    
+* **Equality operator for :class:`list` use:** if you intend to add your objects to a list, then you will need to overwrite
+  the `__eq__` operator. The implementation of `Create.__eq__` delegates the result of the equality test to a later point - however
+  if you plan to add any objects to a list, then this 
+
 Class Interface
 ^^^^^^^^^^^^^^^
 
-The class interfaces for both :class:`cdxcore.deferred.Deferred` and :class:`cdxcore.deferred.DeferredAction`
+The class interfaces for both :func:`cdxcore.deferred.Deferred.Create` and :class:`cdxcore.deferred.Deferred`
 are pretty clunky in that all member functions and attribues are pre-fixed with ``deferred`` or ``_deferred_``, respectively.
 The reason is that the objects will catch and track all member function calls and attribute access meant for objects
 of type ``A``.
@@ -154,7 +166,7 @@ Import
 
 .. code-block:: python
 
-    from cdxcore.deferrred import Deferred
+    from cdxcore.deferred import Deferred
 
 Documentation
 -------------
@@ -181,67 +193,190 @@ class NotSupportedError(RuntimeError):
     Exeception in case of an attempted resolution of unsupported
     operators.
     """
-    pass        
-   
-class DeferredAction(object):
-    """
-    A deferred action
-    for an object which has not been created, yet.
+    pass
 
-    See :class:`cdxcore.deferred.Deferred` for a full discussion.
+class Deferred(object):
+    r"""
+    Create a top level placeholder object to keep track
+    of a sequence of actions performed
+    on an object that does not yet exist.
 
-    **Constructor**
+    Actions such as function calls, item access, or attribute access,
+    feed the resulting logical dependency tree. Once the target
+    element is available, execute the dependency tree iteratively.
+
+    A basic example is as follows: assume we have a class ``A`` of which
+    we will create an object ``a``, but only at a later stage. We
+    wish to record a list of deferred actions on ``a`` ahead of its creation.
+
+    Define the class
+
+    .. code-block:: python
+        
+        class A(object):
+            def __init__(self, x):
+                self.x = x
+            def a_func(self, y):
+                return self.x * y
+            @staticmethod
+            def a_static(y):
+                return y
+            @property
+            def a_propery(self):
+                return self.x
+            def __getitem__(self, y):
+                return self.x * y
+            def __call__(self, y):
+                return self.x * y
+            def another(self):#
+                return A(x=self.x*2)
+
+    Use :func:`cdxcore.deferred.Deferred.Create` to create a root ``Deferred`` object:
+        
+    .. code-block:: python
+
+        from cdxcore.deferred import Create
+        da = Create("A")
+        
+    Record a few actions:
+
+    .. code-block:: python
+
+        af = da.a_func(1)    # defer function call to a_func(1)
+        ai = da[2]           # defer item access
+        aa = da.x            # defer attribute access
+
+    :class:`cdxcore.deferred.Deferred` works iteratively, e.g. all values returned from a function call, ``__call__``, or ``__getitem__``
+    are themselves deferred automatically. :class:`cdxcore.deferred.Deferred` is also able to defer item and attribute assignments.
     
-    External applications do not usually need to directly create objects
-    of type :class:`cdxcore.deferred.DeferredAction`. Use :class:`cdxcore.deferred.Deferred`
-    as top level entry point.
-    """
+    As an example:
 
-    def __init__(self, *, action         : str,       #: :meta private:
-                          info           : str,       #: :meta private:
-                          parent         : type,      #: :meta private:
-                          src_dependants : list,      #: :meta private:
-                          sources        : dict,      #: :meta private:
-                          args           : Collection,#: :meta private: 
-                          kwargs         : Mapping,   #: :meta private:
-                          max_err_len    : int,       #: :meta private:
-                          ):
+    .. code-block:: python
+
+        an = da.another()
+        an = an.another()     # call a.another().another() --> an.x = 1*2*2 = 4
+        
+    Finally, resolve the execution by instantiating ``A`` and calling :meth:`cdxcore.deferred.Create.deferred_resolve`:
+
+    .. code-block:: python
+
+        a = A()
+        da.deferred_resolve( a )
+        
+        print( an.x )         # -> 4
+
+    Parameters
+    ----------
+    info : str
+        Descriptive name of the usually not-yet-created object deferred actions
+        will act upon.
+        
+    deferred__eq__ : bool, optional
+        If ``False``, the default, the ``__eq__`` operator will not be deferred. That means
+        that you are able to use :func:`cdxcore.deferred.Deferred.Create` and :class:`cdxcore.deferred.Deferred`
+        objects in Python contexts which require ``__eq__``, for example using them in lists.
+            
+        By default this works:
+
+        .. code-block:: python
+
+            a = Create("A")
+            b = Create("B")
+            a in [b]  # -> returns False
+            b in [b]  # -> returns True
+
+        *However* that may also break your deferred semantics as the boolean returned by a deferred operator
+        may differ from the boolean returned by the non-deferred ``__eq__`` operator (e.g. comparison using ``id``).
+
+        Accordingly,
+
+        .. code-block:: python
+
+            a = Create("A",deferred__eq__=True)
+            b = Create("B",deferred__eq__=True)
+            a in [b]
+
+        will raise an error.
+        Note that this will be a :class:`cdxcore.deferred.NotSupportedError` for the attempt
+        to call ``__bool__`` on the
+        deferred ``__eq__`` operator:
+            
+        .. code-block:: python
+
+            NotSupportedError:(
+                '__bool__',
+                "Deferring action `__bool__` for '($A!=$B)' is "\
+                "not possible: '__bool__' must return a 'bool'.")
+        
+        Note that this setting does not affect ``__neq__`` or any other relational opertors.
+        
+        Set to ``True`` to defer ``__eq__``.
+    """
+    @classmethod
+    def Create( cls, info : str ):
+        """
+        Create top level element.
+        """
+        info = str(info)
+        verify( len(info) > 0, "You must specify an 'info' term")
+        return cls( info=info )
+
+    deferred_max_err_len = 100 #: maximum string length for strings
+
+    def __init__(self,     info           : str, *,   
+                           action         : str = "",       
+                           #     
+                           parent         : type = None,      
+                           # arguments passed to the action  
+                           args           : Collection = None,
+                           kwargs         : Mapping = None,   
+                           ):
         """
         Initialize a deferred action.
-        :meta private:
         """
-        self._deferred_max_err_len  = max_err_len
-        
-        verify( isinstance(info, str), lambda : f"'info' must be a string; found {self._deferred_to_str(info)}.", exception=ValueError)
-        verify( parent is None or isinstance(parent, DeferredAction), lambda : f"'parent' must be a DeferredAction; found {type(parent)}.", exception=ValueError)
         verify( isinstance(action, str), lambda : f"'action' must be a string; found {self._deferred_to_str(action)}.", exception=ValueError)
-        verify( isinstance(args, (Sequence,Collection)), lambda : f"'args' must be a Collection; found {type(args)}.", exception=ValueError)
-        verify( isinstance(kwargs, Mapping), lambda : f"'kwargs' must be a Mapping; found {type(kwargs)}.", exception=ValueError)
+        verify( isinstance(info, str), lambda : f"'info' must be a string; found {self._deferred_to_str(info)}.", exception=ValueError)
+        verify( parent is None or isinstance(parent, Deferred), lambda : f"'parent' must be a Deferred; found {type(parent)}.", exception=ValueError)
+        verify( args is None or isinstance(args, (Sequence,Collection)), lambda : f"'args' must be a Collection; found {type(args)}.", exception=ValueError)
+        verify( kwargs is None or isinstance(kwargs, Mapping), lambda : f"'kwargs' must be a Mapping; found {type(kwargs)}.", exception=ValueError)
         
         if action == "":
             verify( len(info)>0 and
-                    len(args) == 0 and
                     parent is None and
-                    len(sources) == 0 and
-                    len(kwargs) == 0, "Must specify 'info' but cannot specify 'sources', 'parent', 'args', or 'kwargs' for the root action \"\"", exception=ValueError)
+                    args is None and
+                    kwargs is None, "Must specify 'info' but cannot specify 'parent', 'args', or 'kwargs' for the root action \"\"", exception=ValueError)
         
         self._deferred_action         = action              # action code
         self._deferred_parent         = parent
         self._deferred_depth          = parent._deferred_depth+1 if not parent is None else 0
-        self._deferred_args           = args
-        self._deferred_kwargs         = kwargs
+        self._deferred__eq__          = parent._deferred__eq__ if not parent is None else False
+        self._deferred__hash__ = False
+        self._deferred_args           = [] if args is None else list(args)
+        self._deferred_kwargs         = {} if kwargs is None else dict(kwargs)
         self._deferred_live           = None           # once the object exists, it goes here.
         self._deferred_was_resolved   = False          # whether the action was executed.
         self._deferred_dependants     = []             # list of all direct dependent actions
-        self._deferred_src_dependants = src_dependants # 
         
         if action == "":
-            info            = "$"+info
-            self._deferred_sources  = {id(self):info}
-            self._deferred_info     = info
+            info                          = "$"+info
+            self._deferred_sources        = {id(self):info}
+            self._deferred_info           = info
+            self._deferred_src_dependants = []
+            
         else:
-            self._deferred_sources  = sources
-            self._deferred_info     = info
+            sources = dict(parent._deferred_sources)
+            if not args is None:
+                for x in args:
+                    if isinstance(x, Deferred):
+                        sources |= x._deferred_sources
+            if not kwargs is None:
+                for x in kwargs.values():
+                    if isinstance(x, Deferred):
+                        sources |= x._deferred_sources
+
+            self._deferred_sources        = sources
+            self._deferred_info           = info
+            self._deferred_src_dependants = parent._deferred_src_dependants 
         
         self.__dict__["_ready_for_the_deferred_magic_"] = 1
 
@@ -252,6 +387,8 @@ class DeferredAction(object):
         ``__str__`` cannot be deferred as it must return a string.
         We therefore return some information on ``self``
         """
+        if not '_deferred_info' in self.__dict__:
+            return type(self).__name__
         return self._deferred_info
 
     def __repr__(self) -> str:
@@ -261,13 +398,30 @@ class DeferredAction(object):
         ``__repr__`` cannot be deferred as it must return a string.
         We therefore return some information on ``self``
         """
+        if not '_deferred_info' in self.__dict__:
+            return type(self).__name__
+        if self._deferred_parent is None:
+            return f"{type(self).__name__}({self._deferred_info})"
+
         sources = list(self._deferred_sources.values())
         s = ""
         for src in sources:
             s += src + ","
         s = s[:-1]
-        return f"DeferredAction[{self._deferred_info} <- {s}]"
+        return f"{type(self).__name__}({self._deferred_info}<-{s})"
 
+    def deferred_create_action( self, **kwargs ):
+        """
+        Creates a deferred action created during another deferred action.
+
+        This function is called internally if a new action is created. The purpose of this function
+        is allowing to implement different deferral overwrite profiles (eg which functions are overwritten).   
+        
+        The standard implementation is to call the constructor of the desired
+        class derived from :class:`cdxcore.deferred.Deferred`.
+        """
+        return Deferred( **kwargs )
+        
     @property
     def _deferred_parent_info(self) -> str:
         return self._deferred_parent._deferred_info if not self._deferred_parent is None else ""
@@ -275,15 +429,15 @@ class DeferredAction(object):
     def _deferred_to_str( self, x ):
         """ Limit string 'x' to ``max_err_len`` by adding ``...`` if necessary. """
         x = str(x)
-        if len(x) > self._deferred_max_err_len:
+        if len(x) > self.deferred_max_err_len:
             if x[-1] in [')', ']', '}']:
-                x = x[:self._deferred_max_err_len-4] + "..." + x[-1]
+                x = x[:self.deferred_max_err_len-4] + "..." + x[-1]
             else:
-                x = x[:self._deferred_max_err_len-3] + "..." 
+                x = x[:self.deferred_max_err_len-3] + "..." 
         return x
     
     def _deferred_to_argstr( self, x ):
-        if isinstance(x, DeferredAction):
+        if isinstance(x, Deferred):
             if not x.deferred_was_resolved:
                 return f"{{{x._deferred_info}}}"    
             x = x._deferred_live
@@ -317,7 +471,7 @@ class DeferredAction(object):
         """
         Text description of the current action.
         
-        Top level sources are indicated by a ``$``. Curly brackets ``{}`` indicate
+        Create level sources are indicated by a ``$``. Curly brackets ``{}`` indicate
         deferred actions themselves. For example:
         
         .. code-block:: python
@@ -328,10 +482,10 @@ class DeferredAction(object):
         
         .. code-block:: python
 
-            from cdxcore.deferred import Deferred
+            from cdxcore.deferred import Create
 
-            a = Deferred("a")
-            b = Deferred("b")
+            a = Create("a")
+            b = Create("b")
             _ = a.f( b.g(1) )
             print( _.deferred_info )  # -> '$a.f({$b.g(1)})'
         """
@@ -344,13 +498,13 @@ class DeferredAction(object):
         
     @property
     def deferred_dependants(self) -> list:
-        """ Retrieve list of dependant :class:`cdxcore.deferred.DeferredAction` objects. """
+        """ Retrieve list of dependant :class:`cdxcore.deferred.Deferred` objects. """
         return self._deferred_dependants
         
     @property
     def deferred_source_dependants(self) -> list:
         """
-        Retrieve list of dependant :class:`cdxcore.deferred.DeferredAction` objects at the level of the original parent source.
+        Retrieve list of dependant :class:`cdxcore.deferred.Deferred` objects at the level of the original parent source.
         This list is in order.
         """
         return self._deferred_src_dependants
@@ -362,14 +516,14 @@ class DeferredAction(object):
         this deferred action depends on.
         
         A top level source is an element which must be created explicitly by the user.
-        These are the elements generated by :func:'cdxcore.deferred.Deferred'.
+        These are the elements generated by :func:'cdxcore.deferred.Create'.
 
         The list contains a unique ``id`` and the name of the
         source. The ``id`` is used to allow the same name for
-        several :func:`Deferred` elements.
+        several :func:`Create` elements.
         
         Most users will prefer a simple list of names of sources.
-        In that case, use :meth:`cdxcore.deferred.DeferredAction.deferred_sources_names`.
+        In that case, use :meth:`cdxcore.deferred.Deferred.deferred_sources_names`.
 
         """
         return self._deferred_sources
@@ -381,7 +535,7 @@ class DeferredAction(object):
         this deferred action depends on.
         
         A top level source is an element which must be created explicitly by the user.
-        These are the elements generated by :func:'cdxcore.deferred.Deferred'.
+        These are the elements generated by :func:'cdxcore.deferred.Create'.
 
         The list returned by this function contains the ``info`` names
         for each of the sources. 
@@ -390,10 +544,10 @@ class DeferredAction(object):
         
         .. code-block:: python
 
-            from cdxcore.deferred import Deferred
+            from cdxcore.deferred import Create
 
-            a = Deferred("a")
-            b = Deferred("b")
+            a = Create("a")
+            b = Create("b")
             _ = a.f( b.g(1) )
             print( _.deferred_sources_names )  # -> ['$a', '$b']
             
@@ -408,29 +562,36 @@ class DeferredAction(object):
         Returns the result of the deferred action, if available.
         
         Raises a :class:`RuntimeError` if the action has not been
-        executed with :meth:`cdxcore.deferred.Deferred.deferred_resolve` yet.        
+        executed with :meth:`cdxcore.deferred.Create.deferred_resolve` yet.        
         
         Note that this function might return ``None`` if the resolved
         action had returned ``None``.
         """
-        verify( self._deferred_was_resolved, lambda : f"Deferred action '{self._deferred_info}' has not been executed yet" )
+        verify( self._deferred_was_resolved, lambda : f"Create action '{self._deferred_info}' has not been executed yet" )
         return self._deferred_live
+    
+    @property
+    def deferred_result_or_self(self):
+        """
+        Returns the result of the deferred action, if available, or ``self``.
+        """
+        return self._deferred_live if self._deferred_was_resolved else self
     
     def deferred_print_dependency_tree( self, verbose : Context = Context.all, *, with_sources : bool = False ):
         """ 
         Prints the dependency tree recorded by this object and its descendants.
         
-        This function must be called *before* :meth:`cdxcore.deferred.Deferred.deferred_resolve` is called
+        This function must be called *before* :meth:`cdxcore.deferred.Create.deferred_resolve` is called
         (``deferred_resolve`` clears the dependency tree to free memory).
         
         You can collect this information manually as follows if required:
 
         .. code-block:: python
 
-            from cdxcore.deferred import Deferred
+            from cdxcore.deferred import Create
 
-            a = Deferred("a")
-            b = Deferred("b")
+            a = Create("a")
+            b = Create("b")
             _ = a.f( b.g(1) )
             
             def collect(x,i=0,data=None):
@@ -483,11 +644,11 @@ class DeferredAction(object):
         verbose = Context.quiet if verbose is None else verbose
         
         verify( not parent is None, lambda : f"Cannot resolve '{self._deferred_info}': the parent action '{self._deferred_parent_info}' returned 'None'" )
-        verify( not isinstance(parent, DeferredAction), lambda : f"Cannot resolve '{self._deferred_info}' using a 'DeferredAction'" )
+        verify( not isinstance(parent, Deferred), lambda : f"Cannot resolve '{self._deferred_info}' using a 'Deferred'" )
         
         # what action 
         def morph(x):
-            if not isinstance(x, DeferredAction):
+            if not isinstance(x, Deferred):
                 return x
             if x.deferred_was_resolved:
                 return x._deferred_live
@@ -556,6 +717,53 @@ class DeferredAction(object):
         self._deferred_was_resolved = True
         self._deferred_live         = live
 
+    def deferred_resolve(self, element, verbose : Context = None):
+        """
+        Resolve the top level deferred element.
+        
+        The top level itself is "resolved" by assigning it 
+        concrete object. It will then iterate through all dependent
+        deferred actions and attempt to solve those.
+        
+        This can fail if those calculations are dependent on
+        other :func:`cdxcore.deferred.Deferred.Create` which have not been resolved
+        yet. In this case a :class:`cdxcore.deferred.ResolutionDependencyError`
+        exception will be raised.
+        
+        Parameters
+        ----------
+            element :
+                The object to resolve ``self`` with.
+                
+            verbose : :class:`cdxcore.verbose.Context`
+                Can be used to provide runtime information on which
+                deferred actions are being resolved. Defaults to ``None``
+                which surpresses all output.
+                
+        Returns
+        -------
+            element
+                The input element, so you can chain ``resolve()``.
+        """        
+        
+        verify( self._deferred_action == "", lambda : f"Cannot only resolve top level actions, not '{self._deferred_info}'. Looks like user error, sorry.")
+        verify( self._deferred_live is None, lambda : f"Called resolve() twice on '{self._deferred_info}'.")
+        verify( not element is None, lambda : f"You cannot resolve '{self._deferred_info}' with an empty 'element'")
+        verbose = Context.quiet if verbose is None else verbose
+        
+        verbose.write(f"{self._deferred_info} -> '{qualified_name(element)}' : {self._deferred_to_str(element)}")
+        self._deferred_live         = element
+        self._deferred_was_resolved = True
+
+        while len(self._deferred_src_dependants) > 0:
+            daction = self._deferred_src_dependants.pop(0)
+            dlevel  = daction._deferred_depth
+            daction._deferred_resolve( verbose=verbose(dlevel) )
+            del daction 
+            
+        gc.collect()
+        return element
+    
     # Iteration
     # =========
     # The following are deferred function calls on the object subject of the action ``self``.
@@ -593,12 +801,12 @@ class DeferredAction(object):
         else:
             if not num_args is None:
                 # specific list of arguments
-                verify( num_args is None or len(args) == num_args, lambda : f"Error defining action '{action}' for '{self._deferred_info}': expected {num_args} but found {len(args)}" )
-                verify( len(kwargs) == 0, lambda : f"Error defining action '{action}' for '{self._deferred_info}': expected {num_args} ... in this case no kwargs are expected, but {len(kwargs)} where found" )
+                verify( num_args is None or len(args) == num_args, lambda : f"Error defining action '{action}' for '{self._deferred_info}': expected {num_args} arguments but found {len(args)}" )
+                verify( len(kwargs) == 0, lambda : f"Error defining action '{action}' for '{self._deferred_info}': expected {num_args} ... in this case no kwargs are expected, but {len(kwargs)} keyword arguments where found" )
                 verify( not fmt is None, lambda : f"Error defining action '{action}' for '{self._deferred_info}': 'fmt' not specified" )
     
                 def label(x):
-                    return x if not isinstance(x, DeferredAction) else x._deferred_info
+                    return x if not isinstance(x, Deferred) else x.__dict__.get('_deferred_info',action)
                 arguments           = { f"arg{i}" : label(arg) for i, arg in enumerate(args) }
                 arguments['parent'] = self._deferred_info
                 try:
@@ -610,25 +818,15 @@ class DeferredAction(object):
                 # __call__
                 info = fmt.format(parent=self._deferred_info, args=fmt_args())
         
-        # detected dependencies in arguments on other
-        sources = dict(self._deferred_sources)
-        for x in args:
-            if isinstance(x, DeferredAction):
-                sources |= x._deferred_sources
-        for x in kwargs.values():
-            if isinstance(x, DeferredAction):
-                sources |= x._deferred_sources
-        
         # create new action
-        deferred  = DeferredAction( 
-                              action=action,
-                              parent=self,
+        deferred  = self.deferred_create_action(
                               info=self._deferred_to_str(info),
+                              action=action,
+                              # parent
+                              parent=self,
+                              # arguments
                               args=list(args),
-                              kwargs=dict(kwargs),
-                              max_err_len=self._deferred_max_err_len,
-                              sources=sources,
-                              src_dependants=self._deferred_src_dependants,
+                              kwargs=dict(kwargs)
                               )
         self._deferred_src_dependants.append( deferred )
         self._deferred_dependants.append( deferred )
@@ -636,13 +834,14 @@ class DeferredAction(object):
 
     # Routed actions
     # --------------
+    # We always handle attributes and __call__. 
+    # All other handlers need to be implemented in derived classes.
     # We handle __getattr__ and __setattr__ explicitly
 
     def __getattr__(self, attr ):
-        """ Deferred attribute access """
+        """ Create attribute access """
         private_str = "deferred_"    
         #print("__getattr__", attr, self.__dict__.get(private_str+"info", "?"))
-        #print("  ", self.__dict__)
         if attr in self.__dict__ or\
                    attr[:2] == "__" or\
                    attr[:len(private_str)] == private_str or\
@@ -653,6 +852,8 @@ class DeferredAction(object):
                 return self.__dict__[attr]
             except KeyError as e:
                 raise AttributeError(*e.args, self.__dict__["_deferred_info"]) from e
+            except AttributeError as e:
+                raise AttributeError(*e.args, self.__dict__["_deferred_info"]) from e
         if not self._deferred_live is None:
             #print("__getattr__: live", attr)
             return getattr(self._deferred_live, attr)
@@ -660,7 +861,7 @@ class DeferredAction(object):
         return self._act("__getattr__", args=[attr], num_args=1, fmt="{parent}.{arg0}")
     
     def __setattr__(self, attr, value):
-        """ Deferred attribute access """
+        """ Create attribute access """
         private_str = "deferred_"    
         #print("__getattr__", attr, self.__dict__.get(private_str+"info", "?"))
         if attr in self.__dict__ or\
@@ -669,8 +870,10 @@ class DeferredAction(object):
                    attr[1:1+len(private_str)] == private_str or\
                    not "_ready_for_the_deferred_magic_" in self.__dict__:
             try:
-                self.__dict__[attr] = value
+                object.__setattr__(self, attr, value)
             except KeyError as e:
+                raise AttributeError(*e.args, self.__dict__["_deferred_info"]) from e
+            except AttributeError as e:
                 raise AttributeError(*e.args, self.__dict__["_deferred_info"]) from e
             #print("__setattr__: direct", attr)
             return
@@ -681,7 +884,7 @@ class DeferredAction(object):
         return self._act("__setattr__", args=[attr, value], num_args=2, fmt="{parent}.{arg0}={arg1}")
 
     def __delattr__(self, attr):
-        """ Deferred attribute access """
+        """ Create attribute access """
         private_str = "_deferred_"    
         #print("__delattr__", attr)
         if attr in self.__dict__ or\
@@ -691,8 +894,10 @@ class DeferredAction(object):
                    not "_ready_for_the_deferred_magic_" in self.__dict__:
             #print("__delattr__: direct", attr)
             try:
-                del self.__dict__[attr]
+                object.__delattr__(self,attr)
             except KeyError as e:
+                raise AttributeError(*e.args, self.__dict__[private_str+"info"]) from e
+            except AttributeError as e:
                 raise AttributeError(*e.args, self.__dict__[private_str+"info"]) from e
             return
         if not self._deferred_live is None:
@@ -707,44 +912,74 @@ class DeferredAction(object):
                           num_args : int = None,
                           fmt : str = None ):
         def act(self, *args, **kwargs):
+            if not "_ready_for_the_deferred_magic_" in self.__dict__:
+                return getattr( self, action )(*args,**kwargs)
             r = self._act(action, args=args, kwargs=kwargs, num_args=num_args, fmt=fmt )
             return r if return_deferred else self
         act.__name__ = action
-        act.__doc__  = f"Deferred ``{action}`` action"
+        act.__doc__  = f"Create ``{action}`` action"
         return act
     
     @staticmethod
     def _deferred_unsupported( action : str, reason : str ):
         def act(self, *args, **kwargs):
-            raise NotSupportedError(action, f"Deferring action `{action}` is not possible: {reason}")
+            if not "_ready_for_the_deferred_magic_" in self.__dict__:
+                return getattr( self, action )(*args,**kwargs)
+            raise NotSupportedError(action, 
+                                    f"Deferring action `{action}` for '{self._deferred_info}' is not possible: {reason}")
         act.__name__ = action
-        act.__doc__  = f"Deferred ``{action}`` action"
+        act.__doc__  = f"Create ``{action}`` action"
         return act
 
-    # not supported
+    # core functionality
+    __call__    = _deferred_handle("__call__", num_args=None, fmt="{parent}({args})")
+
+
+class DeferAll(Deferred):
+    def deferred_create_action( self, **kwargs ):
+        """
+        Creates a deferred action created during another deferred action.
+
+        This function is called internally if a new action is created. The purpose of this function
+        is allowing to implement different deferral overwrite profiles (eg which functions are overwritten).   
+        
+        The standard implementation is to call the constructor of the desired
+        class derived from :class:`cdxcore.deferred.Deferred`.
+        """
+        return DeferAll( **kwargs )
+
+    _deferred_handle = Deferred._deferred_handle
+    _deferred_unsupported = Deferred._deferred_unsupported
+    
+    __setitem__ = Deferred._deferred_handle("__setitem__", num_args=2, fmt="{parent}[{arg0}]={arg1}")
+    __getitem__ = Deferred._deferred_handle("__getitem__", num_args=1, fmt="{parent}[{arg0}]")
+
+    # catch those - usually bad sign
     __bool__    = _deferred_unsupported("__bool__", "'__bool__' must return a 'bool'.")
     __index__   = _deferred_unsupported("__index__", "'__index__' must return an 'int'.")
     # __str__ : implemented
     # __repr__ : implemented
                 
+    # collections
+    __contains__ = _deferred_handle("__contains__", num_args=1, fmt="({arg0} in {parent})")
+    __iter__     = _deferred_handle("__iter__")
+    __len__      = _deferred_handle("__len__", num_args=0, fmt="len({parent})")
+
+    # comparison operators
+    __eq__      = _deferred_handle("__eq__", num_args=1, fmt="({parent}!={arg0})")   # ** handle with care - interferes with lists **
+    __neq__     = _deferred_handle("__neq__", num_args=1, fmt="({parent}!={arg0})")
+    __ge__      = _deferred_handle("__ge__", num_args=1, fmt="({parent}>={arg0})")
+    __le__      = _deferred_handle("__le__", num_args=1, fmt="({parent}<={arg0})")
+    __gt__      = _deferred_handle("__gt__", num_args=1, fmt="({parent}>{arg0})")
+    __lt__      = _deferred_handle("__lt__", num_args=1, fmt="({parent}<{arg0})")
+
     # core functionality
     __call__    = _deferred_handle("__call__", num_args=None, fmt="{parent}({args})")
     __setitem__ = _deferred_handle("__setitem__", num_args=2, fmt="{parent}[{arg0}]={arg1}")
     __getitem__ = _deferred_handle("__getitem__", num_args=1, fmt="{parent}[{arg0}]")
 
-    # collections
-    __contains__ = _deferred_handle("__contains__", num_args=1, fmt="({arg0} in {parent})")
-    __iter__     = _deferred_handle("__iter__")
-    __len__      = _deferred_handle("__len__", num_args=0, fmt="len({parent})")
-    __hash__     = _deferred_handle("__hash__", num_args=0, fmt="hash({parent})")
-
-    # comparison operators
-    __neq__     = _deferred_handle("__neq__", num_args=1, fmt="({parent}!={arg0})")
-    __eq__      = _deferred_handle("__eq__", num_args=1, fmt="({parent}=={arg0})")
-    __ge__      = _deferred_handle("__ge__", num_args=1, fmt="({parent}>={arg0})")
-    __le__      = _deferred_handle("__le__", num_args=1, fmt="({parent}<={arg0})")
-    __gt__      = _deferred_handle("__gt__", num_args=1, fmt="({parent}>{arg0})")
-    __lt__      = _deferred_handle("__lt__", num_args=1, fmt="({parent}<{arg0})")
+    # unitary
+    __abs__      = _deferred_handle("__abs__", True, num_args=0, fmt="|{parent}|")
 
     # unitary
     __abs__      = _deferred_handle("__abs__", True, num_args=0, fmt="|{parent}|")
@@ -762,7 +997,6 @@ class DeferredAction(object):
     __ipow__     = _deferred_handle("__ipow__", False, num_args=1, fmt="{parent}**={arg0}")
     __itruediv__ = _deferred_handle("__itruediv__", False, num_args=1, fmt="{parent}/={arg0}")
     __ifloordiv__ = _deferred_handle("__ifloordiv__", False, num_args=1, fmt="{parent}//={arg0}")
-    # Py2 __idiv__     = _deferred_handle("__idiv__", False, num_args=1, fmt="{parent}/={arg0}")
     
     # binary
     __or__       = _deferred_handle("__or__", num_args=1, fmt="({parent}|{arg0})")
@@ -777,7 +1011,6 @@ class DeferredAction(object):
     __matmul__   = _deferred_handle("__matmul__", num_args=1, fmt="({parent}@{arg0})")
     __truediv__  = _deferred_handle("__truediv__", num_args=1, fmt="({parent}/{arg0})")
     __floordiv__ = _deferred_handle("__floordiv__", num_args=1, fmt="({parent}//{arg0})")
-    # Py2__div__      = _deferred_handle("__div__", num_args=1, fmt="({parent}/{arg0})")
 
     # rbinary
     __ror__       = _deferred_handle("__ror__", num_args=1,      fmt="({arg0}|{parent})")
@@ -792,147 +1025,4 @@ class DeferredAction(object):
     __rmatmul__   = _deferred_handle("__rmatmul__", num_args=1,  fmt="({arg0}@{parent})")
     __rtruediv__  = _deferred_handle("__rtruediv__", num_args=1, fmt="({arg0}/{parent})")
     __rfloordiv__ = _deferred_handle("__rfloordiv__", num_args=1,fmt="({arg0}//{parent})")
-    # Py2__rdiv__      = _deferred_handle("__rdiv__", num_args=1,     fmt="({arg0}/{parent})")
- 
-class Deferred(DeferredAction):
-    """
-    Create a top level placeholder object to keep track
-    of a sequence of actions performed
-    on an object that does not yet exist.
-
-    Actions such as function calls, item access, or attribute access,
-    feed the resulting logical dependency tree. Once the target
-    element is available, execute the dependency tree iteratively.
-
-    A basic example is as follows: assume we have a class ``A`` of which
-    we will create an object ``a``, but only at a later stage. We
-    wish to record a list of deferred actions on ``a`` ahead of its creation.
-
-    Define the class
-
-    .. code-block:: python
-        
-        class A(object):
-            def __init__(self, x):
-                self.x = x
-            def a_func(self, y):
-                return self.x * y
-            @staticmethod
-            def a_static(y):
-                return y
-            @property
-            def a_propery(self):
-                return self.x
-            def __getitem__(self, y):
-                return self.x * y
-            def __call__(self, y):
-                return self.x * y
-            def another(self):#
-                return A(x=self.x*2)
-
-    Use :class:`cdxcore.deferred.Deferred` to create a root ``DeferredAction`` object:
-        
-    .. code-block:: python
-
-        from cdxcore.deferred import Deferred
-        da = Deferred("A")
-        
-    Record a few actions:
-
-    .. code-block:: python
-
-        af = da.a_func(1)    # defer function call to a_func(1)
-        ai = da[2]           # defer item access
-        aa = da.x            # defer attribute access
-
-    :class:`cdxcore.deferred.DeferredAction` works iteratively, e.g. all values returned from a function call, ``__call__``, or ``__getitem__``
-    are themselves deferred automatically.`:class:`cdxcore.deferred.DeferredAction` is also able to defer item and attribute assignments.
-    
-    As an example::
-
-        an = da.another()
-        an = an.another()     # call a.another().another() --> an.x = 1*2*2 = 4
-        
-    Finally, resolve the execution by instantiating ``A`` and calling :meth:`cdxcore.deferred.Deferred.deferred_resolve`::
-
-        a = A()
-        da.deferred_resolve( a )
-        
-        print( an.x )         # -> 4
-
-    Parameters
-    ----------
-    info : str
-        Descriptive name of the usually not-yet-created object deferred actions
-        will act upon.
-        
-    max_err_len : int, optional
-        Maximum length of output information. The default is 100.
-    """
-    
-    def __init__(self,  info         : str,
-                        max_err_len  : int = 100 ):
-        """ Init """       
-        self._deferred_src_dependants = []
-        
-        DeferredAction.__init__(  
-                           self,
-                           info=info,
-                           action="", 
-                           parent=None, 
-                           src_dependants=self._deferred_src_dependants,
-                           sources={},
-                           args=[], 
-                           kwargs={},
-                           max_err_len=max_err_len )
-        
-        assert self._deferred_live is None
-    
-
-    def deferred_resolve(self, element, verbose : Context = None):
-        """
-        Resolve the top level deferred element.
-        
-        The top level itself is "resolved" by assigning it 
-        concrete object. It will then iterate through all dependent
-        deferred actions and attempt to solve those.
-        
-        This can fail if those calculations are dependent on
-        other :class:`cdxcore.deferred.Deferred` which have not been resolved
-        yet. In this case a :class:`cdxcore.deferred.ResolutionDependencyError`
-        exception will be raised.
-        
-        Parameters
-        ----------
-            element :
-                The object to resolve ``self`` with.
-                
-            verbose : :class:`cdxcore.verbose.Context`
-                Can be used to provide runtime information on which
-                deferred actions are being resolved. Defaults to ``None``
-                which surpresses all output.
-                
-        Returns
-        -------
-            element
-                The input element, so you can chain ``resolve()``.
-        """        
-        
-        verify( self._deferred_live is None, lambda : f"Called resolve() twice on '{self._deferred_info}'.")
-        verify( not element is None, lambda : f"You cannot resolve '{self._deferred_info}' with an empty 'element'")
-        verbose = Context.quiet if verbose is None else verbose
-        
-        verbose.write(f"{self._deferred_info} -> '{qualified_name(element)}' : {self._deferred_to_str(element)}")
-        self._deferred_live         = element
-        self._deferred_was_resolved = True
-
-        while len(self._deferred_src_dependants) > 0:
-            daction = self._deferred_src_dependants.pop(0)
-            dlevel  = daction._deferred_depth
-            daction._deferred_resolve( verbose=verbose(dlevel) )
-            del daction 
-            
-        gc.collect()
-        return element
-    
     

@@ -15,8 +15,10 @@ _log = Logger(__file__)
 @version("0.0.1")
 class ndsharedarray( object ):
     """
-    Wrapper around https://docs.python.org/3/library/multiprocessing.shared_memory.html
-    Use sharedarray() to create objects of this type
+    Wrapper around :class:`multiprocessing.shared_memory`.
+    
+    Instead of using this class directly to create new objects of type ``ndsharedarray``, use    
+    :func:`cdxcore.sharedarray.sharedarray` instead.
     
     This array vaguley behaves like a numpy array, but it is usally better to use ndsharedarray.array
     to access the actual underlying numpy array.

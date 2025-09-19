@@ -10,29 +10,22 @@ class AutoLimits( object ):
     """
     Max/Min limit manger for dynamic figures.
 
-    limits = MinMaxLimit( 0.05, 0.95 )
-    ax.add_subplot( x,y ,.. )
-    limits.update(x, y)
-    ax.add_subplot( x,z,.. )
-    limits.update(x, z)
-    limits.set_lims(ax)
+    Parameters
+    ----------
+        low_quantile : float
+            Lower quantile to use for computing a 'min' y value. Set to 0 to use 'min'.
+        high_quantile : float
+            Higher quantile to use for computing a 'min' y value. Set to 1 to use 'max'.
+        min_length : int
+            Minimum length data must have to use quantile(). If less data is presented,
+            use min/max, respectively.
+        lookback : int
+            How many steps to lookback for any calculation. None to use all steps
     """
 
     def __init__(self, low_quantile, high_quantile, min_length : int = 10, lookback : int = None ):
         """
-        Initialize MinMaxLimit.
-
-        Parameters
-        ----------
-            low_quantile : float
-                Lower quantile to use for computing a 'min' y value. Set to 0 to use 'min'.
-            high_quantile : float
-                Higher quantile to use for computing a 'min' y value. Set to 1 to use 'max'.
-            min_length : int
-                Minimum length data must have to use quantile(). If less data is presented,
-                use min/max, respectively.
-            lookback : int
-                How many steps to lookback for any calculation. None to use all steps
+        Initialize AutoLimits.
         """
 
         verify( low_quantile >=0., "'low_quantile' must not be negative", exception=ValueError )
@@ -49,9 +42,9 @@ class AutoLimits( object ):
 
     def update(self, *args, axis=None ):
         """
-        Add a data set to the min/max calc
+        Add a data set to the min/max calc.
 
-        If the x axis is ordinal first dimension of 'y':
+        If the x axis is ordinal for 'y':
             update(y, axis=axis )
             In this case x = np.linspace(1,y.shape[0],y.shape[0])
 

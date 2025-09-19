@@ -23,7 +23,7 @@ def import_local():
     sys.path.insert( 0, cwd[:-6] )
 import_local()
 
-from cdxcore.deferred import Deferred, ResolutionDependencyError, NotSupportedError
+from cdxcore.deferred import DeferAll, ResolutionDependencyError, NotSupportedError
 
 class qB(object):
     def __init__(self):
@@ -140,8 +140,8 @@ class Test(unittest.TestCase):
             )
     
 
-        deferred_a = Deferred("a")
-        deferred_b = Deferred("b")
+        deferred_a = DeferAll("a")
+        deferred_b = DeferAll("b")
         actual_a = qA()
         actual_b = qA()
         results_act = tester(actual_a, actual_b)
@@ -233,7 +233,7 @@ class Test(unittest.TestCase):
                 cB = cB(a)
         	)
 
-        deferred_a = Deferred("a")
+        deferred_a = DeferAll("a")
         actual_a = np.full((4,2),3,dtype=np.int32)
         results_act = test_op(actual_a)
         results_drf = test_op(deferred_a)
@@ -251,7 +251,7 @@ class Test(unittest.TestCase):
 
         # abs
         
-        a = Deferred("a")
+        a = DeferAll("a")
         b = abs(a)
         a.deferred_resolve(int(-11))
         self.assertEqual( b.deferred_result, 11 )
@@ -259,25 +259,25 @@ class Test(unittest.TestCase):
         # unsupported
 
         with self.assertRaises(NotSupportedError):
-            a = Deferred("a")
+            a = DeferAll("a")
             bool(a)
         with self.assertRaises(NotSupportedError):
-            a = Deferred("a")
+            a = DeferAll("a")
             a.__index__()
-        a = Deferred("a")
+        a = DeferAll("a")
         a = abs(a)*3
         self.assertEqual(str(a), "(|$a|*3)" )
-        self.assertEqual(repr(a), "DeferredAction[(|$a|*3) <- $a]" )
+        self.assertEqual(repr(a), "DeferAll((|$a|*3)<-$a)" )
 
         # info test
         
-        a = Deferred("a")
-        b = Deferred("b")
+        a = DeferAll("a")
+        b = DeferAll("b")
         _ = a.f( b.g(1) )
         self.assertEqual( _.deferred_info, '$a.f({$b.g(1)})' )
 
-        a = Deferred("a")
-        b = Deferred("b")
+        a = DeferAll("a")
+        b = DeferAll("b")
         _ = a.f( b.g(1) )
         src = list(_.deferred_sources.values())
         self.assertEqual( src, ['$a', '$b'] )
@@ -286,8 +286,8 @@ class Test(unittest.TestCase):
 
         # collision test
         
-        a = Deferred("A")
-        b = Deferred("B")
+        a = DeferAll("A")
+        b = DeferAll("B")
         _ = a.f(b) # <- execution  depends on b
         
         with self.assertRaises(ResolutionDependencyError):

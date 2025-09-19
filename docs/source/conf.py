@@ -81,6 +81,8 @@ intersphinx_mapping = {
     "numpy":  ("https://numpy.org/doc/stable/", None),
     "scipy":  ("https://docs.scipy.org/doc/scipy/", None),
     "pandas": ("https://pandas.pydata.org/docs/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "ipython": ("https://ipython.readthedocs.io/en/stable/", None),
 }
 
 myst_enable_extensions = [

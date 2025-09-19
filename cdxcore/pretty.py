@@ -92,7 +92,6 @@ Documentation
 -------------
 """
 
-from collections import OrderedDict
 import dataclasses as dataclasses
 from dataclasses import Field
 import types as types
@@ -286,12 +285,18 @@ class PrettyObject(MutableMapping):
         return getattr(self,key)
     
     def update(self, other : Mapping = None, **kwargs):
-        """ Equivalent to :meth:`dict.update`. """
+        """
+        Equivalent to :meth:`dict.update`. 
+        
+        Note that functon assignments are handled in normal dictionary
+        fashion - in particular, bound functions will *not* become
+        magically unbound.
+        """
         if not other is None:
             for k, v in other.items():
-                setattr(self, k, v)
+                self[k] = v
         for k, v in kwargs.items():
-            setattr(self, k, v)        
+            self[k] = v
         return self
 
     # behave like a dictionary

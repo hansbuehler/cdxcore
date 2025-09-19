@@ -60,7 +60,7 @@ class CRMan(object):
         
     prints
 
-    .. code-block:: python.
+    .. code-block:: python
     
         message 1... and more
     """

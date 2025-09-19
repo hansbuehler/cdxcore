@@ -18,6 +18,8 @@ API Reference
    config
    verbose
 
+   npio
+
    dynaplot
    deferred
 

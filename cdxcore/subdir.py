@@ -15,7 +15,7 @@ via the :class:`cdxcore.subdir.SubDir` class.
      
 * Files managed by :class:`cdxcore.subdir.SubDir` all have the same extension.
 
-* Files support fast versioning: the version of a file can be read without having to read the
+* Files support "fast versioning": the version of a file can be read without having to read the
   entire file.
   
 * :dec:`cdxcore.subdir.SubDir.cache` implements a convenient versioned caching framework.
@@ -33,6 +33,7 @@ Simply write::
     subdir = SubDir("./my_directory")    # relative to current working directory
     subdir = SubDir("~/my_directory")    # relative to home directory
     subdir = SubDir("!/my_directory")    # relative to default temp directory
+    subdir = SubDir("?!/my_directory")   # relative to a temporary temp directory; this directory will be cleared upon (orderly) exit of ``SubDir``.
     
 Note that ``my_directoy`` will not be created if it does not exist yet. It will be created the first
 time we write a file.
@@ -52,12 +53,12 @@ Change the extension to "bin"::
     subdir = SubDir("~/my_directory", ext="bin")    
     subdir = SubDir("my_directory", "~", ext="bin")    
 
-You can turn off extension management by setting the extension to ""::
+You can turn off extension management by setting the extension to ``""``::
 
     from cdxcore.subdir import SubDir
     subdir = SubDir("~/my_directory", ext="")
 
-You can also use :meth:`cdxcore.subdir.SubDir.__call__` to generate sub directories.
+You can also use :meth:`cdxcore.subdir.SubDir.__call__` to generate sub directories::
 
     from cdxcore.subdir import SubDir
     parent = SubDir("~/parent")
@@ -72,10 +73,9 @@ The list of files with the corresponding extension is accessible via :meth:`cdxc
 File Format
 ^^^^^^^^^^^
 
-:class:`cdxcore.subdir.SubDir` supports file i/o with a number of different file formats
-via :class:`cdxcore.subdir.Format`.
-
-* "PICKLE": standard pickling with default extension is "pck".
+:class:`cdxcore.subdir.SubDir` supports file i/o with a number of different file formats:
+    
+* "PICKLE": standard pickling with default extension "pck".
 
 * "JSON_PICKLE": uses the :mod:`jsonpickle` package; default extension "jpck".
   The advantage of this format over "PICKLE" is that it is somewhat human-readable.
@@ -83,17 +83,17 @@ via :class:`cdxcore.subdir.Format`.
   arrays, hence readablility is somewhat limited. Using "JSON_PICKLE"
   comes at cost of slower i/o speed.
 
-* "JSON_PLAIN": calls :func:`cdxcore.util.plain` is used to generate human readable files
-  which cannot be loaded back from disk.
+* "JSON_PLAIN": calls :func:`cdxcore.util.plain` is an output-only format to generate human readable files
+  which (usually) cannot be loaded back from disk.
   In this mode ``SubDir`` converts objects into plain Python objects before using :mod:`json`
   to write them to disk.
   That means that deserialized data does not have the correct object structure
-  to be able to restore files written in "JSON_PLAIN".
+  for being restored properly.
   However, such files are much easier to read.
 
 * "BLOSC" uses `blosc <https://github.com/blosc/python-blosc>`__
   to read/write compressed binary data. The blosc compression algorithm is very fast,
-  hence using this mode will not usually lead to notably slower performanbce than using
+  hence using this mode will not usually lead to notably slower performance than using
   "PICKLE" but will generate smaller files, depending on your data structure.
   
   The default extension for "BLOSC" is "zbsc".
@@ -101,8 +101,7 @@ via :class:`cdxcore.subdir.Format`.
 * "GZIP": uses :mod:`gzip` to 
   to read/write compressed binary data. The default extension is "pgz".
 
-Summary of properties:
-
+**Summary of properties:**
 
 +--------------+------------------+----------------+-------+-------------+-----------+
 | Format       | Restores objects | Human readable | Speed | Compression | Extension |
@@ -138,12 +137,12 @@ with its reference extension use :meth:`cdxcore.subdir.SubDir.read`::
     from cdxcore.subdir import SubDir
     subdir = SubDir("!/test")
     
-    data = subdir.read("file")                 # returns the default `None` if file is not found
-    data = subdir.read("file", default=[])     # returns the default [] if file is not found
+    data = subdir.read("file")                 # returns the default `None` if file.pck is not found
+    data = subdir.read("file", default=[])     # returns the default [] if file.pck is not found
 
-This function will return the "default"``" (which in turns defaults to ``None``)
-if ``file.ext`` does not exist.
-You can opt for :meth:`cdxcore.subdir.SubDir.read` to raise an error instead of returning a default
+This function will return the "default" (which in turns defaults to ``None``)
+if "file.pck" does not exist.
+You can opt to raise an error instead of returning a default
 by using ``raise_on_error=True``::
 
     data = subdir.read("file", raise_on_error=True)  # raises 'KeyError' if not found
@@ -222,7 +221,7 @@ The temporary file name is generated by applying :func:`cdxcore.uniquehash.uniqu
 to the
 target file name, 
 current time, process and thread ID, as well as the machines's UUID. 
-his is done to reduce collisions between processes/machines accessing the same files,
+This is done to reduce collisions between processes/machines accessing the same files,
 potentially accross a network.
 It does not remove collision risk entirely, though.
 
@@ -239,16 +238,16 @@ Reading and Writing Versioned Files
 :class:`cdxcore.subdir.SubDir` supports versioned files.
 If versions are used, then they *must* be used for both reading and writing.
 :dec:`cdxcore.version.version` provides a standard decorator framework for definining
-versions for classes and functions including the version dependencies.
+versions for classes and functions including version dependencies.
 
-If a ``version`` is provided to :func:`cdxcore.subdir.SubDir.write`
+If a ``version`` is provided for :func:`cdxcore.subdir.SubDir.write`
 then ``SubDir`` will write the version in a block ahead of the main content of the file.
 In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of
 text starting with ``#`` ahead of the file. (Note that this violates
 the JSON file format.)
   
-Writing short version block ahead of the main data allows :func:`cdxcore.subdir.SubDir.read`
-reading this version information back quickly without needing to read the entire file.
+Writing a short version block ahead of the main data allows :func:`cdxcore.subdir.SubDir.read`
+to read this version information back quickly without reading the entire file.
 ``read()`` does attempt so if its called with a ``version`` parameter.
 In this case it will compare the read version with the provided version,
 and only return the main content of the file if versions match.
@@ -257,7 +256,7 @@ Use :func:`cdxcore.subdir.SubDir.is_version` to check whether a given file has a
 Like ``read()`` this function only reads the information required to obtain the information and will
 be much faster than reading the whole file.
 
-*Important:* note that if a file was written, it has to be read again with a test version.
+*Important:* if a file was written with a ``version``, then it has to be read again with a test version.
 You can specify ``version="*"`` for :func:`cdxcore.subdir.SubDir.read` to match any version.
 
 **Examples:**
@@ -283,7 +282,7 @@ attempt to delete the file and then return the ``default`` value.
 This can be turned off
 with the keyword ``delete_wrong_version`` set to ``False``.
 
-You can ignore the version used to write a file by using `*` as version::
+You can ignore the version used to writing a file by using ``"*"`` as version::
 
     _ = sub_dir.read("test", version="*")
 
@@ -307,7 +306,7 @@ To delete a 'file', use any of the following::
     subdir.delete("file")
     del subdir['file']
 
-All of these are *silent*, and will not throw errors if "file" does not exist.
+All of these are *silent*, and will not throw errors if ``file`` does not exist.
 In order to throw an error use::
 
     subdir.delete('file', raise_on_error=True)
@@ -352,6 +351,7 @@ from collections import OrderedDict
 from collections.abc import Collection, Mapping, Callable, Iterable
 from enum import Enum
 from functools import update_wrapper
+import tempfile as tempfile
         
 import json as json
 import gzip as gzip
@@ -780,9 +780,10 @@ class SubDir(object):
             
             The name may start with any of the following special characters:
 
-            * ``'.'`` for current directory
-            * ``'~'`` for home directory
-            * ``'!'`` for system default temp directory
+            * ``'.'`` for current directory.
+            * ``'~'`` for home directory.
+            * ``'!'`` for system default temp directory.
+            * ``'?'`` for a temporary temp directory. In this case ``delete_everything_upon_exit`` is always ``True``.
  
             The directory name may also contain a formatting string for defining ``ext`` on the fly:
             for example use ``"!/test;*.bin"`` to specify a directory ``"test"`` in the user's
@@ -833,16 +834,25 @@ class SubDir(object):
             
             Default is ``False``.
 
+        cache_controller : :class:`cdxcore.subdir.CacheController`, optional
+        
+            An object which fine-tunes the behaviour of :meth:`cdxcore.subdir.SubDir.cache`.
+            See that function's documentation for further details. Default is ``None``.
+
         delete_everything : bool, optional
         
             Delete all contents in the newly defined sub directory upon creation.
 
             Default is ``False``.
             
-        cache_controller : :class:`cdxcore.subdir.CacheController`, optional
+        delete_everything_upon_exit : bool, optional
         
-            An object which fine-tunes the behaviour of :meth:`cdxcore.subdir.SubDir.cache`.
-            See that function's documentation for further details. Default is ``None``.
+            Delete all contents of the current exist if ``self`` is deleted.
+            This is the always ``True`` if the ``"?/"`` pretext was used.
+            
+            Note, however, that this will only be executed once the object is garbage collected.
+
+            Default is, for some good reason, ``False``.            
     """
 
     class __RETURN_SUB_DIRECTORY(object):
@@ -886,14 +896,14 @@ class SubDir(object):
     VER_RETURN   = 2
     """ :meta private: """
 
-    
     def __init__(self, name : str, 
                        parent : str|type = None, *, 
                        ext : str = None, 
                        fmt : Format = None, 
                        create_directory : bool = None,
+                       cache_controller : CacheController = None,
                        delete_everything : bool = False,
-                       cache_controller : CacheController = None
+                       delete_everything_upon_exit : bool = False
                        ):
         """
         Instantiates a sub directory which contains files with a common extension.
@@ -904,22 +914,24 @@ class SubDir(object):
         # copy constructor support
         if isinstance(name, SubDir):
             assert parent is None, "Internal error: copy construction does not accept 'parent' keyword"
-            self._path  = name._path
-            self._ext   = name._ext if ext is None else ext
-            self._fmt   = name._fmt if fmt is None else fmt
-            self._crt   = name._crt if create_directory is None else create_directory
-            self._cctrl = name._cctrl if cache_controller is None else cache_controller
+            self._path   = name._path
+            self._ext    = name._ext if ext is None else ext
+            self._fmt    = name._fmt if fmt is None else fmt
+            self._crt    = name._crt if create_directory is None else create_directory
+            self._cctrl  = name._cctrl if cache_controller is None else cache_controller
+            self._tclean = False # "_clean" is not inherited
             if delete_everything: raise ValueError( "Cannot use 'delete_everything' when cloning a directory")
             return
 
         # reconstruction from a dictionary
         if isinstance(name, Mapping):
             assert parent is None, "Internal error: dictionary construction does not accept 'parent keyword"
-            self._path  = name['_path']
-            self._ext   = name['_ext'] if ext is None else ext
-            self._fmt   = name['_fmt'] if fmt is None else fmt
-            self._crt   = name['_crt'] if create_directory is None else create_directory
-            self._cctrl = name['_cctrl'] if cache_controller is None else cache_controller
+            self._path   = name['_path']
+            self._ext    = name['_ext'] if ext is None else ext
+            self._fmt    = name['_fmt'] if fmt is None else fmt
+            self._crt    = name['_crt'] if create_directory is None else create_directory
+            self._cctrl  = name['_cctrl'] if cache_controller is None else cache_controller
+            self._tclean = name['_tclean']
             if delete_everything: raise ValueError( "Cannot use 'delete_everything' when cloning a directory")
             return
 
@@ -974,6 +986,7 @@ class SubDir(object):
         self._cctrl = cache_controller
 
         # name
+        self._tclean = delete_everything_upon_exit  # delete directory upon completion
         if name is None:
             if not parent is None and not parent._path is None:
                 name = parent._path[:-1]
@@ -982,13 +995,16 @@ class SubDir(object):
             name = _remove_trailing(name)
             if name == "" and parent is None:
                 name = "."
-            if name[:1] in ['!', '~'] or name[:2] == "./" or name == ".":
+            if name[:1] in ['!', '~', '?'] or name[:2] == "./" or name == ".":
                 if len(name) > 1 and name[1] != '/':
                     raise ValueError( txtfmt("If 'name' starts with '%s', then the second character must be '/' (or '\\' on windows). Found 'name' set to '%s'", name[:1], _name ))
                 if name[0] == '!':
                     name = SubDir.temp_dir()[:-1] + name[1:]
                 elif name[0] == ".":
                     name = SubDir.working_dir()[:-1] + name[1:]
+                elif name[0] == "?":
+                    name = SubDir.temp_temp_dir()[:-1] + name[1:]
+                    self._tclean = True
                 else:
                     assert name[0] == "~", ("Internal error", name[0] )
                     name = SubDir.user_dir()[:-1] + name[1:]
@@ -1011,6 +1027,13 @@ class SubDir(object):
                 self.delete_everything(keep_directory=self._crt)
             if self._crt:
                 self.create_directory()
+                
+    def __del__(self):
+        """
+        Delete all of the current directory if ``tclean`` is ``True``
+        """
+        if self._tclean:
+            self.delete_everything(keep_directory=False)
 
     @staticmethod
     def expand_std_root( name ):
@@ -1025,6 +1048,8 @@ class SubDir(object):
         
         If neither of these matches the first character, ``name``
         is returned as is.
+        
+        This function does not support ``"?"``.
         """
         if len(name) < 2 or name[0] not in ['.','!','~'] or name[1] not in ["\\","/"]:
             return name
@@ -1265,6 +1290,7 @@ class SubDir(object):
 
         verify( file[0] != "!", "Key '%s' cannot start with '!' (this symbol indicates the temp directory)", file, exception=ValueError )
         verify( file[0] != "~", "Key '%s' cannot start with '~' (this symbol indicates the user's directory)", file, exception=ValueError )
+        verify( file[0] != "?", "Key '%s' cannot start with '?' (this symbol indicates the user's directory)", file, exception=ValueError )
 
         ext = self.auto_ext( ext )
         if len(ext) > 0 and file[-len(ext):] != ext:
@@ -1283,6 +1309,30 @@ class SubDir(object):
         return d + "/"
 
     @staticmethod
+    def temp_temp_dir() -> str:
+        """
+        Return a temporary temp directory name using :func:`tempfile.mkdtemp`. 
+        Noet that this function will return a different directory upon every function call.
+
+        It is strongly recommended to clean up after usage, for example using the pattern::
+            
+            from cdxcore.subdir import SubDir
+            import shutil
+            
+            try:
+                tmp_dir = SubDir.temp_temp_dir()
+                
+                ...
+            finally:
+                shutil.rmtree(tmp_dir)
+ 
+        Result contains trailing ``'/'``.
+        """
+        d = tempfile.mkdtemp()
+        assert len(d) == 0 or not (d[-1] == '/' or d[-1] == '\\'), ("*** Internal error 13123212-1", d)
+        return d + "/"
+
+    @staticmethod
     def working_dir() -> str:
         """
         Return current working directory. Short-cut for :func:`os.getcwd`.
@@ -1295,7 +1345,7 @@ class SubDir(object):
     @staticmethod
     def user_dir() -> str:
         """
-        Return current working directory. Short-cut for :func:`os.path.expanduser` with parameter ``'~'``.
+        Return current working directory. Short-cut for :func:`os.path.expanduser` with parameter ``' '``.
         Result contains trailing ``'/'``.
         """
         d = os.path.expanduser('~')

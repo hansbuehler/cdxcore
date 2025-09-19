@@ -3,7 +3,9 @@ Overview
 --------
 
 Framework for delayed execution of a Python code tree.
-Used by :mod:`cdxcore.dnaplot`. *Most users will not need to use this module. Advanced users only.*
+Used by :mod:`cdxcore.dnaplot`.
+
+*Advanced Users Only*
 
 Illustation
 ^^^^^^^^^^^

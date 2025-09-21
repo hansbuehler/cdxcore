@@ -3,37 +3,62 @@ Overview
 --------
 
 Fast binary disk i/o for numpy.
-Usage is fairly straight forward
 
+.. code-block:: python
 
+    from cdxcore.npio import to_file, from_file, read_into
+    from cdxcore.subdir import SubSir
+    import numpy as np
+    
+    array = (np.random.normal(size=(1000,3))*100.).astype(np.int32)
+    file  = SubDir("!/test", create_directory=True).full_file_name("test")
+    
+    to_file( file, array )    # write
+    test = from_file( file )  # read back
+    read_into( file, test )   # read into an existing array
 
-Illustation
-^^^^^^^^^^^
+When reading :func:`cdxcore.npio.from_file` you can automatically validate the shape and dtype of
+the data being read::
+    
+    test = from_file( file, validate_dtype=np.int32, validate_shape=(1000,3) )
+    
+**Continguous Arrays**
 
+By default functions in this module assume that data is laid out linearly in memory, also called "c-continguous".
+This allows writing a continuous block of data to disk, or reading it back. If an array is not "continguous"
+by default, an exception will be raised unless an intermediary copy buffer size is set with ``cont_block_size_mb``::
+
+    array = np.zeros((4,4), dtype=np.int8)
+    x = array[:,1]
+    assert not x.data.contiguous  # not continguous
+    to_file( file, x, cont_block_size_mb=100 )
+
+**Shared Memory**
+
+The binary format is compatible with :func:`cdxcore.npshm.read_shared_array` which reads
+a binary array into shared memory.
 
 Import
 ------
 
 .. code-block:: python
 
-    from cdxcore.deferred import Deferred
+    from cdxcore.npio import to_file, from_file, intofile
 
 Documentation
 -------------
 """
-from .util import fmt_digits, fmt as txtfmt, fmt_list
-from .err import verify, error, warn, warn_if
+from .util import fmt_digits, fmt_list
+from .err import verify
 import numpy as np
 from collections.abc import Callable
-from numba import njit
-import warnings as warnings
 
 LINUX_MAX_FILE_BLOCK = 0x7ffff000 
 """
 The `maximum block size <https://www.man7.org/linux/man-pages/man2/write.2.html#NOTES>`__ in 64 and 32 bit linux.
 """
 
-DTYPE_TO_CODE = {
+_DTYPE_TO_CODE = {
         "bool"       : np.int8(0),
         "int8"       : np.int8(1),
         "int16"      : np.int8(2),
@@ -54,68 +79,148 @@ DTYPE_TO_CODE = {
 Maps numpy dtype names to a numerical ID in int8
 """
 
-CODE_TO_DTYPE = { v:k for k,v in DTYPE_TO_CODE.items() }
+_CODE_TO_DTYPE = { v:getattr(np, k) for k,v in _DTYPE_TO_CODE.items() }
 """
 Maps a numerical ID to numpy dtype names
 """
 
 # ===============================================
+# Header
+# ===============================================
+
+def _create_header( shape : tuple, dtype : type ):
+    """
+    Binary header:
+        Bytes
+            [0:4]          : total byte length of the current block
+            [4]            : dtype code for _DTYPE_TO_CODE
+            [5:8]          : length of the shape tuple
+            [8+i*8:16+i*8] : the actual tuple values
+    """
+ 
+    # get type code (byte)
+    total    = 4+1+3+len(shape)*8
+    verify( len(shape) < 0x100**4, lambda : f"Cannot handle numpy array with shape {shape}: shape information exceeds {fmt_digits(0x100**4)}.", exception=ValueError )   
+    header   = int(total).to_bytes(4,"big",signed=False)  # write long total size
+
+    #print("_create_header", shape, dtype, total )
+
+    dtype    = np.dtype(dtype)
+    dtypec   = _DTYPE_TO_CODE.get( str(dtype), None )
+    verify( not dtypec is None, lambda : f"Cannot handle dtype '{str(dtype)}'. Supported dtypes are: {fmt_list(_DTYPE_TO_CODE)}.", exception=ValueError ) 
+    dtypec   = np.int8(dtypec)
+    header   += int(dtypec).to_bytes(1,"big",signed=False)  # write a word anyway
+    
+    # get shape size (3 bytes)
+    verify( len(shape) < 0x100**3, lambda : f"Cannot handle numpy array with shape {shape}: dimension cannot exceed {fmt_digits(0x100**3)}", exception=ValueError )   
+    header   += int(len(shape)).to_bytes(3,"big",signed=False)
+    
+    # get shapes (wlong)
+    for dim in shape:
+        header += int(dim).to_bytes(8,"big",signed=False)
+
+    assert len(header) == total, ("Internal consistency error", len(header), total )
+    return header
+
+def _decode_header( header : bytes ):
+    """
+    Binary header:
+        Bytes
+            [0:4]          : total byte length of the current block
+            [4]            : dtype code for _DTYPE_TO_CODE
+            [5:8]          : length of the shape tuple
+            [8+i*8:16+i*8] : the actual tuple values
+    """
+    # total size
+    total = int.from_bytes( header[0:4], "big", signed=False )
+    verify( total <= len(header), lambda : f"Internal file header consistency error: header length is given as {fmt_digits(total)} but byte stream only has {fmt_digits(len(header))} bytes.", exception=ValueError )   
+    header = header[4:]
+    
+    # dtype
+    dtypec = int.from_bytes( header[:1], "big", signed=False )
+    dtype  = _CODE_TO_DTYPE.get( dtypec, None )
+    verify( not dtype is None, lambda : f"Internal file header consistency error: unknown dtype code '{dtypec}'.", exception=ValueError )   
+    dtype  = np.dtype(dtype)
+
+    # shape
+    len_shape = int.from_bytes( header[1:4], "big", signed=False )
+    verify( total == 4+1+3+len_shape*8, lambda : f"Internal file header consistency error: total header size reported {fmt_digits(total)} does not match a shape of length {len_shape}.", exception=ValueError )   
+    header    = header[4:]
+    shape     = []
+    for i in range(len_shape):
+        shape.append( int.from_bytes( header[:8], "big", signed=False ) )
+        header = header[8:]
+    shape     = tuple(shape)
+    #print("_decode_header", shape, dtype, total )
+
+    return dtype, shape, header
+
+# ===============================================
 # Write
-# ===========0====================================
+# ===============================================
 
-def _write_int(f : int, x : int, lbytes : int):
-    """ Write an integer ``x`` of at most ``lbytes`` to a file ``f`` """
-    x = int(x).to_bytes(lbytes,"big")
-    w = f.write( x )
-    if w != len(x):
-        raise IOError(f"could only write {w} bytes, not {len(x)}.")
-
-def _tofile(f : int, array : np.ndarray, DTYPE_TO_CODE : dict ):
+def _tofile(f : int, array : np.ndarray, cont_block_size_mb : int ):
     """
     Write a numpy array ``array`` including its associated
     shape and dtype to a file ``f``.
     """
+    # prepare shape
+    header   = _create_header(array.shape, array.dtype) 
+    nw       = f.write( header )
+    if nw != len(header):
+        raise IOError( f"wrote only {fmt_digits(nw)} bytes of a block of {fmt_digits(len(header))} bytes.")
+    del header
+    
+    # prepare array
     array    = np.asarray( array )
-    dtypec   = DTYPE_TO_CODE.get( str(array.dtype), None )
-    verify( not dtypec is None, lambda : f"Cannot handle dtype '{str(array.dtype)}'. Supported dtypes are: {fmt_list(DTYPE_TO_CODE)}.", exception=ValueError ) 
-    dtypec   = np.int8(dtypec)
     length   = np.int64( np.prod( array.shape, dtype=np.uint64 ) )
-    shape32  = tuple( [np.int32(i) for i in array.shape])
     array    = np.reshape( array, (length,) )  # this operation should not reallocate any memory
     dsize    = int(array.itemsize)   
     max_size = int(LINUX_MAX_FILE_BLOCK//dsize)
+
+    if not array.flags.c_contiguous:
+        verify( not cont_block_size_mb is None, "Array is not c_contiguous. Use 'cont_block_size_mb' to auto-transform into contiguous chunks of memory.")
+        verify( cont_block_size_mb > 0, "'cont_block_size_mb' must be positive.")
+        max_size = min( max_size, max(1,cont_block_size_mb*1024*1024//dsize) )
+        buffer   = np.empty( (max_size,), dtype=array.dtype )
+    else:
+        buffer   = None
     num      = int(length-1)//max_size+1        
     saved    = 0
 
-    # write shape
-    verify( len(shape32) < 0x7fff, lambda : f"Cannot write numpy array with shape {array.shape}: maximum number of dimensions is {fmt_digits(0x7fff)}", exception=ValueError )   
-    _write_int( f, len(shape32), 2 )  # max 32k dimension
-    for i in shape32:
-        verify( i < 0x7fffffff, lambda : f"Cannot write numpy array with shape {array.shape}: maximum dimensions is {fmt_digits(0x7fffffff)}", exception=ValueError )
-        _write_int(f, i, 4) # max 32 bit resolution
-    # write dtype
-    _write_int(f, dtypec, 1)
-    # write object      
+    # write array
     for j in range(num):
         s   = j*max_size
         e   = min(s+max_size, length)
-        bts = array.data[s:e]
-        nw  = f.write( bts )
+        if array.flags.c_contiguous:
+            nw  = f.write( array.data[s:e] )
+        else:
+            buffer[:e-s] = array[s:e]
+            nw  = f.write( buffer.data[:e-s] )
         if nw != (e-s)*dsize:
             raise IOError( f"wrote only {fmt_digits(nw)} bytes of a block of {fmt_digits((e-s)*dsize)} bytes.")
         saved += nw
     if saved != length*dsize:
-        raise IOError( f"wrote only {fmt_digits(saved) } bytes of a block of  {fmt_digits(length*dsize)} bytes")
+        raise IOError( f"wrote only {fmt_digits(saved) } bytes of a block of {fmt_digits(length*dsize)} bytes")
 
-def tofile( file         : str|int,
-            array        : np.ndarray, *,
-            buffering    : int = -1
+def to_file( file               : str|int,
+            array              : np.ndarray, *,
+            buffering          : int = -1,
+            cont_block_size_mb : int|None = None
             ):
     """
     Write a numpy arrray into a file using binary format.
     
     This function will work for unbuffered files exceeding 2GB which is the usual unbuffered :func:`write` `limitation on Linux <https://www.man7.org/linux/man-pages/man2/write.2.html#NOTES>`__.
-    This function will only work with the dtypes contained in :data:`cdxcore.npio.DTYPE_TO_CODE`.
+    This function will only work with the dtypes contained in :data:`cdxcore.npio._DTYPE_TO_CODE`.
+    
+    By default this function does not write non-continguous arrays (those not laid out linearly in memory). Use ``cont_block_size_mb``
+    to enable an intermediary buffer to do so.
+
+    **Shared Memory**
+    
+    Use :func:`cdxcore.npshm.read_shared_array` to read numpy arrays stored to disk
+    with ``to_file`` into shared memory.
     
     Parameters
     ----------
@@ -129,28 +234,33 @@ def tofile( file         : str|int,
             Buffering strategy. Only used if ``file`` is a string and :func:`open` is called. Use ``0`` to turn off
             buffering. The default, ``-1``, is the default.
             
+        cont_block_size_mb : int | None, default ``None``
+            By default this function does not write non-continguous arrays (those not laid out linearly in memory).
+            Use ``cont_block_size_mb``
+            to enable an intermediary buffer of size ``cont_block_size_mb`` to do so.
+            
     Raises
     ------
         I/O error : :class:`IOError`
             In case the function failed to write the whole file.
         Value error : :class:`ValueError`
-            In case an array is passed whose dtype is not contained in :data:`cdxcore.npio.DTYPE_TO_CODE`,
-            which has more than 32k dimensions, or which has an indivudual dimension longer than 2bn lines.        
+            In case an array is passed whose dtype is not contained in :data:`cdxcore.npio._DTYPE_TO_CODE`,
+            which has more than 32k dimensions, or which has an indivudual dimension longer than 2bn lines. 
+        Not continguous : :class:`RuntimeError`
+            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None``, its default.
     """
     if isinstance(file, str):
         with open( file, "wb", buffering=buffering ) as f:
-            return tofile(f, array, buffering=buffering)
+            return to_file(f, array, buffering=buffering, cont_block_size_mb=cont_block_size_mb)
     f = file
     del file
     
-    if not array.data.contiguous:
-        warn("Array is not 'contiguous'. Is that an issue??")
-        array = np.ascontiguousarray( array, dtype=array.dtype ) if not array.data.contiguous else array
-        
     try:
-        _tofile(f, array=array, DTYPE_TO_CODE=DTYPE_TO_CODE )
+        _tofile(f, array=array, cont_block_size_mb=cont_block_size_mb )
     except IOError as e:
-        raise IOError(f"Could not write all {fmt_digits(array.nbytes)} bytes to {f.name}: {str(e)}", e) from e
+        raise IOError(f"Could not write all {fmt_digits(array.nbytes)} bytes to {f.name}: {str(e)}") from e
+    except Exception as e:
+        raise type(e)(f"Failed to write {f.name}: {str(e)}") from e
 
 # ===============================================
 # Read
@@ -164,20 +274,35 @@ def _read_int(f : int, lbytes : int) -> int:
     x = int.from_bytes(x,"big")
     return int(x)
 
-def _readfromfile( f : int, array : np.ndarray ):
+def _readfromfile( f : int, array : np.ndarray, cont_block_size_mb : int ):
     # split into chunks
     shape    = array.shape
     length   = int( np.prod( array.shape, dtype=np.uint64 ) )
     array    = np.reshape( array, (length,) )
     dsize    = int(array.itemsize)
     max_size = int(LINUX_MAX_FILE_BLOCK//dsize)
+
+    if not array.flags.c_contiguous:
+        verify( not cont_block_size_mb is None, "Array is not c_contiguous. Use 'cont_block_size_mb' to auto-transform into contiguous chunks of memory.")
+        verify( cont_block_size_mb > 0, "'cont_block_size_mb' must be positive.")
+        max_size = min( max_size, max(1,cont_block_size_mb*1024*1024//dsize) )
+        buffer   = np.empty( (max_size,), dtype=array.dtype )
+    else:
+        buffer   = None
+
     num      = int(length-1)//max_size+1
     read     = 0
+
     # read        
     for j in range(num):
         s   = j*max_size
         e   = min(s+max_size, length)
-        nr  = f.readinto( array.data[s:e] )
+        if array.flags.c_contiguous:
+            nr  = f.readinto( array.data[s:e] )
+        else:
+            nr  = f.readinto( buffer.data[:e-s] )
+            array[s:e] = buffer[:e-s]            
+            
         if nr != (e-s)*dsize:
             raise EOFError(f"could only read {fmt_digits(nr)} of a block of {fmt_digits((e-s)*dsize)} bytes.")
         read += nr
@@ -189,23 +314,42 @@ def _readheader(f : int):
     """
     Read shape, dtype
     """
-    shape_len  = _read_int(f,2)
-    shape      = tuple( [ int(_read_int(f,4)) for _ in range(shape_len) ] )
-    dtype      = CODE_TO_DTYPE[_read_int(f,1)]
-    return shape, dtype
+    """
+    Binary header:
+        Bytes
+            [0:4]          : total byte length of the current block
+            [4]            : dtype code for _DTYPE_TO_CODE
+            [5:8]          : length of the shape tuple
+            [8+i*8:16+i*8] : the actual tuple values
+    """
+    header  = f.read(4)
+    if len(header) != 4:
+        raise EOFError(f"could only read {len(header)} bytes not {4}.")
 
-def readfromfile( file           : str|int, 
-                  target         : np.ndarray|Callable, *, 
-                  read_only      : bool = False,
-                  buffering      : int  = -1,
-                  validate_dtype : type = None,
-                  validate_shape : tuple = None
+    total  =  int.from_bytes(header,"big",signed=False)
+    header += f.read(total-4)
+    if len(header) != total:
+        raise EOFError(f"could only read {len(header)} bytes not {total}.")
+    
+    dtype, shape, _ = _decode_header( header )
+    return dtype, shape
+
+def read_from_file( file               : str|int, 
+                    target             : np.ndarray|Callable, *, 
+                    read_only          : bool = False,
+                    buffering          : int  = -1,
+                    validate_dtype     : type|None = None,
+                    validate_shape     : tuple|None = None,
+                    cont_block_size_mb : int|None = None
                   ) -> np.ndarray:
     """
     Read a :class:`numpy.ndarray` from disk into an existing array or into a new array.
     
-    See :func:`cdxcore.npio.readinto` and :func:`cdxcore.npio.fromfile` for more convenient interfaces
+    See :func:`cdxcore.npio.read_into` and :func:`cdxcore.npio.from_file` for more convenient interfaces
     for each use case.
+    
+    By default this function does not read into non-continguous arrays. Use ``cont_block_size_mb``
+    to enable an intermediary buffer to do so.
     
     Parameters
     ----------
@@ -219,19 +363,24 @@ def readfromfile( file           : str|int,
                 def create( shape : tuple, dtype : type ):
                     return np.empty( shape, dtype )
                 
-        read_only : bool, optional
+        read_only : bool, default ``False``
             Whether to clear the ``writable`` `flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flags.html>`__ of the array
             after reading it from disk.
             
-        buffering : int, optional
+        buffering : int, default ``-1``
             Buffering strategy. Only used if ``file`` is a string and :func:`open` is called. Use ``0`` to turn off
             buffering. The default, ``-1``, is the default.
 
-        validate_dtype: dtype | ``None``, optional
+        validate_dtype: dtype | None, default ``None``
             If not ``None``, check that the returned array has the specified dtype.
             
-        validate_shape: tuple | ``None``, optional
+        validate_shape: tuple | None, default ``None``
             If not ``None``, check that the array has the specified shape.
+            
+        cont_block_size_mb : int | None, default ``None``
+            By default this function does not read into arrays which are not c-continguous (linear in memory). Use this
+            parameter to allocate an intermediary buffer of ``cont_block_size_mb`` mega bytes to read into 
+            non-continguous arrays.
         
     Returns
     -------
@@ -245,19 +394,23 @@ def readfromfile( file           : str|int,
         I/O error : :class:`IOError`
             In case the function failed to match the desired ``validate_dtype`` or ``validate_shape``,
             or if it does not match the geometry of ``target`` if provided as a numpy array.
+        Not continguous : :class:`RuntimeError`
+            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None``, its default.
     """
     if isinstance(file, str):
         with open( file, "rb", buffering=buffering ) as f:
-            return readfromfile( f, target, 
+            return read_from_file( f, target, 
                                  read_only=read_only,
                                  buffering=buffering,
                                  validate_dtype=validate_dtype,
-                                 validate_shape=validate_shape )
+                                 validate_shape=validate_shape,
+                                 cont_block_size_mb=cont_block_size_mb)
     f = file
     del file
         
     # read shape
-    shape, dtype = _readheader(f)
+    dtype, shape = _readheader(f)
+    assert isinstance(shape, tuple), ("Internal error", shape, dtype, type(dtype))
 
     if not validate_dtype is None and validate_dtype != dtype:
         raise IOError(f"Failed to read {f.name}: found type {dtype} expected {validate_dtype}.")
@@ -277,7 +430,7 @@ def readfromfile( file           : str|int,
     del target
 
     try:
-        _readfromfile(f, array)
+        _readfromfile(f, array, cont_block_size_mb=cont_block_size_mb )
     except EOFError as e:
         raise EOFError(f"Cannot read from {f.name}: {str(e)}", e)
     if read_only:
@@ -286,36 +439,36 @@ def readfromfile( file           : str|int,
     assert array.flags.writeable == (not read_only), ("Internal flag error", array.flags.writeable, read_only, not read_only )
     return array
 
-def read_shape_and_dtype( file : str|int, buffering : int = -1 ) -> tuple:
+def read_dtype_and_shape( file : str|int, buffering : int = -1 ) -> tuple:
     """
-    Read shape and dtype from a numpy binary file.
+    Read shape and dtype from a numpy binary file by only reading the file header.
     
     Parameters
     ----------
         file : str | int
-            file name passed to open(), or a file handle from open()
+            A file name to be passed to :func:`open`, or a file handle from :func:`open`.
 
-        buffering : int, optional
+        buffering : int, default ``-1``
             Buffering strategy. Only used if ``file`` is a string and :func:`open` is called. Use ``0`` to turn off
             buffering. The default, ``-1``, is the default.
         
     Returns
     -------
-        shape, dtype : tuple, type
+        dtype, shape : tuple, type
             Shape and dtype.
 
     Raises
     ------
         EOF : :class:`EOFError`
-            In case the function failed to read the whole file.
+            In case the function failed to read the whole header block.
     """
 
     if isinstance(file, str):
         with open( file, "rb", buffering=buffering ) as f:
-            return read_shape_and_dtype( f, buffering=buffering )
+            return read_dtype_and_shape( f, buffering=buffering )
     return _readheader(file)
 
-def readinto( file, array : np.ndarray, *, read_only : bool = False, buffering : int = -1 ):
+def read_into( file, array : np.ndarray, *, read_only : bool = False, buffering : int = -1,cont_block_size_mb : int|None = None ):
     """
     Read an array from disk into an existing :class:`numpy.ndarray`.    
     
@@ -329,13 +482,18 @@ def readinto( file, array : np.ndarray, *, read_only : bool = False, buffering :
         target : np.ndarray
             Target array to write into. This array must have the same shape and dtype as the source data.
                 
-        read_only : bool, optional
+        read_only : bool, default ``False``
             Whether to clear the ``writable`` `flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flags.html>`__ of the array
             after reading it from disk.
             
-        buffering : int, optional
+        buffering : int, default ``-1``
             Buffering strategy. Only used if ``file`` is a string and :func:`open` is called. Use ``0`` to turn off
             buffering. The default, ``-1``, is the default.
+
+        cont_block_size_mb : int | None, default ``None``
+            By default this function does not read into arrays which are not c-continguous (linear in memory). Use this
+            parameter to allocate an intermediary buffer of ``cont_block_size_mb`` mega bytes to read into 
+            non-continguous arrays.
         
     Returns
     -------
@@ -348,15 +506,17 @@ def readinto( file, array : np.ndarray, *, read_only : bool = False, buffering :
             In case the function failed to read the whole file.
         I/O error : :class:`IOError`
             In case the function failed to match the desired ``validate_dtype`` or ``validate_shape``,
-            or if it does not match the geometry of ``target`` if provided as a numpy array.
+            or if it does not match the geometry of ``target``.
+        Not continguous : :class:`RuntimeError`
+            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None`` (its default).
     """
-    return readfromfile( file, target = array, read_only=read_only, buffering=buffering )
+    return read_from_file( file, target = array, read_only=read_only, buffering=buffering, cont_block_size_mb=cont_block_size_mb )
 
-def fromfile( file, *, validate_dtype = None, validate_shape = None, read_only : bool = False, buffering : int = -1  ) -> np.ndarray:
+def from_file( file, *, validate_dtype = None, validate_shape = None, read_only : bool = False, buffering : int = -1, cont_block_size_mb : int|None = None  ) -> np.ndarray:
     """
     Read array from disk into a new :class:`numpy.ndarray`.
     
-    Use :func:`cdxcore.sharedarray.shared_fromfile` to create a shared array 
+    Use :func:`cdxcore.npshm.read_shared_array` to create a shared array 
     instead.
 
     Parameters
@@ -364,19 +524,24 @@ def fromfile( file, *, validate_dtype = None, validate_shape = None, read_only :
         file : str | int
             A file name to be passed to :func:`open`, or a file handle from :func:`open`.
 
-        validate_dtype: dtype | ``None``, optional
+        validate_dtype : dtype | None, default ``None``
             If not ``None``, check that the returned array has the specified dtype.
             
-        validate_shape: tuple | ``None``, optional
+        validate_shape : tuple | None, default ``None``
             If not ``None``, check that the array has the specified shape.
 
-        read_only : bool, optional
+        read_only : bool, default ``False``
             Whether to clear the ``writable`` `flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flags.html>`__ of the array
             after reading it from disk.
             
-        buffering : int, optional
+        buffering : int, default ``-1``
             Buffering strategy. Only used if ``file`` is a string and :func:`open` is called. Use ``0`` to turn off
             buffering. The default, ``-1``, is the default.
+
+        cont_block_size_mb : int | None, default ``None``
+            By default this function does not read into arrays which are not c-continguous (linear in memory). Use this
+            parameter to allocate an intermediary buffer of ``cont_block_size_mb`` mega bytes to read into 
+            non-continguous arrays.
 
     Returns
     -------
@@ -388,15 +553,18 @@ def fromfile( file, *, validate_dtype = None, validate_shape = None, read_only :
         EOF : :class:`EOFError`
             In case the function failed to read the whole file.
         I/O error : :class:`IOError`
-            In case the function failed to match the desired ``validate_dtype`` or ``validate_shape``,
-            or if it does not match the geometry of ``target`` if provided as a numpy array.
+            In case the function failed to match the desired ``validate_dtype`` or ``validate_shape``.
+        Not continguous : :class:`RuntimeError`
+            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None`` (its default).
     """
-    return readfromfile( file,
+    return read_from_file(
+                         file,
                          target=lambda shape, dtype : np.empty( shape=shape, dtype=dtype ),
                          read_only = read_only, 
                          validate_dtype=validate_dtype, 
                          validate_shape=validate_shape,
-                         buffering=buffering )
+                         buffering=buffering,
+                         cont_block_size_mb=cont_block_size_mb )
         
 
 

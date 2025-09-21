@@ -1,16 +1,52 @@
-"""
-Shared named numpy arrays
-Hans Buehler 2023
-"""
+r"""
+Overview
+--------
 
-from .logger import Logger
+Simple :class:`multiprocessing.shared_memory` wrapper for :mod:`numpy`.
+
+Usage is fairly straight forward::
+
+    from cdxcore.npio import tofile, fromfile, readinto
+    from cdxcore.subdir import SubSir
+    import numpy as np
+    
+    array = (np.random.normal(size=(1000,3))*100.).astype(np.int32)
+    file  = SubDir("!/test", create_directory=True).full_file_name("test")
+    
+    tofile( file, array )    # write
+    test = fromfile( file )  # read back
+    readinto( file, test )   # read into an existing array
+
+When reading :func:`cdxcore.npio.fromfile` you can automatically validate the shape and dtype of
+the data being read::
+    
+    test = fromfile( file, validate_dtype=np.int32, validate_shape=(1000,3) )
+    
+**Continguous Arrays**
+
+By default functions in this module assume that data is laid out linearly in memory, also called "c-continguous".
+This allows writing a continuous block of data to disk, or reading it back. If an array is not "continguous"
+by default, an exception will be raised unless an intermediary copy buffer size is set with ``cont_block_size_mb``::
+
+    array = np.zeros((4,4), dtype=np.int8)
+    x = array[:,1]
+    assert not x.data.contiguous  # not continguous
+    tofile( file, x, cont_block_size_mb=100 )
+
+Import
+------
+
+.. code-block:: python
+
+    from cdxcore.npio import tofile, fromfile, intofile
+
+Documentation
+-------------
+"""
 from .version import version
 from .verbose import Context
-from .util import fmt_digits
 import numpy as np
-import gc as gc
 from multiprocessing import shared_memory
-_log = Logger(__file__)
 
 @version("0.0.1")
 class ndsharedarray( object ):
@@ -53,7 +89,7 @@ class ndsharedarray( object ):
             verbose : None or a Context. If the latter is present, the object provides logging information on when objects are created/delted
         """
         dtype         = dtype() if isinstance(dtype, type) else dtype
-        size          = int( np.uint64( dtype.itemsize ) * np.product( [ np.uint64(i) for i in shape ], dtype=np.uint64 ) + 32 )
+        size          = int( np.uint64( dtype.itemsize ) * np.prod( [ np.uint64(i) for i in shape ], dtype=np.uint64 ) + 32 )
         shape         = tuple(shape)
         self._name    = name
         self._id      = name + str(shape) + "[" + str(type(dtype).__name__) + "]"
@@ -196,7 +232,7 @@ def sharedarray( name   : str,
                  dtype  = np.float32, 
                  full   = None,
                  *,
-                 raiseOnError : bool = False,
+                 raise_on_error : bool = False,
                  verbose      : Context = None ):
     """
     Create a new shared memory array.
@@ -210,9 +246,9 @@ def sharedarray( name   : str,
         name    : globally unique name accross all processes.
         shape   : numpy shape
         create  : whether to create a new shared memory block or not.
-                  If True, and if a block with the given name already exists, this function returns None or raises FileExistsError (if raiseOnError is True)
+                  If True, and if a block with the given name already exists, this function returns None or raises FileExistsError (if raise_on_error is True)
                     Otherwise it will return a new block with the specified name.
-                  If False, and no block with the given name exists, this function returns None  or raises FileNotFoundError (if raiseOnError is True)
+                  If False, and no block with the given name exists, this function returns None  or raises FileNotFoundError (if raise_on_error is True)
                     If the block has different total size, the function will raise an IncompatibleSharedSizeError
                     Otherwise the function will return an array pointing to the shared block
                   If None, then the function first attempts to create a new block with the given name.
@@ -222,7 +258,7 @@ def sharedarray( name   : str,
         dtype   : dtype
         full    : If not None, fill a newly created object with this data.
                   Ignored if a shared object is used.
-        raiseOnError : if False, fail by returning None, else throw FileExistsError or FileNotFoundError, respectively
+        raise_on_error : if False, fail by returning None, else throw FileExistsError or FileNotFoundError, respectively
         verbose : None or a Context. If the latter is present, the object provides logging information on when objects are created/delted
 
     Returns
@@ -232,7 +268,7 @@ def sharedarray( name   : str,
 
     Raises
     ------
-        May raise FileExistsError or FileNotFoundError if raiseOnError is True
+        May raise FileExistsError or FileNotFoundError if raise_on_error is True
     """
     name         = str(name)
     create       = bool(create) if not create is None else None
@@ -248,7 +284,7 @@ def sharedarray( name   : str,
                 return array, True
         except FileExistsError as e:
             if not create is None:
-                if raiseOnError:
+                if raise_on_error:
                     raise e
                 return None
 
@@ -260,7 +296,7 @@ def sharedarray( name   : str,
             return array, False
     except FileNotFoundError as e:
         if not create is None:
-            if raiseOnError:
+            if raise_on_error:
                 raise e
             return None
     
@@ -282,6 +318,6 @@ def shared_fromfile( file, name, dtype=np.float32 ):
         Newly created numpy array
     """
     def construct(shape):
-        return ndsharedarray( name=name, shape=shape, dtype=dtype, create=True, raiseOnError=True )
+        return ndsharedarray( name=name, shape=shape, dtype=dtype, create=True, raise_on_error=True )
     return _fromfile( file, construct=construct )
 

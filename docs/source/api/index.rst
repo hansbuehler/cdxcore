@@ -19,6 +19,7 @@ API Reference
    verbose
 
    npio
+   npshm
 
    dynaplot
    deferred

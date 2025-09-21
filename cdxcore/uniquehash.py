@@ -52,6 +52,7 @@ Documentation
 """
 
 import datetime as datetime
+from zoneinfo import ZoneInfo
 import types as types
 import hashlib as hashlib
 import inspect as inspect
@@ -337,6 +338,7 @@ class UniqueHash( object ):
         """
         if x is None:
             h.update(b'\x00')
+            if not debug_trace is None: debug_trace._update( None )
             return
         # numpy atomic
         if isinstance(x, np.generic):
@@ -377,11 +379,11 @@ class UniqueHash( object ):
         # datetime etc
         if isinstance(x,datetime.datetime):
             if not debug_trace is None: debug_trace = debug_trace._update_topic( x )
-            ts = float( x.timestamp() )
-            td = x.tzinfo.utcoffset(x) if not x.tzinfo is None else None
+            if x.tzinfo is None:
+                ts = float( (x - datetime.datetime(1970, 1, 1)).total_seconds() )
+            else:
+                ts = float( (x - datetime.datetime(1970, 1, 1, tzinfo=ZoneInfo("GMT"))).total_seconds() )
             self._hash_any(h, ts, debug_trace=debug_trace)
-            if not td is None:
-                self._hash_any(h, td.total_seconds, debug_trace=debug_trace)
             return
         if isinstance(x,datetime.time):
             """
@@ -824,8 +826,7 @@ class DebugTraceVerbose(DebugTrace):
     def __init__(self, strsize : int = 50, verbose : Context = None ):
         """
         Initialize tracer.
-        """                
-        from .verbose import Context
+        """
         if strsize<=3: ValueError("'strsize' must exceed 3")
         self.strsize = strsize
         self.verbose = Context("all") if verbose is None else verbose

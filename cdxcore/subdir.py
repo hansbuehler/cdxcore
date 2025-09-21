@@ -351,7 +351,6 @@ from collections import OrderedDict
 from collections.abc import Collection, Mapping, Callable, Iterable
 from enum import Enum
 from functools import update_wrapper
-import tempfile as tempfile
         
 import json as json
 import gzip as gzip
@@ -379,16 +378,16 @@ def _import_jsonpickle():
         jsonpickle_numpy.register_handlers()
     return jsonpickle
 
-BLOSC_MAX_BLOCK = 2147483631
-BLOSC_MAX_USE   = 1147400000 # ... blosc really cannot handle large files
-#
-
 def _remove_trailing( path ):
     if len(path) > 0:
         if path[-1] in ['/' or '\\']:
             return _remove_trailing(path[:-1])
     return path
 
+_BLOSC_MAX_USE   = 1147400000
+# Maximum blosc buffer size we use, as blosc seems to have issues with too large files.
+# The actual maximum `blosc buffer size <https://www.blosc.org/python-blosc2/reference/autofiles/low_level/blosc2.MAX_BUFFERSIZE.html>`__
+# seems too generous/
 
 # ========================================================================
 # Basics
@@ -1959,11 +1958,11 @@ class SubDir(object):
                         pdata      = pickle.dumps(obj)  # returns data as a bytes object
                         del obj
                         len_data   = len(pdata)
-                        num_blocks = max(0,len_data-1) // BLOSC_MAX_USE + 1
+                        num_blocks = max(0,len_data-1) // _BLOSC_MAX_USE + 1
                         f.write(num_blocks.to_bytes(2, 'big', signed=False))
                         for i in range(num_blocks):
-                            start  = i*BLOSC_MAX_USE
-                            end    = min(len_data,start+BLOSC_MAX_USE)
+                            start  = i*_BLOSC_MAX_USE
+                            end    = min(len_data,start+_BLOSC_MAX_USE)
                             assert end>start, ("Internal error; nothing to write")
                             block  = blosc.compress( pdata[start:end] )
                             blockl = len(block)

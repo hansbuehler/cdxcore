@@ -68,6 +68,7 @@ autodoc_default_options = {
     "special-members": "__call__"
 }
 autodoc_typehints = 'signature'  # types shown in the doc body, like NumPy
+typehints_document_rtype = False
 
 # numpydoc tweaks (keeps class doc at top, avoids member spam)
 numpydoc_show_class_members = True

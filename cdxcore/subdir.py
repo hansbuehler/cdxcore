@@ -1,9 +1,9 @@
 """
+Utilities for file i/o, directory management and
+streamlined versioned caching.
+
 Overview
 --------
-
-This module contains utilities for file i/o, directory management and
-streamlined versioned caching.
 
 The key idea is to provide transparent, concise :mod:`pickle` access to the file system
 via the :class:`cdxcore.subdir.SubDir` class.
@@ -324,9 +324,25 @@ Caching
 A :class:`cdxcore.subdir.SubDir` object offers an advanced context for caching calls to :class:`collection.abc.Callable``
 objects with :dec:`cdxcore.subdir.SubDir.cache`.
 
+    .. code-block:: python
+
+        from cdxcore.subdir import SubDir
+        cache   = SubDir("!/.cache")
+        cache.delete_all_content()   # for illustration
+        
+        @cache.cache("0.1")
+        def f(x,y):
+            return x*y
+        
+        _ = f(1,2)    # function gets computed and the result cached
+        _ = f(1,2)    # restore result from cache
+        _ = f(2,2)    # different parameters: compute and store result
+
 This involves keying the cache by the function name and its current parameters using :class:`cdxcore.uniquehash.UniqueHash`,
 and monitoring the functions version using :dec:`cdxcore.version.version`. The caching behaviour itself can be controlled by
 specifying the desired :class:`cdxcore.subdir.CacheMode`.
+
+See :dec:`cdxcore.subdir.SubDir.cache` for full feature set.
 
 Import
 ------
@@ -859,7 +875,7 @@ class SubDir(object):
     """ :meta private: """
 
     Format = Format # :meta private
-    """ :meta private: """
+    """ The same as :class:`cdxcore.subdir.Format` for convenience """
     
     PICKLE = Format.PICKLE     
     """ :meta private: """

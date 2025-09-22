@@ -1,9 +1,9 @@
 """
-Overview
---------
-
 Tooling for setting up program-wide configuration hierachies.
 Aimed at machine learning programs to ensure consistency of code accross experimentation.
+
+Overview
+--------
 
 **Basic config construction**::
 

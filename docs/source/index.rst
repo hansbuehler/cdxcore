@@ -12,7 +12,7 @@ Install using::
 
     pip install -U cdxcore
 
-Documentation can be foud `here `<https://quantitative-research.de/docs/cdxcore>`__.
+Documentation can be found here: `https://quantitative-research.de/docs/cdxcore <https://quantitative-research.de/docs/cdxcore>`__.
 
 Contents
 ^^^^^^^^

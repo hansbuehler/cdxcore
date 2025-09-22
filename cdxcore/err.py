@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
+Basic error handling and reporting functions with minimal runtime performance overhead for string formatting.
+
 Overview
 --------
-
-Basic error handling and reporting functions.
 
 The main use of this module are the functions
 :func:`cdxcore.err.verify` and :func:`cdxcore.err.warn_if`.

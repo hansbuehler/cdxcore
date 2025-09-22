@@ -1,9 +1,10 @@
 """
-Overview
---------
 
 Framework for producing unique hashes for various Python elements. Hashing is key for caching strategies and managing data pipelines effectively.
 The module contains a range of utility functions to ease implementation of pipelines and other tasks where hashes of data are required.
+
+Overview
+--------
 
 The functionality here follows by default important design principles which are discussed in :func:`cdxcore.uniquehash.UniqueHash`,
 such as

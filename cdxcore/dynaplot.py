@@ -1,13 +1,18 @@
 """
-Overview
---------
 
-Tools for dynamic/animated plotting in Jupyer/IPython.
+Tools for dynamic plotting in Jupyer/IPython.
+
 The aim of the toolkit is making it easier to develop
 animated visualization with :mod:`matplotlib`,
 for example during training with machine learing kits such as
-*pyTorch*. This has been tested with Anaconda's
+*pyTorch*.
+
+This has been tested with Anaconda's
 JupyterHub and ``%matplotlib inline``. 
+
+Overview
+--------
+
 
 It also makes the creation of subplots more streamlined.
 

@@ -1,7 +1,4 @@
 """
-Overview
---------
-
 Simple multi-processing conv wrapper around (already great)
 `joblib.Parallel() <https://joblib.readthedocs.io/en/latest/generated/joblib.Parallel.html>`__.
 

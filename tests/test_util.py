@@ -27,6 +27,7 @@ import_local()
 
 from cdxcore.util import is_function, is_atomic, is_float, is_filename, qualified_name
 from cdxcore.util import fmt, fmt_seconds, fmt_list, fmt_dict, fmt_big_number, fmt_digits, fmt_big_byte_number, fmt_datetime, fmt_date, fmt_time, fmt_timedelta, fmt_filename, DEF_FILE_NAME_MAP
+from cdxcore.util import CRMan
 
 class qA(object):
 
@@ -451,7 +452,20 @@ class Test(unittest.TestCase):
         self.assertEqual( qualified_name(qb.g,True), ("int","builtins") )   # <-- property type
         self.assertEqual( qualified_name(qb.h,True), ("Test.test_basics.<locals>.qB.h",modname) )
         self.assertEqual( qualified_name(qb.j,True), ("Test.test_basics.<locals>.qB.j",modname) )
+     
+    def test_crman(self):
         
+        crman = CRMan()
+        self.assertEqual( crman("test"), "test" )
+        self.assertEqual( crman("test"), "\r    \r\x1b[2K\rtesttest" )
+        self.assertEqual( crman("\rxxxx"), "\r        \r\x1b[2K\rxxxx" )
+        self.assertEqual( crman("yyyy\n"), "\r    \r\x1b[2K\rxxxxyyyy\n" )
+        self.assertEqual( crman("ab\rcde\nxyz\r01\nt"), "cde\n01\nt" )
+        
+        self.assertEqual( crman.current, "t" )
+        crman.reset()
+        self.assertEqual( crman.current, "" )
+
 if __name__ == '__main__':
     unittest.main()
 

@@ -1,8 +1,8 @@
 r"""
+Shared memory numpy arrays.
+
 Overview
 --------
-
-Shared memory numpy arrays.
 
 The functions in this module wrap :class:`multiprocessing.shared_memory.SharedMemory` into a numpy array
 with garbage collection clean up, depending in the operating system.

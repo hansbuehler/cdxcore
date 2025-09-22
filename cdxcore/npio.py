@@ -1,8 +1,5 @@
 r"""
-Overview
---------
-
-Fast binary disk i/o for numpy.
+Fast binary disk i/o for numpy arrays.
 
 .. code-block:: python
 

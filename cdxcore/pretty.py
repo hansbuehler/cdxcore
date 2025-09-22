@@ -1,8 +1,9 @@
 """
+A simple :class:`cdxcore.pretty.PrettyObject` class which mimics directory access to its members.
+
 Overview
 --------
 
-A simple :class:`cdxcore.pretty.PrettyObject` class which mimics directory access to its members.
 The purpose is a functional-programming style pattern for generating complex objects::
 
     from cdxbasics.prettydict import PrettyObject

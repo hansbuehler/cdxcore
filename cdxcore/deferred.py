@@ -1,9 +1,11 @@
 r"""
+[Not included in main documentation]
+
 Overview
 --------
 
 Framework for delayed execution of a Python code tree.
-Used by :mod:`cdxcore.dnaplot`.
+Used by :mod:`cdxcore.dynaplot`.
 
 *Advanced Users Only*
 

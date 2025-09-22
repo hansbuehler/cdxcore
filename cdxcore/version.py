@@ -1,9 +1,10 @@
 r"""
+
+Framework to track code versions of functions, classes, and their members via a simple decorating mechanism
+implemented with :dec:`cdxcore.verson.version`.
+
 Overview
 --------
-
-This module provides a framework to track versions of functions, classes, and their members via a simple decorating mechanism
-implemented with :dec:`cdxcore.verson.version`.
 
 A main application is the use in caching results of computational intensive tasks such as data pipelines in machine learning. The version
 framework allows updating dynamically only those parts of the data dependency graph whose code generation logic has changed.

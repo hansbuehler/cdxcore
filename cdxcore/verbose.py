@@ -1,9 +1,10 @@
 r"""
+This module contains the :class:`cdxcore.verbose.Context` manager class
+which supports printing hierarchical verbose progress reports.
+
 Overview
 --------
 
-This module contains the :class:`cdxcore.verbose.Context` manager class
-which supports printing hierarchical verbose progress reports.
 The key point of this class is to implement an easy-to-use method to print indented progress which
 can also be turned off easily without
 untidy code constructs such as excessive ``if`` blocks. In this case, we also avoid formatting
@@ -204,9 +205,8 @@ Documentation
 -------------
 """
 
-from .util import fmt, Timer
+from .util import fmt, Timer, CRMan, Callable
 from .err import verify
-from .crman import CRMan, Callable
 
 class Context(object):
     r"""

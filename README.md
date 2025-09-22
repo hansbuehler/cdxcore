@@ -25,7 +25,7 @@ Documentation can be found here: <https://quantitative-research.de/docs/cdxcore>
   animated updates for graphs (e.g. during training runs), and allows generation of plot layouts without knowing upfront
   the number of plots (e.g. for plotting a list of features).
 
-  ![Animated 3D plot](https://raw.githubusercontent.com/hansbuehler/cdxcore/main/docs/_static/dynaplot3D.gif)
+  ![Aninmated 3D plot](https://quantitative-research.de/docs/cdxcore/_static/dynaplot3D.gif)
   
 - [`cdxcore.config`](https://quantitative-research.de/docs/cdxcore/api/generated/cdxcore.config.html) allows **robust management of configurations**. It automates help, validation checking,
   and detects misspelled configuration arguments.

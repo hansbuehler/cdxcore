@@ -46,13 +46,11 @@ exclude_patterns = []
 
 html_theme = "pydata_sphinx_theme"
 html_theme_options = {
-    "navigation_depth": 4,
+    "navigation_depth": 2,
     "show_prev_next": False,
-    "github_url": "https://github.com/hansbuehler/cdxcore",  # optional
-    "show_toc_level": 2,
+    "github_url": "https://quantitative-research.de/docs/cdxcore",  # optional
+    "show_toc_level": 3,
     "secondary_sidebar_items": ["page-toc", "sourcelink"],
-}
-html_theme_options = {
 }
 
 html_static_path = ['_static']

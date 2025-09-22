@@ -22,14 +22,12 @@ API Reference
    npshm
 
    dynaplot
-   deferred
 
    jcpool
 
    pretty 
    util
    err
-   crman
 
 
 

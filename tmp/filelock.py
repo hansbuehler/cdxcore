@@ -1,9 +1,70 @@
+# -*- coding: utf-8 -*-
 """
-subdir
-Simple class to keep track of directory sturctures and for automated caching on disk
-Hans Buehler 2020
-"""
+Simple filelock for both Windows and Linux.
 
+The class :class:`cdxcore.filelock.FileLock` is for common file lock patterns for
+`Linux <https://code.activestate.com/recipes/519626-simple-file-based-mutex-for-very-basic-ipc/>`__ and 
+`Windows <https://timgolden.me.uk/pywin32-docs/Windows_NT_Files_.2d.2d_Locking.html>`__.
+
+Overview
+--------
+
+The main use of this module are the functions
+:func:`cdxcore.err.verify` and :func:`cdxcore.err.warn_if`.
+Both test some runtime condition and will either
+raise an ``Exception`` or issue a ``Warning`` if triggered. In both cases, required string formatting is only performed
+if the event is actually triggered.
+
+This way we are able to write neat code which produces robust,
+informative errors and warnings without impeding runtime performance.
+
+Example::
+    
+    from cdxcore.err import verify, warn_if
+    import numpy as np
+    
+    def f( x : np.ndarray ):
+        std = np.std(x,axis=0,keepdims=True)
+        verify( np.all( std>1E-8 ), "Cannot normalize 'x' by standard deviation: standard deviations are {std}", std=std )
+        x /= std        
+        
+    f( np.zeros((10,10)) )
+    
+raises a :class:`RuntimeError`
+
+.. code-block:: python
+
+    Cannot normalize 'x' by standard deviation: standard deviations are [[0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]]
+
+For warnings, we can use ``warn_if``::
+
+    from cdxcore.err import verify, warn_if
+    import numpy as np
+    
+    def f( x : np.ndarray ):
+        std = np.std(x,axis=0,keepdims=True)
+        warn_if( not np.all( std>1E-8 ), lambda : f"Normalizing 'x' by standard deviation: standard deviations are {std}" )
+        x   = np.where( std<1E-8, 0., x/np.where( std<1E-8, 1., std ) )
+        
+    f( np.zeros((10,10)) )
+    
+issues a warning::
+
+    RuntimeWarning: Normalizing 'x' by standard deviation: standard deviations are [[0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]]
+      warn_if( not np.all( std>1E-8 ), "Normalizing 'x' by standard deviation: standard deviations are {std}", std=std )    
+
+Note that though we used two different approaches for message formatting, the the error messages in both cases
+are only formatted if the condition in ``verify`` is not met.
+
+Import
+------
+.. code-block:: python
+
+    from cdxcore.err import verify, warn_if, error, warn
+    
+Documentation
+-------------
+"""
 from .logger import Logger
 from .verbose import Context
 from .util import datetime, fmt_datetime, fmt_seconds
@@ -29,7 +90,7 @@ if IS_WINDOWS:
     import pywintypes
     import win32security
     import win32api
-    WIN_HIGHBITS=0xffff0000 #high-order 32 bits of byte range to lock
+    _WIN_HIGHBITS=0xffff0000 #high-order 32 bits of byte range to lock
 
 else:
     win32file = None
@@ -37,9 +98,67 @@ else:
 import os
 
 class FileLock(object):
-    """
-    Systemwide Lock (Mutex) using files
-    https://code.activestate.com/recipes/519626-simple-file-based-mutex-for-very-basic-ipc/
+    r"""
+    System-wide file lock.
+
+
+
+
+    Parameters
+    ----------
+        filename : str
+            Filename of the lock.
+            ``filename`` may start with ``'!/'`` to refer to the temp directory, or ``'~/'`` to refer to the user directory.
+            On Unix ``'/dev/shm/'`` can be used to refer to the standard shared memory directory in case a shared memory
+            file is being locked.
+
+        acquire : bool, default: ``False``
+            Whether to attempt aquiring the lock upon initialization.
+
+        release_on_exit : bool, default ``True``
+            Whether to auto-release the lock upon exit.
+            
+        wait : bool, default ``True``
+            * If ``False``, return immediately if the lock cannot be acquired. 
+            * If ``True``, wait with below parameters; in particular if these are left as defaults the lock will wait indefinitely.
+            
+        timeout_seconds : int | None, default ``None``
+            Number of seconds to wait before retrying.
+            Set to ``0``` to fail immediately.
+            If set to ``None``, then behaviour will depend on ``wait``:
+                
+            * If wait is ``True``, then ``timeout_seconds==1``;
+            * If wait is ``False``, then ``timeout_seconds==0``.
+
+        timeout_retry : int|None, default ``None``        
+            How many times to retry before timing out.
+            Set to ``None`` to retry indefinitely.
+
+        raise_on_fail : bool, default ``True``
+            If the constructor fails to obtain the lock, raise an exception.
+            This will be either of type
+            
+            * :class:`TimeoutError` if ``timeout_seconds > 0`` and ``wait==True``, or
+            * :class:`BlockingIOError` if ``timeout_seconds == 0`` or ``wait==False``.
+
+        verbose : :class:`cdxcore.verbose.Context`|None, default ``None``
+            Context which will print out operating information of the lock. This is helpful for debugging.
+            In particular, it will track ``__del__()`` function calls.
+            Set to ``None`` to supress printing any context.
+
+    Exceptions
+    ----------
+        Timeout : :class:`TimeoutError`
+            Raised if ``acquire`` is ``True``, if ``timeout_seconds > 0`` and ``wait==True``, and if the call failed
+            to obtain the file lock.
+
+        Blocked : :class:`BlockingIOError`
+            Raised if ``acquire`` is ``True``, if ``timeout_seconds == 0`` or ``wait==False``, and if the call failed
+            to obtain the file lock.
+    
+        If acquire is True, then this constructor may raise an exception:
+            TimeoutError if 'timeout_seconds' > 0 and 'wait' is True, or
+            BlockingIOError if 'timeout_seconds' == 0 or 'wait' is False.
     """
 
     __LOCK_ID = 0
@@ -48,57 +167,19 @@ class FileLock(object):
                        acquire         : bool = False,
                        release_on_exit : bool = True,
                        wait            : bool = True,
-                       timeout_seconds : int = None,
-                       timeout_retry   : int = None,
+                       timeout_seconds : int|None = None,
+                       timeout_retry   : int|None = None,
                        raise_on_fail   : bool = True,
-                       verbose         : Context = Context.quiet ):
+                       verbose         : Context|None = None ):
         """
-        Initialize new lock with name 'filename'
-        Acquire the lock if 'acquire' is True
-
-        Parameters
-        ----------
-            filename :
-                Filename of the lock.
-                'filename' may start with '!/' to refer to the temp directory, or '~/' to refer to the user directory.
-                On Unix /dev/shm/ can be used to refer to shared memory.
-            acquire :
-                Whether to attempt aquiring the lock upon initialization
-            release_on_exit :
-                Whether to auto-release the lock upon exit.
-            wait :
-                If False, return immediately if the lock cannot be acquired. 
-                If True, wait with below parameters; in particular if these are left as defaults the lock will wait indefinitely.
-            timeout_seconds :
-                Number of seconds to wait before retrying.
-                Set to 0 to fail immediately.
-                If set to None, then its value will depend on 'wait'.
-                If wait is True, then timeout_seconds==1; if wait is False, then timeout_seconds==0
-            timeout_retry :
-                How many times to retry before timing out.
-                Set to None to retry indefinitely.
-            raise_on_fail :
-                If the constructor fails to obtain the lock, raise an Exception:
-                This will be either of type
-                    TimeoutError if 'timeout_seconds' > 0 and 'wait' is True, or
-                    BlockingIOError if 'timeout_seconds' == 0 or 'wait' is False.
-            verbose :
-                Context which will print out operating information of the lock. This is helpful for debugging.
-                In particular, it will track __del__() function calls.
-                Set to None to print all context.
-
-        Exceptions
-        ----------
-            If acquire is True, then this constructor may raise an exception:
-                TimeoutError if 'timeout_seconds' > 0 and 'wait' is True, or
-                BlockingIOError if 'timeout_seconds' == 0 or 'wait' is False.
+        __init__
         """
         self._filename       = SubDir.expandStandardRoot(filename)
         self._fd             = None
         self._pid            = os.getpid()
         self._cnt            = 0
         self._lid            = "LOCK" + fmt_datetime(datetime.datetime.now()) + (",%03ld:" % FileLock.__LOCK_ID) + filename
-        self.verbose         = verbose if not verbose is None else Context(None)
+        self.verbose         = verbose if not verbose is None else Context.quiet
         self.release_on_exit = release_on_exit
         FileLock.__LOCK_ID   +=1
         
@@ -133,7 +214,7 @@ class FileLock(object):
         """ Return filename """
         return self._filename
 
-    def acquire(self,    wait = True,
+    def acquire(self,    wait            : bool = True,
                       *, timeout_seconds : int = 1,
                          timeout_retry   : int = 5,
                          raise_on_fail   : bool = True) -> int:
@@ -142,9 +223,10 @@ class FileLock(object):
 
         Parameters
         ----------
-            wait :
-                If False, return immediately if the lock cannot be acquired. 
+            wait : bool, default ``True``
+                If ``False``, return immediately if the lock cannot be acquired. 
                 If True, wait with below parameters
+
             timeout_seconds :
                 Number of seconds to wait before retrying. If wait is False, this must be zero.
                 Set to 0 to fail immediately. 
@@ -188,6 +270,8 @@ class FileLock(object):
             if not IS_WINDOWS:
                 # Linux
                 # -----
+                # Systemwide Lock (Mutex) using files
+                # https://code.activestate.com/recipes/519626-simple-file-based-mutex-for-very-basic-ipc/
                 try:
                     self._fd = os.open(self._filename, os.O_CREAT|os.O_EXCL|os.O_RDWR)
                     os.write(self._fd, bytes("%d" % self._pid, 'utf-8'))
@@ -212,7 +296,7 @@ class FileLock(object):
                         win32con.FILE_ATTRIBUTE_NORMAL , 0 )
 
                     ov=pywintypes.OVERLAPPED() #used to indicate starting region to lock
-                    win32file.LockFileEx(self._fd,win32con.LOCKFILE_EXCLUSIVE_LOCK|win32con.LOCKFILE_FAIL_IMMEDIATELY,0,WIN_HIGHBITS,ov)
+                    win32file.LockFileEx(self._fd,win32con.LOCKFILE_EXCLUSIVE_LOCK|win32con.LOCKFILE_FAIL_IMMEDIATELY,0,_WIN_HIGHBITS,ov)
                 except BaseException as e:
                     if not self._fd is None:
                         self._fd.Close()
@@ -291,7 +375,7 @@ class FileLock(object):
         else:
             try:
                 ov=pywintypes.OVERLAPPED() #used to indicate starting region to lock
-                win32file.UnlockFileEx(self._fd,0,WIN_HIGHBITS,ov)
+                win32file.UnlockFileEx(self._fd,0,_WIN_HIGHBITS,ov)
             except:
                 err = "*** WARNING: could not unlock file."
                 pass

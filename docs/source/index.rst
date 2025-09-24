@@ -14,14 +14,6 @@ Install using::
 
 Documentation can be found here: `https://quantitative-research.de/docs/cdxcore <https://quantitative-research.de/docs/cdxcore>`__.
 
-Contents
-^^^^^^^^
-
-.. toctree::
-   :maxdepth: 2
-
-   api/index
-
 Main Functionality
 ^^^^^^^^^^^^^^^^^^
 
@@ -130,6 +122,14 @@ General purpose utilities
 * :mod:`cdxcore.npio` provides a low level binary i/o interface for numpy files.
 
 * :mod:`cdxcore.npshm` provides shared memory numpy arrays.
+
+Contents
+^^^^^^^^
+
+.. toctree::
+   :maxdepth: 2
+
+   api/index
 
 
 

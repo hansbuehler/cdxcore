@@ -3390,11 +3390,11 @@ def VersionedCacheRoot( directory          : str, *,
         
     Returns
     -------
-        Root : SubDir
+        Root : :class:`cdxcore.subdir.SubDir`
             A root directory suitable for caching.
     """    
     controller = CacheController(**controller_kwargs) if len(controller_kwargs) > 0 else None
-    return SubDir( directory=directory, ext=ext, fmt=fmt, create_directory=create_directory, controller=controller )
+    return SubDir( directory, ext=ext, fmt=fmt, create_directory=create_directory, controller=controller )
 
 version = version_decorator
                 

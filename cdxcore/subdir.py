@@ -1210,6 +1210,11 @@ class SubDir(object):
     def cache_controller(self):
         """ Returns an assigned :class:`cdxcore.subdir.CacheController`, or ``None`` """
         return self._cctrl if not self._cctrl is None else default_cacheController
+    
+    @property
+    def cache_mode(self):
+        """ Returns the :class:`cdxcore.subdir.CacheMode` associated with the underlying cache controller """
+        return self.cache_controller.cache_mode
 
     # -- static helpers --
 

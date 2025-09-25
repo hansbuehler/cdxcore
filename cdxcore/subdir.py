@@ -3394,6 +3394,7 @@ def VersionedCacheRoot( directory          : str, *,
             A root directory suitable for caching.
     """    
     controller = CacheController(**controller_kwargs) if len(controller_kwargs) > 0 else None
+    return SubDir( directory, ext=ext, fmt=fmt, create_directory=create_directory, cache_controller=controller )
 
 version = version_decorator
                 

@@ -94,8 +94,7 @@ File Format
 * "BLOSC" uses `blosc <https://github.com/blosc/python-blosc>`__
   to read/write compressed binary data. The blosc compression algorithm is very fast,
   hence using this mode will not usually lead to notably slower performance than using
-  "PICKLE" but will generate smaller files, depending on your data structure.
-  
+  "PICKLE" but will generate smaller files, depending on your data structure.  
   The default extension for "BLOSC" is "zbsc".
 
 * "GZIP": uses :mod:`gzip` to 
@@ -324,19 +323,19 @@ Caching
 A :class:`cdxcore.subdir.SubDir` object offers an advanced context for caching calls to :class:`collection.abc.Callable``
 objects with :dec:`cdxcore.subdir.SubDir.cache`.
 
-    .. code-block:: python
+.. code-block:: python
 
-        from cdxcore.subdir import SubDir
-        cache   = SubDir("!/.cache")
-        cache.delete_all_content()   # for illustration
-        
-        @cache.cache("0.1")
-        def f(x,y):
-            return x*y
-        
-        _ = f(1,2)    # function gets computed and the result cached
-        _ = f(1,2)    # restore result from cache
-        _ = f(2,2)    # different parameters: compute and store result
+    from cdxcore.subdir import SubDir
+    cache   = SubDir("!/.cache")
+    cache.delete_all_content()   # for illustration
+    
+    @cache.cache("0.1")
+    def f(x,y):
+        return x*y
+    
+    _ = f(1,2)    # function gets computed and the result cached
+    _ = f(1,2)    # restore result from cache
+    _ = f(2,2)    # different parameters: compute and store result
 
 This involves keying the cache by the function name and its current parameters using :class:`cdxcore.uniquehash.UniqueHash`,
 and monitoring the functions version using :dec:`cdxcore.version.version`. The caching behaviour itself can be controlled by
@@ -378,7 +377,6 @@ from .verbose import Context
 from .version import Version, version as version_decorator, VersionError
 from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename
 from .uniquehash import unique_hash48, UniqueLabel, NamedUniqueHash, named_unique_filename48_8
-
 
 """
 :meta private:
@@ -637,41 +635,34 @@ class CacheController( object ):
 
     Parameters
     ----------
-        exclude_arg_types : list[type], optional
-            List of types to exclude from producing unique ids from function arguments.
-    
-            Defaults to ``[Context]``.
-            
-        cache_mode : CacheMode, optional
-            Top level cache control.
-            Set to "OFF" to turn off all caching.
-            Default is "ON".
-            
-        max_filename_length : int, optional
-            Maximum filename length. If unique id's exceed the file name a hash of length
-            ``hash_length`` will be intergated into the file name.
-            See :class:`cdxcore.uniquehash.NamedUniqueHash`.
-            Default is ``48``.
-            
-        hash_length : int, optional
-            Length of the hash used to make sure each filename is unique
-            See :class:`cdxcore.uniquehash.NamedUniqueHash`.
-            Default is ``8``.
-            
-        debug_verbose : :class:`cdxcore.verbose.Context`, optional
-            If not ``None`` print caching process messages to this object.
-            
-            Default is ``None``.
-            
-        keep_last_arguments : bool, optional
-            Keep a dictionary of all parameters as string representations after each function call.
-            If the function ``F`` was decorated using :meth:``cdxcore.subdir.SubDir.cache``,
-            you can access this information via ``F.cache_info.last_arguments``.
+    exclude_arg_types : list[type], optional
+        List of types to exclude from producing unique ids from function arguments.
 
-            Note that strings are limited to 100 characters per argument to avoid memory
-            overload when large objects are passed.    
-            
-            Default is ``False``.
+        Defaults to ``[Context]``.
+        
+    cache_mode : CacheMode, default ``ON``
+        Top level cache control.
+        Set to "OFF" to turn off all caching.
+        
+    max_filename_length : int, default ``48``
+        Maximum filename length. If unique id's exceed the file name a hash of length
+        ``hash_length`` will be intergated into the file name.
+        See :class:`cdxcore.uniquehash.NamedUniqueHash`.
+        
+    hash_length : int, default ``8``
+        Length of the hash used to make sure each filename is unique
+        See :class:`cdxcore.uniquehash.NamedUniqueHash`.
+        
+    debug_verbose : :class:`cdxcore.verbose.Context` | None, default ``None``
+        If not ``None`` print caching process messages to this object.
+        
+    keep_last_arguments : bool, default ``False``
+        Keep a dictionary of all parameters as string representations after each function call.
+        If the function ``F`` was decorated using :meth:``cdxcore.subdir.SubDir.cache``,
+        you can access this information via ``F.cache_info.last_arguments``.
+
+        Note that strings are limited to 100 characters per argument to avoid memory
+        overload when large objects are passed.   
     """
     
     def __init__(self, *,
@@ -790,84 +781,74 @@ class SubDir(object):
 
     Parameters
     ----------
-        name : str:
-            Name of the directory.
-            
-            The name may start with any of the following special characters:
+    name : str:
+        Name of the directory.
+        
+        The name may start with any of the following special characters:
 
-            * ``'.'`` for current directory.
-            * ``'~'`` for home directory.
-            * ``'!'`` for system default temp directory.
-            * ``'?'`` for a temporary temp directory. In this case ``delete_everything_upon_exit`` is always ``True``.
+        * ``'.'`` for current directory.
+        * ``'~'`` for home directory.
+        * ``'!'`` for system default temp directory.
+        * ``'?'`` for a temporary temp directory. In this case ``delete_everything_upon_exit`` is always ``True``.
  
-            The directory name may also contain a formatting string for defining ``ext`` on the fly:
-            for example use ``"!/test;*.bin"`` to specify a directory ``"test"`` in the user's
-            temp directory with extension ``"bin"``.
-            
-            The directory name can be set to ``None`` in which case it is always empty
-            and attempts to write to it fail with  :class:`EOFError`.
-            
-        parent : str | SubDir, optional
-            Parent directory. 
-            
-            If ``parent`` is a :class:`cdxcore.subdir.SubDir` then its parameters are used
-            as default values here.
-
-            Default is ``None``.
-            
-        ext : str, optional
-            Extension for files managed by this ``SubDir``. All files will share the same extension.
-
-            If set to ``""`` no extension is assigned to this directory. That means, for example, that
-            :meth:`cdxcore.subdir.SubDir.files` returns all files contained in the directory, not
-            just files with a specific extension.
-            
-            If ``None``, use an extension depending on ``fmt``:
-                
-            * 'pck' for the default PICKLE format.
-            * 'json' for JSON_PLAIN.
-            * 'jpck' for JSON_PICKLE.
-            * 'zbsc' for BLOSC.
-            * 'pgz' for GZIP.
-            
-            Default is ``None``.
-            
-        fmt : :class:`cdxcore.subdir.Format`, optional
-
-            One of the :class:`cdxcore.subdir.Format` codes.
-            If ``ext`` is left to ``None`` then setting the a format will also set the corrsponding ``ext``.
-            
-            Default is ``Format.PICKLE``.
-
-        create_directory : bool | None, optional
+        The directory name may also contain a formatting string for defining ``ext`` on the fly:
+        for example use ``"!/test;*.bin"`` to specify a directory ``"test"`` in the user's
+        temp directory with extension ``"bin"``.
         
-            Whether to create the directory upon creation of the ``SubDir`` object; otherwise it will be created upon first
-            :meth:`cdxcore.subdir.SubDir.write`.
-            
-            Set to ``None`` to use the setting of the parent directory, or ``False`` if no parent
-            is specified.
-            
-            Default is ``False``.
-
-        cache_controller : :class:`cdxcore.subdir.CacheController`, optional
+        The directory name can be set to ``None`` in which case it is always empty
+        and attempts to write to it fail with  :class:`EOFError`.
         
-            An object which fine-tunes the behaviour of :meth:`cdxcore.subdir.SubDir.cache`.
-            See that function's documentation for further details. Default is ``None``.
-
-        delete_everything : bool, optional
+    parent : str | SubDir | None, default ``None``
+        Parent directory. 
         
-            Delete all contents in the newly defined sub directory upon creation.
-
-            Default is ``False``.
-            
-        delete_everything_upon_exit : bool, optional
+        If ``parent`` is a :class:`cdxcore.subdir.SubDir` then its parameters are used
+        as default values here.
         
-            Delete all contents of the current exist if ``self`` is deleted.
-            This is the always ``True`` if the ``"?/"`` pretext was used.
-            
-            Note, however, that this will only be executed once the object is garbage collected.
+    ext : str | None, default ``None``
+        Extension for files managed by this ``SubDir``. All files will share the same extension.
 
-            Default is, for some good reason, ``False``.            
+        If set to ``""`` no extension is assigned to this directory. That means, for example, that
+        :meth:`cdxcore.subdir.SubDir.files` returns all files contained in the directory, not
+        just files with a specific extension.
+        
+        If ``None``, use an extension depending on ``fmt``:
+            
+        * 'pck' for the default PICKLE format.
+        * 'json' for JSON_PLAIN.
+        * 'jpck' for JSON_PICKLE.
+        * 'zbsc' for BLOSC.
+        * 'pgz' for GZIP.
+        
+    fmt : :class:`cdxcore.subdir.Format` | None, default ``Format.PICKLE``
+
+        One of the :class:`cdxcore.subdir.Format` codes.
+        If ``ext`` is left to ``None`` then setting the a format will also set the corrsponding ``ext``.
+
+    create_directory : bool | None, default ``False``
+    
+        Whether to create the directory upon creation of the ``SubDir`` object; otherwise it will be created upon first
+        :meth:`cdxcore.subdir.SubDir.write`.
+        
+        Set to ``None`` to use the setting of the parent directory, or ``False`` if no parent
+        is specified.
+
+    cache_controller : :class:`cdxcore.subdir.CacheController` | None, default ``None``
+    
+        An object which fine-tunes the behaviour of :meth:`cdxcore.subdir.SubDir.cache`.
+        See that function's documentation for further details. Default is ``None``.
+
+    delete_everything : bool, default ``False``
+    
+        Delete all contents in the newly defined sub directory upon creation.
+        
+    delete_everything_upon_exit : bool, default ``False``
+    
+        Delete all contents of the current exist if ``self`` is deleted.
+        This is the always ``True`` if the ``"?/"`` pretext was used.
+        
+        Note, however, that this will only be executed once the object is garbage collected.
+
+        Default is, for some good reason, ``False``.            
     """
 
     class __RETURN_SUB_DIRECTORY(object):
@@ -997,8 +978,11 @@ class SubDir(object):
             self._crt = bool(create_directory)
             
         # cache controller
-        assert cache_controller is None or type(cache_controller).__name__ == CacheController.__name__, ("'cache_controller' should be of type 'CacheController'", type(cache_controller))
-        self._cctrl = cache_controller
+        if cache_controller is None:
+            self._cctrl = parent._cctrl if not parent is None else None               
+        else:
+            assert type(cache_controller).__name__ == CacheController.__name__, ("'cache_controller' should be of type 'CacheController'", type(cache_controller))
+            self._cctrl = cache_controller
 
         # name
         self._tclean = delete_everything_upon_exit  # delete directory upon completion
@@ -1170,13 +1154,13 @@ class SubDir(object):
         
         Parameters
         ----------
-            ext_or_fmt : str or :class:`cdxcore.subdir.Format`
-                An extension or a format.
+        ext_or_fmt : str | :class:`cdxcore.subdir.Format` | None, default ``None``
+            An extension or a format.
         
         Returns
         -------
-            ext : str
-                The extension with leading ``'.'``.
+        ext : str
+            The extension with leading ``'.'``.
         """
         if isinstance(ext_or_fmt, Format):
             return self._auto_ext(ext_or_fmt)
@@ -1193,9 +1177,9 @@ class SubDir(object):
 
         Returns
         -------
-            (ext, fmt) : tuple
-                Here ``ext`` contains the leading ``'.'`` and ``fmt`` is
-                of type :class:`cdxcore.subdir.Format`.
+        (ext, fmt) : tuple
+            Here ``ext`` contains the leading ``'.'`` and ``fmt`` is
+            of type :class:`cdxcore.subdir.Format`.
         """
         if isinstance(ext, Format):
             verify( fmt is None or fmt == ext, "If 'ext' is a Format, then 'fmt' must match 'ext' or be None. Found '%s' and '%s', respectively.", ext, fmt, exception=ValueError )
@@ -1255,9 +1239,10 @@ class SubDir(object):
     def _extract_ext( ext : str ) -> str:
         """
         Checks that 'ext' is an extension, and returns .ext.
-        -- Accepts '.ext' and 'ext'
-        -- Detects use of directories
-        -- Returns '*' if ext='*'
+        
+        * Accepts '.ext' and 'ext'
+        * Detects use of directories
+        * Returns '*' if ext='*'
         """
         assert not ext is None, ("'ext' should not be None here")
         verify( isinstance(ext,str), "Extension 'ext' must be a string. Found type %s", type(ext).__name__, exception=ValueError )
@@ -1289,16 +1274,16 @@ class SubDir(object):
 
         Parameters
         ----------
-            file : str
-                Core file name without path or extension.
-            ext : str
-                If not ``None``, use this extension rather than :attr:`cdxcore.subdir.SubDir.ext`.
+        file : str
+            Core file name without path or extension.
+        ext : str | None, default ``None``
+            If not ``None``, use this extension rather than :attr:`cdxcore.subdir.SubDir.ext`.
 
         Returns
         -------
-            Filename : str
-                Fully qualified system file name.
-                If ``self`` is ``None``, then this function returns ``None``; if ``file`` is ``None`` then this function also returns ``None``.
+        Filename : str | None
+            Fully qualified system file name.
+            If ``self`` is ``None``, then this function returns ``None``; if ``file`` is ``None`` then this function also returns ``None``.
         """
         if self._path is None or file is None:
             return None
@@ -1380,22 +1365,22 @@ class SubDir(object):
 
         Parameters
         ----------
-            reader( file, full_file_name, default )
-                A function which is called to read the file once the correct directory is identified
-                file : file (for error messages, might include '/')
-                full_file_name : full file name
-                default value
-            file : str or list
-                str: fully qualified file
-                list: list of fully qualified names
-            default :
-                default value. None is a valid default value
-                list : list of defaults for a list of keys
-            raise_on_error : bool
-                If True, and the file does not exist, throw exception
-            ext :
-                Extension or None for current extension.
-                list : list of extensions for a list of keys
+        reader( file, full_file_name, default )
+            A function which is called to read the file once the correct directory is identified
+            file : file (for error messages, might include '/')
+            full_file_name : full file name
+            default value
+        file : str or list
+            str: fully qualified file
+            list: list of fully qualified names
+        default :
+            default value. None is a valid default value
+            list : list of defaults for a list of keys
+        raise_on_error : bool
+            If True, and the file does not exist, throw exception
+        ext :
+            Extension or None for current extension.
+            list : list of extensions for a list of keys
         """
         # vector version
         if not isinstance(file,str):
@@ -1631,10 +1616,10 @@ class SubDir(object):
                     default = None,
                     raise_on_error : bool = False,
                     *,
-                    version : str = None,
+                    version : str|None = None,
                     delete_wrong_version : bool = True,
-                    ext : str = None,
-                    fmt : Format = None
+                    ext : str|None = None,
+                    fmt : Format|None = None
                     ):
         """
         Read data from a file if the file exists, or return ``default``.
@@ -1661,58 +1646,64 @@ class SubDir(object):
 
         Parameters
         ----------
-            file : str
-                A file name or a list thereof. ``file`` may contain subdirectories.
-                
-            default :
-                Default value, or default values if ``file`` is a list.
-                
-            raise_on_error : bool
-                Whether to raise an exception if reading an existing file failed.
-                By default this function fails silently and returns the default.
-                
-            version : str
-                If not ``None``, specifies the version of the current code base.
-                
-                In this case, this version will be compared to the version of the file being read.
-                If they do not match, read fails (either by returning default or throwing a :class:`cdxcore.version.VersionError` exception).
+        file : str
+            A file name or a list thereof. ``file`` may contain subdirectories.
+            
+        default :
+            Default value, or default values if ``file`` is a list.
+            
+        raise_on_error : bool, default ``False``
+            Whether to raise an exception if reading an existing file failed.
+            By default this function fails silently and returns the default.
+            
+        version : str | None, default ``None``
+            If not ``None``, specifies the version of the current code base.
+            
+            In this case, this version will be compared to the version of the file being read.
+            If they do not match, read fails (either by returning default or throwing a :class:`cdxcore.version.VersionError` exception).
 
-                You can specify version ``"*"`` to accept any version.
-                Note that this is distinct
-                to using ``None`` which stipulates that the file should not 
-                have version information.
-                
-            delete_wrong_version : bool
-                If ``True``, and if a wrong version was found, delete the file.
+            You can specify version ``"*"`` to accept any version.
+            Note that this is distinct
+            to using ``None`` which stipulates that the file should not 
+            have version information.
+            
+        delete_wrong_version : bool, default ``True``
+            If ``True``, and if a wrong version was found, delete the file.
 
-            ext : str
-                Extension overwrite, or a list thereof if ``file`` is a list.
+        ext : str | None, default ``None``
+            Extension overwrite, or a list thereof if ``file`` is a list.
+            
+            Use:
                 
-                Use:
-                    
-                * ``None`` to use directory's default.
-                * ``'*'`` to use the extension implied by ``fmt``.
-                * ``""`` to turn of extension management.
+            * ``None`` to use directory's default.
+            * ``'*'`` to use the extension implied by ``fmt``.
+            * ``""`` to turn of extension management.
+            
+        fmt : :class:`cdxcore.subdir.Format` | None, default ``None``
+            File :class:`cdxcore.subdir.Format` or ``None`` to use the directory's default.
+            
+            Note:
                 
-            fmt : :class:`cdxcore.subdir.Format`
-                File :class:`cdxcore.subdir.Format` or ``None`` to use the directory's default.
-                
-                Note:
-                    
-                * ``fmt`` cannot be a list even if ``file`` is.
-                * Unless ``ext`` or the SubDir's extension is ``'*'``, changing the format does not automatically change the extension.
+            * ``fmt`` cannot be a list even if ``file`` is.
+            * Unless ``ext`` or the SubDir's extension is ``'*'``, changing the format does not automatically change the extension.
 
         Returns
         -------
-            Content 
-                For a single ``file`` returns the content of the file if successfully read, or ``default`` otherwise.
-                If ``file``` is a list: list of contents.
+        Content : type | list
+            For a single ``file`` returns the content of the file if successfully read, or ``default`` otherwise.
+            If ``file``` is a list, this function returns a list of contents.
                 
         Raises
         ------
-            :class:`cdxcore.version.VersionError`:
-                If the file's version did not match the ``version`` provided.
-                
+        Version error : :class:`cdxcore.version.VersionError`:
+            If the file's version did not match the ``version`` provided.
+            
+        Version present : :class:`cdxcore.subdir.VersionPresentError`:
+            When attempting to read a file without ``version`` which has a version this exception is raised.
+            
+        I/O errors : ``Exception``
+            Various standard I/O errors are raisedas usual.
+            
         """
         return self._read( file=file,
                            default=default,
@@ -1729,42 +1720,43 @@ class SubDir(object):
 
         Parameters
         ----------
-            file : str
-                A filename, or a list thereof.
- 
-            version : str
-                Specifies the version to compare the file's version with.
-                
-                You can use ``"*"`` to match any version.
+        file : str
+            A filename, or a list thereof. 
 
-            raise_on_error : bool
-                Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
-                By default this function fails silently and returns the default.
  
-            delete_wrong_version : bool
-                If True, and if a wrong version was found, delete ``file``.
+        version : str
+            Specifies the version to compare the file's version with.
+            
+            You can use ``"*"`` to match any version.
+
+        raise_on_error : bool
+            Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
+            By default this function fails silently and returns the default.
+ 
+        delete_wrong_version : bool, default ``True``
+            If ``True``, and if a wrong version was found, delete ``file``.
+            
+        ext : str | None, default ``None``
+            Extension overwrite, or a list thereof if ``file`` is a list.
+            
+            Set to:
                 
-            ext : str
-                Extension overwrite, or a list thereof if file is a list.
-                
-                Set to:
-                    
-                * ``None`` to use directory's default.
-                * ``"*"`` to use the extension implied by ``fmt``.
-                * ``""`` for no extension.
-                
-            fmt : :class:`cdxcore.subdir.Format`
-                File format or ``None`` to use the directory's default.
-                Note that ``fmt`` cannot be a list even if ``file`` is.
+            * ``None`` to use directory's default.
+            * ``"*"`` to use the extension implied by ``fmt``.
+            * ``""`` for no extension.
+            
+        fmt : :class:`cdxcore.subdir.Format` | None, default ``None``
+            File format or ``None`` to use the directory's default.
+            Note that ``fmt`` cannot be a list even if ``file`` is.
 
         Returns
         -------
             Status : bool
-                Returns `True` only if the file exists, has version information, and its version is equal to ``version``.
+                Returns ``True`` only if the file exists, has version information, and its version is equal to ``version``.
         """
         return self._read( file=file,default=False,raise_on_error=raise_on_error,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_CHECK )
 
-    def get_version( self, file : str, raise_on_error : bool = False, *, ext : str = None, fmt : Format = None ):
+    def get_version( self, file : str, raise_on_error : bool = False, *, ext : str|None = None, fmt : Format|None = None ):
         """
         Returns a version stored in a file.
         
@@ -1773,32 +1765,33 @@ class SubDir(object):
 
         Parameters
         ----------
-            file : str
-                A filename, or a list thereof. 
+        file : str
+            A filename, or a list thereof. 
 
-            raise_on_error : bool
-                Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
-                By default this function fails silently and returns the default.
+        raise_on_error : bool
+            Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
+            By default this function fails silently and returns the default.
  
-            delete_wrong_version : bool
-                If ``True``, and if a wrong version was found, delete ``file``.
+        delete_wrong_version : bool, default ``True``
+            If ``True``, and if a wrong version was found, delete ``file``.
+            
+        ext : str | None, default ``None``
+            Extension overwrite, or a list thereof if ``file`` is a list.
+            
+            Set to:
                 
-            ext : str
-                Extension overwrite, or a list thereof if ``file`` is a list.
-                
-                Set to:
-                    
-                * ``None`` to use directory's default.
-                * ``"*"`` to use the extension implied by ``fmt``.
-                * ``""`` for no extension.
-                
-            fmt : :class:`cdxcore.subdir.Format`
-                File format or ``None`` to use the directory's default.
-                Note that ``fmt`` cannot be a list even if ``file`` is.
+            * ``None`` to use directory's default.
+            * ``"*"`` to use the extension implied by ``fmt``.
+            * ``""`` for no extension.
+            
+        fmt : :class:`cdxcore.subdir.Format` | None, default ``None``
+            File format or ``None`` to use the directory's default.
+            Note that ``fmt`` cannot be a list even if ``file`` is.
 
         Returns
         -------
-            version : str
+        version : str
+            The version.
         """
         return self._read( file=file,default=None,raise_on_error=raise_on_error,version="",ext=ext,fmt=fmt,delete_wrong_version=False,handle_version=SubDir.VER_RETURN )
 
@@ -1883,9 +1876,9 @@ class SubDir(object):
                      obj,
                      raise_on_error : bool = True,
                      *,
-                     version : str = None,
-                     ext : str = None,
-                     fmt : Format = None ) -> bool:
+                     version : str|None = None,
+                     ext : str|None = None,
+                     fmt : Format|None = None ) -> bool:
         """
         Writes an object to file.
         
@@ -1916,17 +1909,17 @@ class SubDir(object):
             raise_on_error : bool
                 If ``False``, this function will return ``False`` upon failure.
 
-            version : str
+            version : str | None, default ``None``
                 If not ``None``, specifies the version of the code which generated ``obj``.
                 This version will be written to the beginning of the file.
 
-            ext : str
+            ext : str | None, default ``None``
                 Extension, or list thereof if ``file`` is a list.
                 
                 * Use ``None`` to use directory's default extension.
                 * Use ``"*"`` to use the extension implied by ``fmt``.
 
-            fmt : :class:`cdxcore.subdir.Format`
+            fmt : :class:`cdxcore.subdir.Format` | None, default ``None``
                 File format or ``None`` to use the directory's default.
                 Note that ``fmt`` cannot be a list even if ``file`` is.
                 Note that unless ``ext`` or the SubDir's extension is '*',
@@ -2026,7 +2019,7 @@ class SubDir(object):
             return True
         return self._write( writer=writer, file=file, obj=obj, raise_on_error=raise_on_error, ext=ext )
 
-    def write_string( self, file : str, line : str, raise_on_error : bool = True, *, ext : str = None ) -> bool:
+    def write_string( self, file : str, line : str, raise_on_error : bool = True, *, ext : str|None = None ) -> bool:
         """
         Writes a line of text into a file.
         
@@ -2055,7 +2048,7 @@ class SubDir(object):
 
     # -- iterate --
 
-    def files(self, *, ext : str = None) -> list:
+    def files(self, *, ext : str|None = None) -> list:
         """
         Returns a list of files in this subdirectory with the current extension, or the specified extension.
 
@@ -2104,9 +2097,10 @@ class SubDir(object):
                 subdirs.append( entry.name )
         return subdirs
 
-    # -- delete --
+    # delete
+    # ------
 
-    def delete( self, file : str, raise_on_error: bool  = False, *, ext : str = None ):
+    def delete( self, file : str, raise_on_error: bool  = False, *, ext : str|None = None ):
         """
         Deletes ``file``.
         
@@ -2115,21 +2109,21 @@ class SubDir(object):
 
         Parameters
         ----------
-            file :
-                filename, or list of filenames
-                
-            raise_on_error : bool, default ``False``
-                If ``False``, do not throw :class:`KeyError` if file does not exist
-                or another error occurs.
-                
-            ext : str | None, default ``None``
-                Extension, or list thereof if ``file`` is a list.
-                
-                Use
-                
-                * ``None`` for the directory default.
-                * ``""`` to not use an automatic extension.
-                * ``"*"`` to use the extension associated with the format of the directory.
+        file :
+            filename, or list of filenames
+            
+        raise_on_error : bool, default ``False``
+            If ``False``, do not throw :class:`KeyError` if file does not exist
+            or another error occurs.
+            
+        ext : str | None, default ``None``
+            Extension, or list thereof if ``file`` is a list.
+            
+            Use
+            
+            * ``None`` for the directory default.
+            * ``""`` to not use an automatic extension.
+            * ``"*"`` to use the extension associated with the format of the directory.
         """
         # do not do anything if the object was deleted
         if self._path is None:
@@ -2165,21 +2159,21 @@ class SubDir(object):
         else:
             os.remove(full_file_name)
 
-    def delete_all_files( self, raise_on_error : bool = False, *, ext : str = None ):
+    def delete_all_files( self, raise_on_error : bool = False, *, ext : str|None = None ):
         """
         Deletes all valid keys in this sub directory with the correct extension.
         
         Parameters
         ----------
-            raise_on_error : bool
-                Set to ``False`` to quietly ignore errors.
+        raise_on_error : bool
+            Set to ``False`` to quietly ignore errors.
+            
+        ext : str | None, default ``None``
+            Extension to be used:
                 
-            ext : str
-                Extension to be used:
-                    
-                * ``None`` for the directory default.
-                * ``""`` to not use an automatic extension.
-                * ``"*"`` to use the extension associated with the format of the directory.
+            * ``None`` for the directory default.
+            * ``""`` to not use an automatic extension.
+            * ``"*"`` to use the extension associated with the format of the directory.
         """
         if self._path is None:
             if raise_on_error: raise EOFError("Cannot delete all files: current directory not specified")
@@ -2188,7 +2182,7 @@ class SubDir(object):
             return
         self.delete( self.files(ext=ext), raise_on_error=raise_on_error, ext=ext )
 
-    def delete_all_content( self, delete_self : bool = False, raise_on_error : bool = False, *, ext : str = None ):
+    def delete_all_content( self, delete_self : bool = False, raise_on_error : bool = False, *, ext : str|None = None ):
         """
         Deletes all valid keys and subdirectories in this sub directory.
         
@@ -2197,13 +2191,13 @@ class SubDir(object):
 
         Parameters
         ----------
-            delete_self: bool
-                Whether to delete the directory itself as well, or only its contents.
-            raise_on_error: bool
-                ``False`` for silent failure
-            ext: str
-                Extension for keys, or ``None`` for the directory's default.
-                Use ``""`` to match all files regardless of extension.
+        delete_self: bool
+            Whether to delete the directory itself as well, or only its contents.
+        raise_on_error: bool
+            ``False`` for silent failure
+        ext : str | None, default ``None``
+            Extension for keys, or ``None`` for the directory's default.
+            Use ``""`` to match all files regardless of extension.
         """
         # do not do anything if the object was deleted
         if self._path is None:
@@ -2248,30 +2242,29 @@ class SubDir(object):
         elif keep_directory and not os.path.exists(self._path[:-1]):
             os.makedirs(self._path[:-1])
 
-    # -- file ops --
+    # file ops
+    # --------
 
-    def exists(self, file : str, *, ext : str = None ) -> bool:
+    def exists(self, file : str, *, ext : str|None = None ) -> bool:
         """
         Checks whether a file exists.
 
         Parameters
         ----------
-            file :
-                Filename, or list of filenames.
+        file :
+            Filename, or list of filenames.
+            
+        ext : str | None, default ``None``
+            Extension to be used:
                 
-            ext : str
-                Extension, or list thereof if ``file`` is a list.
-                
-                Use
-                
-                * ``None`` for the directory default.
-                * ``""`` to not use an automatic extension.
-                * ``"*"`` to use the extension associated with the format of the directory.
+            * ``None`` for the directory default.
+            * ``""`` to not use an automatic extension.
+            * ``"*"`` to use the extension associated with the format of the directory.
 
         Returns
         -------
-            Status : bool
-                If ``file`` is a string, returns ``True`` or ``False``, else it will return a list of ``bool`` values.
+        Status : bool
+            If ``file`` is a string, returns ``True`` or ``False``, else it will return a list of ``bool`` values.
         """
         # vector version
         if not isinstance(file,str):
@@ -2329,7 +2322,7 @@ class SubDir(object):
             return None
         return func(full_file_name)
 
-    def get_creation_time( self, file : str, *, ext : str = None ) -> datetime.datetime:
+    def get_creation_time( self, file : str, *, ext : str|None = None ) -> datetime.datetime:
         """
         Returns the creation time of a file.
         
@@ -2337,21 +2330,21 @@ class SubDir(object):
 
         Parameters
         ----------
-            file :
-                filename, or list of filenames.
-            ext :
-                Extension, or list thereof if ``file`` is an extension.
-                Use:
-                    
-                * ``None`` for the directory default.
-                * ``""`` for no automatic extension.
-                * A :class:`cdxcore.subdir.Format` to use the default extension for that format.
+       file :
+           Filename, or list of filenames.
+           
+       ext : str | None, default ``None``
+           Extension to be used:
+               
+           * ``None`` for the directory default.
+           * ``""`` to not use an automatic extension.
+           * ``"*"`` to use the extension associated with the format of the directory.
 
         Returns
         -------
-            Datetime : :class:`datetime.datetime`
-                A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
-                Returns ``None`` if an error occured.
+        Datetime : :class:`datetime.datetime`
+            A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
+            Returns ``None`` if an error occured.
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getctime(x)) )
 
@@ -2363,21 +2356,21 @@ class SubDir(object):
 
         Parameters
         ----------
-            file :
-                filename, or list of filenames.
-            ext :
-                Extension, or list thereof if ``file`` is an extension.
-                Use:
-                    
-                * ``None`` for the directory default.
-                * ``""`` for no automatic extension.
-                * A :class:`cdxcore.subdir.Format` to use the default extension for that format.
+        file :
+            Filename, or list of filenames.
+            
+        ext : str | None, default ``None``
+            Extension to be used:
+                
+            * ``None`` for the directory default.
+            * ``""`` to not use an automatic extension.
+            * ``"*"`` to use the extension associated with the format of the directory.
 
         Returns
         -------
-            Datetime : :class:`datetime.datetime`
-                A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
-                Returns ``None`` if an error occured.
+        Datetime : :class:`datetime.datetime`
+            A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
+            Returns ``None`` if an error occured.
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getmtime(x)) )
 
@@ -2389,20 +2382,21 @@ class SubDir(object):
 
         Parameters
         ----------
-            file : str
-                Filename, or list of filenames.
-
-            ext : str
-                Extension, or list thereof if ``file`` is an extension.
-                    
-                * Use ``None`` for the directory default.
-                * Use ``""`` for no automatic extension.
+        file :
+            Filename, or list of filenames.
+            
+        ext : str | None, default ``None``
+            Extension to be used:
+                
+            * ``None`` for the directory default.
+            * ``""`` to not use an automatic extension.
+            * ``"*"`` to use the extension associated with the format of the directory.
 
         Returns
         -------
-            Datetime : :class:`datetime.datetime`
-                A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
-                Returns ``None`` if an error occured.
+        Datetime : :class:`datetime.datetime`
+            A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
+            Returns ``None`` if an error occured.
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getatime(x)) )
 
@@ -2474,6 +2468,7 @@ class SubDir(object):
         os.rename(src_full, tar_full)
 
     # utilities
+    # ---------
     
     def temp_file_name( self, file : str|None = None ):
         """
@@ -2543,7 +2538,6 @@ class SubDir(object):
             self.create_directory()
         return self.full_file_name( self.temp_file_name(file), ext=ext )
     
-    
     @staticmethod
     def remove_bad_file_characters( file : str, by : str="default" ) -> str:
         """
@@ -2579,7 +2573,8 @@ class SubDir(object):
             uqf          = UniqueLabel( max_length=max_length-len_ext, id_length=id_length, separator=separator )
             return uqf( unique_filename )
    
-    # -- dict-like interface --
+    # object interface
+    # ----------------
 
     def __call__(self, element : str,
                        default = RETURN_SUB_DIRECTORY,
@@ -2803,7 +2798,6 @@ class SubDir(object):
             raise LookupError(f"Unknown format name '{format_name}'. Must be one of: {fmt_list(SubDir.FORMAT_NAMES)}")
         return Format[format_name]
     
-
     # caching
     # -------
 
@@ -3384,8 +3378,8 @@ class SubDir(object):
 # ========================================================================
 
 def VersionedCacheRoot( directory          : str, *,
-                        ext                : str = None, 
-                        fmt                : Format = None,
+                        ext                : str|None = None, 
+                        fmt                : Format|None = None,
                         create_directory   : bool = False,
                         **controller_kwargs
                         ):
@@ -3417,43 +3411,43 @@ def VersionedCacheRoot( directory          : str, *,
     
     Parameters
     ----------
-        directory : str
-            Name of the root directory for caching.
+    directory : str
+        Name of the root directory for caching.
+        
+        Using SubDir the following Short-cuts are supported:
             
-            Using SubDir the following Short-cuts are supported:
-                
-            * ``"!/dir"`` creates ``dir`` in the temporary directory.
-            * ``"~/dir"`` creates ``dir`` in the home directory.
-            * ``"./dir"`` creates ``dir`` relative to the current directory.
-            
-        ext : str
-            Extension, which will automatically be appended to file names.
-            The default value depends on ``fmt`; for ``Format.PICKLE`` it is "pck".
-            
-        fmt : :class:`cdxcore.subdir.Format`
-            File format; if ``ext`` is not specified, the format drives the extension, too.
-            Default is ``Format.PICKLE``.
+        * ``"!/dir"`` creates ``dir`` in the temporary directory.
+        * ``"~/dir"`` creates ``dir`` in the home directory.
+        * ``"./dir"`` creates ``dir`` relative to the current directory.
+        
+    ext : str | None, default ``None``
+        Extension, which will automatically be appended to file names.
+        The default value depends on ``fmt`; for ``Format.PICKLE`` it is "pck".
+        
+    fmt : :class:`cdxcore.subdir.Format` | None, default ``None``
+        File format; if ``ext`` is not specified, the format drives the extension, too.
+        The default ``None`` becomes ``Format.PICKLE``.
 
-        create_directory : bool
-            Whether to create the directory upon creation. Default is ``False``.
+    create_directory : bool, default ``False``
+        Whether to create the directory upon creation. 
+        
+    controller_kwargs: dict
+        Parameters passed to :class:`cdxcore.subdir.CacheController``.
+        
+        Common parameters used:
             
-        controller_kwargs: dict
-            Parameters passed to :class:`cdxcore.subdir.CacheController``.
-            
-            Common parameters used:
-                
-            * ``exclude_arg_types``: list of types or names of types to exclude when auto-generating function
-              signatures from function arguments.
-              An example is :class:`cdxcore.verbose.Context` which is used to print progress messages.
-              
-            * ``max_filename_length``: maximum filename length.
-            
-            * ``hash_length``: length used for hashes, see :class:`cdxcore.uniquehash.UniqueHash`.
+        * ``exclude_arg_types``: list of types or names of types to exclude when auto-generating function
+          signatures from function arguments.
+          An example is :class:`cdxcore.verbose.Context` which is used to print progress messages.
+          
+        * ``max_filename_length``: maximum filename length.
+        
+        * ``hash_length``: length used for hashes, see :class:`cdxcore.uniquehash.UniqueHash`.
         
     Returns
     -------
-        Root : :class:`cdxcore.subdir.SubDir`
-            A root directory suitable for caching.
+    Root : :class:`cdxcore.subdir.SubDir`
+        A root directory suitable for caching.
     """    
     controller = CacheController(**controller_kwargs) if len(controller_kwargs) > 0 else None
     return SubDir( directory, ext=ext, fmt=fmt, create_directory=create_directory, cache_controller=controller )

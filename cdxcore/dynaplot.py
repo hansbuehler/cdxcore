@@ -614,7 +614,8 @@ class DynaFig(_DynaDeferred):
             verify( not 'figsize' in fig_kwargs, "Cannot specify both `figsize` and `fig_size`", exception=ValueError)
             fig_kwargs['figsize'] = fig_size
         
-        _DynaDeferred.__init__(self, f"figure('{str(title)[:20]}')" if not title is None else"figure()" )
+        dyna_title = title if len(title) <= 20 else ( title[:17] + "..." ) if not title is None else None
+        _DynaDeferred.__init__(self, f"figure('{dyna_title}')" if not title is None else "figure()" )
 
     def __str__(self):
         return self.deferred_info[1:]
@@ -953,6 +954,16 @@ class DynaFig(_DynaDeferred):
             ax.remove()
         if render:
             self.render()
+            
+    # context for cleaning up
+    # -----------------------
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, *args, **kwargs):
+        self.close()
+        return False
 
 def figure( title    : str = None, *,
             row_size : int = 5,

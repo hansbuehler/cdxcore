@@ -180,7 +180,6 @@ from .err import verify
 from. util import qualified_name, fmt_list
 from .verbose import Context
 from collections.abc import Collection, Sequence, Mapping
-import gc as gc
 
 class _ParentDeleted:
     pass
@@ -273,48 +272,7 @@ class Deferred(object):
     ----------
     info : str
         Descriptive name of the usually not-yet-created object deferred actions
-        will act upon.
-        
-    deferred__eq__ : bool, optional
-        If ``False``, the default, the ``__eq__`` operator will not be deferred. That means
-        that you are able to use :func:`cdxcore.deferred.Deferred.Create` and :class:`cdxcore.deferred.Deferred`
-        objects in Python contexts which require ``__eq__``, for example using them in lists.
-            
-        By default this works:
-
-        .. code-block:: python
-
-            a = Create("A")
-            b = Create("B")
-            a in [b]  # -> returns False
-            b in [b]  # -> returns True
-
-        *However* that may also break your deferred semantics as the boolean returned by a deferred operator
-        may differ from the boolean returned by the non-deferred ``__eq__`` operator (e.g. comparison using ``id``).
-
-        Accordingly,
-
-        .. code-block:: python
-
-            a = Create("A",deferred__eq__=True)
-            b = Create("B",deferred__eq__=True)
-            a in [b]
-
-        will raise an error.
-        Note that this will be a :class:`cdxcore.deferred.NotSupportedError` for the attempt
-        to call ``__bool__`` on the
-        deferred ``__eq__`` operator:
-            
-        .. code-block:: python
-
-            NotSupportedError:(
-                '__bool__',
-                "Deferring action `__bool__` for '($A!=$B)' is "\
-                "not possible: '__bool__' must return a 'bool'.")
-        
-        Note that this setting does not affect ``__neq__`` or any other relational opertors.
-        
-        Set to ``True`` to defer ``__eq__``.
+        will act upon.        
     """
     @classmethod
     def Create( cls, info : str ):
@@ -330,10 +288,11 @@ class Deferred(object):
     def __init__(self,     info           : str, *,   
                            action         : str = "",       
                            #     
-                           parent         : type = None,      
+                           parent         : type|None  = None,
+                           base_info      : bool|None = None,
                            # arguments passed to the action  
-                           args           : Collection = None,
-                           kwargs         : Mapping = None,   
+                           args           : Collection|None  = None,
+                           kwargs         : Mapping|None  = None,   
                            ):
         """
         Initialize a deferred action.
@@ -353,8 +312,7 @@ class Deferred(object):
         self._deferred_action         = action              # action code
         self._deferred_parent         = parent
         self._deferred_depth          = parent._deferred_depth+1 if not parent is None else 0
-        self._deferred__eq__          = parent._deferred__eq__ if not parent is None else False
-        self._deferred__hash__ = False
+        self._deferred_base_info      = parent._deferred_base_info if not parent is None else ( base_info if not base_info is None else False )
         self._deferred_args           = [] if args is None else list(args)
         self._deferred_kwargs         = {} if kwargs is None else dict(kwargs)
         self._deferred_live           = None           # once the object exists, it goes here.
@@ -621,7 +579,7 @@ class Deferred(object):
             for _ in sources:
                 s += _+","
             s = s[:-1]
-            verbose.write( f"{self._deferred_info} <= {s}" )
+            verbose.write( lambda : f"{self._deferred_info} <= {s}" )
         else:
             verbose.write( self._deferred_info )
                       
@@ -688,7 +646,6 @@ class Deferred(object):
                 raise e
             
             try:
-                        
                 live  = action( *args, **kwargs )
             except Exception as e:
                 arguments = self._deferred_fmt_args(args,kwargs)
@@ -701,7 +658,7 @@ class Deferred(object):
                 raise e
             del action
        
-        verbose.write(f"{self._deferred_info} -> '{qualified_name(live)}' : {self._deferred_to_str(live)}")
+        verbose.write(lambda : f"{self._deferred_info} -> '{qualified_name(live)}' : {self._deferred_to_str(live)}")
 
         # clear object
         # note that as soon as we write to self._deferred_live we can no longer
@@ -715,7 +672,6 @@ class Deferred(object):
         self._deferred_kwargs = None
         self._deferred_args   = None
         self._deferred_parent = _ParentDeleted()  # None is a valid parent --> choose someting bad
-        gc.collect()
         
         # action        
         self._deferred_was_resolved = True
@@ -755,7 +711,7 @@ class Deferred(object):
         verify( not element is None, lambda : f"You cannot resolve '{self._deferred_info}' with an empty 'element'")
         verbose = Context.quiet if verbose is None else verbose
         
-        verbose.write(f"{self._deferred_info} -> '{qualified_name(element)}' : {self._deferred_to_str(element)}")
+        verbose.write(lambda : f"{self._deferred_info} -> '{qualified_name(element)}' : {self._deferred_to_str(element)}")
         self._deferred_live         = element
         self._deferred_was_resolved = True
 
@@ -764,8 +720,7 @@ class Deferred(object):
             dlevel  = daction._deferred_depth
             daction._deferred_resolve( verbose=verbose(dlevel) )
             del daction 
-            
-        gc.collect()
+
         return element
     
     # Iteration
@@ -810,7 +765,7 @@ class Deferred(object):
                 verify( not fmt is None, lambda : f"Error defining action '{action}' for '{self._deferred_info}': 'fmt' not specified" )
     
                 def label(x):
-                    return x if not isinstance(x, Deferred) else x.__dict__.get('_deferred_info',action)
+                    return self._deferred_to_str(x) if not isinstance(x, Deferred) else x.__dict__.get('_deferred_info',action)
                 arguments           = { f"arg{i}" : label(arg) for i, arg in enumerate(args) }
                 arguments['parent'] = self._deferred_info
                 try:

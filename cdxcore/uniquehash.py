@@ -1120,5 +1120,5 @@ def named_unique_filename48_8( label : str, *args, **kwargs ) -> str:
     discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
     """
-    return NamedUniqueHash( max_length=48, id_length=8, filename_by="default" )
+    return NamedUniqueHash( max_length=48, id_length=8, filename_by="default" )(label, *args, **kwargs)
     

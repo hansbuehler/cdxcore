@@ -2801,14 +2801,14 @@ class SubDir(object):
     # caching
     # -------
 
-    def cache( self,  version             : str = None , *,
-                      dependencies        : list = None, 
-                      label               : Callable = None,
-                      uid                 : Callable = None,
-                      name                : str = None, 
-                      exclude_args        : list[str] = None,
-                      include_args        : list[str] = None,
-                      exclude_arg_types   : list[type] = None,
+    def cache( self,  version             : str|None = None , *,
+                      dependencies        : list|None = None, 
+                      label               : Callable|None = None,
+                      uid                 : Callable|None = None,
+                      name                : str|None = None, 
+                      exclude_args        : list[str]|None = None,
+                      include_args        : list[str]|None = None,
+                      exclude_arg_types   : list[type]|None = None,
                       version_auto_class  : bool = True):
         """
         Advanced versioned caching for callables.
@@ -3178,9 +3178,13 @@ class SubDir(object):
            :dec:`cdxcore.subdir.SubDir.cache`
            to provide version information at class level. Only version information are provided here.
            
+           You can use :dec:`cdxcore.subdir.SubDir.cache_class` as an alias.
+           
         2) Secondly, decorate ``__init__``. You do not need to specify a version
            for ``__init__`` as its version usually coincides with the version of the class. At ``__init__``
            you define how unique IDs are generated from the parameters passed to object construction.
+           
+           You can use :dec:`cdxcore.subdir.SubDir.cache_init` as an alias.
 
         Simple example:
             
@@ -3190,10 +3194,10 @@ class SubDir(object):
             cache   = SubDir("!/.cache")
             cache.delete_all_content()   # for illustration
             
-            @cache.cache("0.1")
+            @cache.cache_class("0.1")
             class A(object):
                 
-                @cache.cache(exclude_args=['debug'])
+                @cache.cache_init(exclude_args=['debug'])
                 def __init__(self, x, debug):
                     if debug:
                         print("__init__",x)
@@ -3216,10 +3220,10 @@ class SubDir(object):
         
         .. code-block:: python
         
-            @cache.cache("0.1")
+            @cache.cache_class("0.1")
             class A(object):
                 
-                @cache.cache("0.1", id=lambda x, debug: f"A.__init__(x={x})")  # <-- 'self' is not passed to the lambda function; no need to add **_
+                @cache.cache_init(id=lambda x, debug: f"A.__init__(x={x})")  # <-- 'self' is not passed to the lambda function; no need to add **_
                 def __init__(self, x, debug):
                     if debug:
                         print("__init__",x)
@@ -3227,35 +3231,79 @@ class SubDir(object):
 
         Decorating classes with ``__slots__`` does not yet work.
                                     
-        See also
-        ^^^^^^^^
+        Managing Caching Accross a Project
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-        For project-wide use it is usually inconvenient to control caching at the level of a 
+        For project-wide use it is usually convenient to control caching at the level of a 
         project-wide cache root directory.
-        See :class:`cdxcore.subdir.VersionedCacheRoot` for a thin convenience wrapper around a :class:`cdxcore.subdir.SubDir`
+        The classs :class:`cdxcore.subdir.VersionedCacheRoot` is a thin convenience wrapper around a :class:`cdxcore.subdir.SubDir`
         with a :class:`cdxcore.subdir.CacheController`.
         
+        The idea is to have a central file, ``cache.py`` which contains the central root for caching.
+        We recommend using an environment variable to be able to control the location of this directory
+        out side the code. Here is an example with an environment variable ``PROJECT_CACHE_DIR``::
+            
+            # file cache.py
+            
+            from cdxcore.subdir import VersionedCacheRoot
+            import os as os
+                        
+            cache_root = VersionedCacheRoot(
+                               os.getenv("PROJECT_CACHE_DIR", "!/.cache")
+                               )
+
+        In a particular project file, say ``pipeline.py`` create a file-local cache directory
+        and use it::
+            
+            # file pipeline.py
+            
+            from cache import cache_root
+            
+            cache_dir = cache_root("pipeline")
+            
+            @cache_dir.cache("0.1")
+            def f(x):
+                return x+2
+            
+            @cache_dir.cache("0.1", dependencies=[f])
+            def g(x)
+                return f(x)**2
+            
+            # ...
+            
+        In case you have issues with caching you can use the central root directory to turn on tracing 
+        accross your project:
+
+        .. code-block:: python
+           :emphasize-lines: 4
+
+            from cdxcore.verbose import Context
+            cache_root = VersionedCacheRoot(
+                               os.getenv("PROJECT_CACHE_DIR", "!/.cache"),
+                               debug_verbose=Context.all    # turn full traing on
+                            )
+
         Parameters
         ----------
-        version : str, optional
+        version : str | None, default ``None``
             Version of the function.
             
-            * If ``None`` then ``F`` must be decorated with :dec:`cdxcore.version.version`.
-            * If set, the function ``F`` is first decorated with :dec:`cdxcore.version.version`.
+            * If ``None`` then a common `F`` must be decorated manually with :dec:`cdxcore.version.version`.
+            * If set, the function ``F`` is automatically first decorated with :dec:`cdxcore.version.version` for you.
             
-        dependencies : list[type], optional
+        dependencies : list[type] | None, default ``None``
             A list of version dependencies, either by reference or by name.
             See :dec:`cdxcore.version.version` for details on name lookup if strings are used.
         
-        label : str | Callable
-            Specify a human-readable label for the function call given its parameters.
+        label : str | Callable | None, default ``None``
+            Specify a human-readabl label for the function call given its parameters.
             This label is used to generate the cache file name, and is also printed in when tracing
             hashing operations. Labels are not assumed to be unique, hence a unique hash of
             the label and the parameters to this function will be appended to generate
             the actual cache file name.
             
-            Use ``uid`` instead if ``label`` represents valid unique filenames.
-            
+            Use ``uid`` instead if ``label`` represents valid unique filenames. You cannot specify both ``uid`` and ``label``.
+            If neither ``uid`` and ``label`` are present, ``name`` will be used.
             
             **Usage:**
             
@@ -3271,30 +3319,34 @@ class SubDir(object):
             
             ``label`` cannot be used alongside ``uid``.
             
-        uid : str | Callable
+        uid : str | Callable | None, default ``None``
             Alternative to ``label`` which is assumed to generate a unique cache file name. It has the same
-            semantics as ``label``. When used, parameters to the decorated function are not hashed.
+            semantics as ``label``. When used, parameters to the decorated function are not hashed
+            as the ``uid`` is assumed to be already unique. The string must be a valid file name
             
-            ``uid`` be used alongside ``label``.
+            Use ``label`` if the id is not unique. You cannot specify both ``uid`` and ``label``.
+            If neither ``uid`` and ``label`` are present, ``name`` will be used (as non-unique ``label``).
         
-        name : str, optional
-            Name of this function which is used either on its own if neither ``label`` not ``uid`` are used.
-            If either of them is used, ``name`` is passed as a parameter to either the callable or the
-            formatting operator.
+        name : str | None, default ``None``
+            Name of this function which is used either on its own if neither ``label`` not ``uid`` are used,
+            or which passed as a parameter ``name`` to either the callable or the
+            formatting operator. See above for more details.
             
             If ``name`` is not specified it defaults to ``__qualname__`` expanded
             by the module name the function is defined in.
         
-        include_args : list[str]
+        include_args : list[str] | None, default ``None``
             List of arguments to include in generating an unqiue ID, or ``None`` for all.
         
-        exclude_args : list[str]:
-            List of arguments to exclude from generating an unique ID.
+        exclude_args : list[str] | None, default ``None``
+            List of arguments to exclude from generating an unique ID. Examples of such non-functional arguments
+            are workflow controls (debugging) and i/o elements.
             
-        exclude_arg_types : list[type]
-            List of parameter types to exclude from generating an unique ID.
+        exclude_arg_types : list[type] | None, default ``None``
+            List of parameter types to exclude from generating an unique ID. Examples of such non-functional arguments
+            are workflow controls (debugging) and i/o elements.
             
-        version_auto_class : bool
+        version_auto_class : bool, default ``True``
             Whether to automaticallty add version dependencies on base classes or, for member functions, on containing
             classes. This is the ``auto_class`` parameter for :dec:`cdxcore.version.version`.
             
@@ -3326,12 +3378,39 @@ class SubDir(object):
                 
             The decorated ``F()`` has additional function parameters, namely:
                 
-            * ``override_cache_mode`` : allows to override caching mode temporarily, in particular you can set it to ``"off"``.
-            * ``track_cached_files`` : allows passing a :class:`cdxcore.subdir.CacheTracker`
+            * ``override_cache_mode`` : ``CacheMode`` | None, default ``None``
+            
+              Allows overriding the ``CacheMode`` temporarily, in particular you can set it to ``"off"``.
+               
+            * ``track_cached_files`` : :class:`cdxcore.subdir.CacheTracker` | None, default ``None``
+            
+              Allows passing a :class:`cdxcore.subdir.CacheTracker`
               object to keep track of all
               files used (loaded from or saved to). 
               The function :meth:`cdxcore.subdir.CacheTracker.delete_cache_files` can be used
               to delete all files involved in caching.
+
+            * ``return_cache_uid`` : bool, default ``False``
+            
+              If ``True``, then the decorated function will return a tuple ``uid, result``
+              where ``uid`` is the unique filename generated for this function call,
+              and where ``result`` is the actual result from the function, cached or not.
+              
+              Usage::
+                  
+                  from cdxcore.subdir import SubDir
+                  cache_dir = SubDir("!/.cache")
+                  
+                  @cache_dir.cache()
+                  def f(x, y):
+                      return x*y
+                  
+                  uid, xy = f( x=1, y=2, return_cache_uid=True )
+                  
+              This pattern is thread-safe when compared to using::
+              
+                  xy = f( x=1, y=2 )
+                  uid = f.cache_info.filename
         """
         return CacheCallable(subdir = self,
                              version = version,
@@ -3361,17 +3440,41 @@ class SubDir(object):
             @cache.cache_class("0.1")
             class A(object):
                 
-                @cache.cache(exclude_args=['debug'])
+                @cache.cache_init(exclude_args=['debug'])
                 def __init__(self, x, debug):
                     if debug:
                         print("__init__",x)
                     self.x = x
 
         """
-        return self.cache( name=name,
-                           version=version,
-                           dependencies=dependencies,
-                           version_auto_class=version_auto_class)        
+        return self.cache( name=name, version=version, dependencies=dependencies, version_auto_class=version_auto_class)        
+
+    def cache_init(  self, 
+                     label               : Callable = None,
+                     uid                 : Callable = None,
+                     exclude_args        : list[str] = None,
+                     include_args        : list[str] = None,
+                     exclude_arg_types   : list[type] = None,
+                     ):
+        """
+        Short-cut for :dec:`cdxcore.subdir.SubDir.cache` applied to decorating ``__init__``
+        with a reduced number of available parameters.
+        
+        Example::
+
+            cache   = SubDir("!/.cache")
+            
+            @cache.cache_class("0.1")
+            class A(object):
+                
+                @cache.cache_init(exclude_args=['debug'])
+                def __init__(self, x, debug):
+                    if debug:
+                        print("__init__",x)
+                    self.x = x
+
+        """
+        return self.cache( label=label, uid=uid, exclude_args=exclude_args, include_args=include_args, exclude_arg_types=exclude_arg_types )        
 
 # ========================================================================
 # Caching, convenience
@@ -3443,6 +3546,9 @@ def VersionedCacheRoot( directory          : str, *,
         * ``max_filename_length``: maximum filename length.
         
         * ``hash_length``: length used for hashes, see :class:`cdxcore.uniquehash.UniqueHash`.
+        
+        * ``debug_verbose`` set to ``Context.all`` after importing ``from cdxcore.verbose import Context``
+          will turn on tracing all caching operations.
         
     Returns
     -------
@@ -3768,8 +3874,9 @@ class CacheCallable(object):
         exclude_types = ( self._exclude_arg_types if not self._exclude_arg_types is None else set() )\
                       | ( self.global_exclude_arg_types if not self.global_exclude_arg_types is None else set())
 
-        def execute( *args, override_cache_mode : CacheMode = None, 
-                            track_cached_files  : CacheTracker = None,
+        def execute( *args, override_cache_mode : CacheMode|None = None, 
+                            track_cached_files  : CacheTracker|None = None,
+                            return_cache_uid    : bool = False,
                             **kwargs ):     
             """
             Cached execution of the wrapped function
@@ -3899,7 +4006,7 @@ class CacheCallable(object):
             # -------------------------
 
             execute.cache_info.label    = str(label) if not label is None else None
-            execute.cache_info.filename = filename
+            execute.cache_info.filename = filename # that is the unique ID for this call
             execute.cache_info.version  = version_
             
             if self.cache_controller.keep_last_arguments:
@@ -3937,6 +4044,8 @@ class CacheCallable(object):
                         assert r.__magic_cache_call_init__ is None, ("**** Internal error. __init__ should reset __magic_cache_call_init__", F.__qualname__, label)
                         r.__magic_cache_call_init__ = False # since we called __new__, __init__ will be called next
 
+                    if return_cache_uid:
+                        return filename, r
                     return r
             
             r = F(*args, **kwargs)
@@ -3966,6 +4075,9 @@ class CacheCallable(object):
                     debug_verbose.write(f"cache({name}): called '{label}' version 'version {version_}' and wrote result into '{self._subdir.full_file_name(filename)}'.")
                 else:
                     debug_verbose.write(f"cache({name}): called '{label}' version 'version {version_}' but did *not* write into '{self._subdir.full_file_name(filename)}'.")
+
+            if return_cache_uid:
+                return filename, r
             return r
 
         update_wrapper( wrapper=execute, wrapped=F )

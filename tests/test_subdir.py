@@ -25,14 +25,14 @@ import_local()
 """
 Imports
 """
-from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError
+from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot
 import numpy as np
 
 class Test(unittest.TestCase):
 
     def test_subdir(self):
 
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", delete_everything=True )
+        sub = SubDir("?/.tmp_test_for_cdxbasics.subdir", delete_everything=True )
         sub['y'] = 2
         sub.write('z',3)
         sub.write_string('l',"hallo")
@@ -193,11 +193,8 @@ class Test(unittest.TestCase):
         with self.assertRaises(VersionError):
             r = sub.read("test", None, version="2", raise_on_error=True)
             # wrong version
-        sub.delete_everything()
         
     def test_new(self):
-        
-        
         subdir = SubDir("my_directory")      # relative to current working directory
         subdir = SubDir("./my_directory")    # relative to current working directory
         subdir = SubDir("~/my_directory")    # relative to home directory
@@ -248,8 +245,6 @@ class Test(unittest.TestCase):
         test_format( SubDir.GZIP, True )
         test_format( SubDir.JSON_PICKLE )
 
-
-
     def test_cache_mode(self):
 
         on = CacheMode("on")
@@ -275,6 +270,66 @@ class Test(unittest.TestCase):
         self.assertEqual( [ x.write for x in allc ], [True, True, False, False, True, False] )
         self.assertEqual( [ x.delete for x in allc ], [False, False, False, True, True, False ] )
         self.assertEqual( [ x.del_incomp for x in allc ], [True, False, False, True, True, False ] )            
+
+class A(object):
+    def __init__(self, x):
+        self.x = x
+class B(object):
+    def __init__(self, x):
+        self.x = x
+        
+class Test(unittest.TestCase):
+
+    def test_cache( self ):
+        
+        sub = VersionedCacheRoot("?/subdir_cache_test", exclude_arg_types=[A] )
+        
+        @sub.cache("1.0")
+        def f(x):
+            return x
+        
+        _ = f(1)
+        _ = f(1)
+        self.assertTrue( f.cache_info.last_cached )
+
+        @sub.cache("1.0")
+        def g(x):
+            return x
+        
+        # a new B object each time -> no caching
+        _ = f(B(1))
+        _ = f(B(2))
+        self.assertFalse( f.cache_info.last_cached )
+
+        # same B object each time -> no caching
+        _ = f(B(1))
+        _ = f(B(1))
+        self.assertTrue( f.cache_info.last_cached )
+        
+        # a new A object each time -> caching, as we ignore 'A' types
+        _ = f(A(1))
+        _ = f(A(2))
+        self.assertTrue( f.cache_info.last_cached )
+        
+        @sub.cache("1.0", label=lambda x, **_: f"f({x})")
+        def f(x):
+            return x
+        
+        _ = f(1)
+        self.assertEqual( f.cache_info.filename[:5], "f(1) " )
+        uid, _ = f(1, return_cache_uid=True)
+        self.assertEqual( uid[:5], "f(1) " )
+        
+        @sub.cache("1.0", uid=lambda x, **_: f"f({x})")
+        def f(x):
+            return x
+        
+        _ = f(1)
+        self.assertEqual( f.cache_info.filename, "f(1)" )
+        uid, _ = f(1, return_cache_uid=True)
+        self.assertEqual( uid, "f(1)" )
+        
+        
 if __name__ == '__main__':
     unittest.main()
 

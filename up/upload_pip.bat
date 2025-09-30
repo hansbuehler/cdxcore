@@ -42,6 +42,7 @@ git push
 
 @echo off
 call deactivate
+pip install -U cdxcore
 
 echo ** cdxcore testing, pip, git done **
 

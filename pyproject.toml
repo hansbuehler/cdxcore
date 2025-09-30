@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdxcore"
-version = "0.1.27"
+version = "0.1.28"
 description = "Basic Python Tools; upgraded cdxbasics"
 authors = [{ name = "Hans Buehler", email = "github@buehler.london" }]
 readme = "README.md"

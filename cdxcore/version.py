@@ -655,7 +655,13 @@ def version( version              : str = "0.0.1" ,
                 if not gversion._class is None:
                     continue
                 gversion._class = f
-        f.version = Version(f, version, dep, auto_class=auto_class )
+                
+        version_ = Version(f, version, dep, auto_class=auto_class )
+        try:
+            f.version = version_
+        except AttributeError:
+            f.__dict__['version'] = version_
+        del version_
         assert type(f.version).__name__ == Version.__name__
         return f
     return wrap

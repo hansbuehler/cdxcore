@@ -366,6 +366,7 @@ from collections import OrderedDict
 from collections.abc import Collection, Mapping, Callable, Iterable
 from enum import Enum
 from functools import update_wrapper
+from string import Formatter
         
 import json as json
 import gzip as gzip
@@ -375,7 +376,7 @@ from .err import verify, error, warn, fmt as txtfmt
 from .pretty import PrettyObject
 from .verbose import Context
 from .version import Version, version as version_decorator, VersionError
-from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename
+from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename, fmt_dict
 from .uniquehash import unique_hash48, UniqueLabel, NamedUniqueHash, named_unique_filename48_8
 
 """
@@ -1031,8 +1032,9 @@ class SubDir(object):
         """
         Delete all of the current directory if ``tclean`` is ``True``
         """
-        if self._tclean:
+        if getattr(self, "_tclean", False):
             self.delete_everything(keep_directory=False)
+        self._path = None
 
     @staticmethod
     def expand_std_root( name ):
@@ -1078,7 +1080,9 @@ class SubDir(object):
 
     def path_exists(self) -> bool:
         """ Whether the current directory exists """
-        return os.path.exists( self._path[:-1] ) if not self._path is None else False
+        if self._path is None:
+            return False
+        return os.path.exists( self._path[:-1] )
         
     # -- a few basic properties --
 
@@ -2193,8 +2197,11 @@ class SubDir(object):
         ----------
         delete_self: bool
             Whether to delete the directory itself as well, or only its contents.
+            If ``True``, the current object will be left in ``None`` state.
+            
         raise_on_error: bool
             ``False`` for silent failure
+            
         ext : str | None, default ``None``
             Extension for keys, or ``None`` for the directory's default.
             Use ``""`` to match all files regardless of extension.
@@ -2228,8 +2235,9 @@ class SubDir(object):
         Deletes the entire sub directory will all contents.
         
         *WARNING:* deletes *all* files and sub-directories, not just those with the present extension.
-        If ``keep_directory`` is ``False``, the directory referred to by this object will also be deleted.
-        In this case, ``self`` will be set to ``None``.
+        If ``keep_directory`` is ``False``, then the directory referred to by this object will also be deleted.
+
+        In this case, ``self`` will be set to ``None`` state.
         """
         if self._path is None:
             return
@@ -2801,15 +2809,16 @@ class SubDir(object):
     # caching
     # -------
 
-    def cache( self,  version             : str|None = None , *,
-                      dependencies        : list|None = None, 
-                      label               : Callable|None = None,
-                      uid                 : Callable|None = None,
-                      name                : str|None = None, 
-                      exclude_args        : list[str]|None = None,
-                      include_args        : list[str]|None = None,
-                      exclude_arg_types   : list[type]|None = None,
-                      version_auto_class  : bool = True):
+    def cache( self,  version              : str|None = None , *,
+                      dependencies         : list|None = None, 
+                      label                : Callable|None = None,
+                      uid                  : Callable|None = None,
+                      name                 : str|None = None, 
+                      exclude_args         : list[str]|None = None,
+                      include_args         : list[str]|None = None,
+                      exclude_arg_types    :  list[type]|None = None,
+                      version_auto_class   : bool = True,
+                      name_of_func_name_arg: str = "func_name"):
         """
         Advanced versioned caching for callables.
         
@@ -3158,7 +3167,7 @@ class SubDir(object):
                     return self.x*y
             
             a = A(x=1)
-            f = cache.cache("0.1", id=lambda self, y : f"a.f({y})")(a.f)  # <- decorate bound 'f'.
+            f = cache.cache("0.1", uid=lambda self, y : f"a.f({y})")(a.f)  # <- decorate bound 'f'.
             r = c(y=2)
 
         In this case the function ``f`` is bound to ``a``. The object is added as ``self`` to the function
@@ -3223,7 +3232,7 @@ class SubDir(object):
             @cache.cache_class("0.1")
             class A(object):
                 
-                @cache.cache_init(id=lambda x, debug: f"A.__init__(x={x})")  # <-- 'self' is not passed to the lambda function; no need to add **_
+                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})")  # <-- 'self' is not passed to the lambda function; no need to add **_
                 def __init__(self, x, debug):
                     if debug:
                         print("__init__",x)
@@ -3296,7 +3305,8 @@ class SubDir(object):
             See :dec:`cdxcore.version.version` for details on name lookup if strings are used.
         
         label : str | Callable | None, default ``None``
-            Specify a human-readabl label for the function call given its parameters.
+            Specify a human-readable label for the function call given its parameters.
+            
             This label is used to generate the cache file name, and is also printed in when tracing
             hashing operations. Labels are not assumed to be unique, hence a unique hash of
             the label and the parameters to this function will be appended to generate
@@ -3307,14 +3317,22 @@ class SubDir(object):
             
             **Usage:**
             
+            * If ``label`` is a ``Callable`` then ``label( func_name=name, **parameters )`` will be called
+              to generate the actual label.
+              
+              The parameter ``func_name`` refers to the qualified
+              name of the function. Its value can be overwitten by ``name``, while the parameter name itself
+              can be overwritten using ``name_of_func_name_arg``, see below.
+
             * If ``label`` is a plain string without ``{}`` formatting: use this string as-is.
             
-            * If ``label`` is a string with ``{}`` formatting, then ``label.format( name=name, **parameters )``
-              will be used to generate the actual label.
+            * If ``label`` is a string with ``{}`` formatting, then ``label.format( func_name=name, **parameters )``
+              will be used to generate the actual label. 
+              
+              The parameter ``func_name`` refers to the qualified
+              name of the function. Its value can be overwitten by ``name``, while the parameter name itself
+              can be overwritten using ``name_of_func_name_arg``, see below.
             
-            * If ``label`` is a ``Callable`` then ``label( name=name, **parameters )`` will be called
-              to generate the actual label.
-
             See above for examples.
             
             ``label`` cannot be used alongside ``uid``.
@@ -3329,7 +3347,7 @@ class SubDir(object):
         
         name : str | None, default ``None``
             Name of this function which is used either on its own if neither ``label`` not ``uid`` are used,
-            or which passed as a parameter ``name`` to either the callable or the
+            or which passed as a parameter ``func_name`` to either the callable or the
             formatting operator. See above for more details.
             
             If ``name`` is not specified it defaults to ``__qualname__`` expanded
@@ -3350,6 +3368,34 @@ class SubDir(object):
             Whether to automaticallty add version dependencies on base classes or, for member functions, on containing
             classes. This is the ``auto_class`` parameter for :dec:`cdxcore.version.version`.
             
+        name_of_func_name_arg : str, default ``"func_name"``
+            When formatting ``label`` or ``uid``, by default ``"func_name"`` is used to refer to the current
+            function name. If there is already a parameter ``func_name`` for the function, an error will be raised.
+            Use this flag to change the parameter name. Example::
+
+            .. code-block:: python
+
+                from cdxcore.subdir import SubDir
+                cache = SubDir("?/temp")
+
+                @cache.cache("0.1")
+                def f( func_name, x ):
+                    pass
+                
+                f("test", 1)
+                
+            Generates a :class:`RuntimeError` ``f@__main__: 'func_name' is a reserved keyword
+            and used as formatting parameter
+            name for the function name. Found it also in the function parameter list. Use 'name_of_name_arg' to change the internal parameter name used.``.
+
+            Instead, use:            
+            
+            .. code-block:: python
+
+                @cache.cache("0.1", label=lambda new_func_name, func_name, x : f"{new_func_name}(): {func_name} {x}", name_of_func_name_arg="new_func_name")
+                def f( func_name, x ):
+                    pass
+
         Returns
         -------
         Decorated F: Callable
@@ -3421,7 +3467,8 @@ class SubDir(object):
                              exclude_args = exclude_args,
                              include_args = include_args,
                              exclude_arg_types = exclude_arg_types,
-                             version_auto_class = version_auto_class )
+                             version_auto_class = version_auto_class,
+                             name_of_func_name_arg = name_of_func_name_arg)
 
     def cache_class( self, 
                      version             : str = None , *,
@@ -3633,7 +3680,7 @@ def _ensure_has_version( F,
                               dependencies=dependencies,
                               auto_class=auto_class)(F)
 
-def _qualified_name( F, name ):
+def _qualified_name( F, name = None ):
     """
     Return qualified name including module name, robustly
     """
@@ -3652,6 +3699,36 @@ def _qualified_name( F, name ):
             warn( f"Cannot determine module name for '{name}' of {type(F)}" )
     return name
 
+def _expected_str_fmt_args(fmt: str):
+    """
+    Inspect a format string and report what arguments it expects.
+    Returns:
+      - auto_positional: count of automatic '{}' fields
+      - positional_indices: explicit numeric field indices used (e.g., {0}, {2})
+      - keywords: named fields used (e.g., {user}, {price})
+    """
+    f = Formatter()
+    pos = set()
+    auto = 0
+    kws = set()
+
+    for literal, field, spec, conv in f.parse(fmt):
+        if field is None:
+            continue
+        # Keep only the first identifier before attribute/index access
+        head = field.split('.')[0].split('[')[0]
+        if head == "":               # '{}' → automatic positional
+            auto += 1
+        elif head.isdigit():         # '{0}', '{2}' → explicit positional
+            pos.add(int(head))
+        else:                        # '{name}' → keyword
+            kws.add(head)
+
+    return PrettyObject( positional=auto,
+                         posindices=pos,
+                         keywords=kws
+                       )
+
 class CacheCallable(object):
     """
     Wrapper for a cached function.
@@ -3660,17 +3737,17 @@ class CacheCallable(object):
     """
     
     def __init__(self, 
-                    subdir              : SubDir, *,
-                    version             : str = None,
-                    dependencies        : list,
-                    label               : Callable = None,
-                    uid                 : Callable = None,
-                    name                : str = None,
-                    exclude_args        : set[str] = None,
-                    include_args        : set[str] = None,
-                    exclude_arg_types   : set[type] = None,
-                    version_auto_class  : bool = True,
-                    name_of_name_arg    : str = "name"):
+                    subdir               : SubDir, *,
+                    version              : str = None,
+                    dependencies         : list,
+                    label                : Callable = None,
+                    uid                  : Callable = None,
+                    name                 : str = None,
+                    exclude_args         : set[str] = None,
+                    include_args         : set[str] = None,
+                    exclude_arg_types    : set[type] = None,
+                    version_auto_class   : bool = True,
+                    name_of_func_name_arg: str = "name"):
         """
         Utility class for :dec:`cdxcore.subdir.SubDir.cache`.
         
@@ -3679,18 +3756,38 @@ class CacheCallable(object):
         if not label is None and not uid is None:
             error("Cannot specify both 'label' and 'uid'.")
         
-        self._subdir              = SubDir(subdir)
-        self._version             = str(version) if not version is None else None
-        self._dependencies        = list(dependencies) if not dependencies is None else None
-        self._label               = label
-        self._uid                 = uid
-        self._name                = str(name) if not name is None else None
-        self._exclude_args        = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
-        self._include_args        = set(include_args) if not include_args is None and len(include_args) > 0 else None
-        self._exclude_arg_types   = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
-        self._version_auto_class  = bool(version_auto_class)
-        self._name_of_name_arg    = str(name_of_name_arg)
+        self._subdir                = SubDir(subdir)
+        self._input_version         = str(version) if not version is None else None
+        self._dependencies          = list(dependencies) if not dependencies is None else None
+        self._label                 = label
+        self._uid                   = uid
+        self._name                  = str(name) if not name is None else None
+        self._exclude_args          = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
+        self._include_args          = set(include_args) if not include_args is None and len(include_args) > 0 else None
+        self._exclude_arg_types     = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
+        self._version_auto_class    = bool(version_auto_class)
+        self._name_of_func_name_arg = str(name_of_func_name_arg)
+        self._uid_label_params      = None
         
+        if not self.uid_or_label is None:
+            F     = self.uid_or_label
+            which = "'uid'" if not uid is None else "'label'"
+            if isinstance( F, str ):
+                r = _expected_str_fmt_args( F )
+                if len(r.positional) + len(r.posindices) > 0:
+                    raise ValueError("f{which} '{F}' cannot have positional arguments (empty brackets {} or brackets with integer position {1}). Use only named arguments.")
+                self._uid_label_params = list(r.keywords)
+                del r
+            else:
+                if not inspect.isfunction(F):
+                    if not callable(F):
+                        raise ValueError(f"{which} '{_qualified_name(F)}' is not callable")
+                    F = F.__call__
+                    assert inspect.isfunction(F), ("Internal error - function expected")
+                self._uid_label_params = list( inspect.signature(F).parameters )
+            del F, which
+            self._uid_label_params = self._uid_label_params if len(self._uid_label_params) > 0 else None
+
     @property
     def uid_or_label(self) -> Callable:
         """ ID or label """
@@ -3723,6 +3820,10 @@ class CacheCallable(object):
     def global_exclude_arg_types(self) -> list[type]:
         """ Returns ``exclude_arg_types`` of the underlying :class:`cdxcore.subdir.CacheController` """ 
         return self.cache_controller.exclude_arg_types
+    @property
+    def uid_label_params(self) -> list:
+        """ Returns the ``set`` of parameters the ``uid`` or ``label`` function expects """
+        return self._uid_label_params 
     
     def __call__(self, F : Callable):
         """
@@ -3774,7 +3875,7 @@ class CacheCallable(object):
         # apply version
         # this also ensures that __init__ picks up a version dependency on the class itse
         # (as we forceed 'auto_class' to be true)
-        C = _ensure_has_version( C, version=self._version,
+        C = _ensure_has_version( C, version=self._input_version,
                                     dependencies=self._dependencies,
                                     auto_class=self._version_auto_class)
             
@@ -3795,7 +3896,7 @@ class CacheCallable(object):
         # Cannot currently decorate classes.
 
         
-        is_method = inspect.ismethod(F)
+        is_method = inspect.ismethod(F) # for *bound* methods
         if is_method:
             assert not getattr(F, "__self__", None) is None, ("Method type must have __self__...?", F.__qualname__ )
         elif not inspect.isfunction(F):
@@ -3858,11 +3959,12 @@ class CacheCallable(object):
         # -------
         # Decorate now or pick up existing @version
 
-        F = _ensure_has_version( F, version=self._version,
+        F = _ensure_has_version( F, version=self._input_version,
                                     dependencies=self._dependencies,
                                     auto_class=self._version_auto_class,
                                     allow_default=is_new )
-        
+        version = F.version.unique_id64
+
         # name
         # ----
         
@@ -3892,38 +3994,46 @@ class CacheCallable(object):
             
             uid_or_label = self.uid_or_label
             filename     = None
-            if isinstance(uid_or_label, str) and self.unique:
-                # if 'id' does not contain formatting codes,
-                # and the result is 'unique' then do not bother collecting
-                # function arguments
-                try:
-                    filename = uid_or_label.format()   # throws a KeyError if 'id' contains formatting information
-                except KeyError:
-                    pass
+            if self.unique and self._uid_label_params is None:                    
+                # the string or function do not require any parameters, and is unique
+                assert not uid_or_label is None
+                filename  = uid_or_label if isinstance( uid_or_label, str ) else uid_or_label()
 
-            if not filename is None:
-                # generate name with the unique string provided by the user
                 if not is_filename(filename):
                     raise ValueError(f"The unique filename '{filename}' computed for '{name}' contains invalid characters for filename. When using `uid` make sure that "+\
-                                     "the returned ID is a valid filename (and unique)")
+                                     "the returned ID is a valid filename (and is unique)")
                 label     = filename
-                filename  = self.uniqueFileName( filename )
                 arguments = None
-                
+
             else:
+                # need the list of parameters to compute a hash and/or a label
+                which     = 'uid' if not self._uid is None else 'label'                 
+                
                 # get dictionary of named arguments
                 arguments = execute.cache_info.signature.bind(*args,**kwargs)
                 arguments.apply_defaults()
                 arguments = arguments.arguments # ordered dict
 
+                # delete 'cls' from argument list for class functions
                 if is_new:
-                    # delete 'cls' from argument list
                     assert len(arguments) >= 1, ("*** Internal error", F.__qualname__, is_new, arguments)
                     del arguments[list(arguments)[0]]
-                argus     = set(arguments)
+
+                # add 'self' for methods                
+                if is_method:
+                    # add __self__ to the beginning of all arguments
+                    full_arguments = OrderedDict()
+                    if is_method:
+                        if 'self' in set(arguments):
+                            raise RuntimeError(f"'self' found in bound method '{name}' argument list {fmt_dict(execute.cache_info.signature.bind(*args,**kwargs).arguments)}.")
+                        full_arguments['self'] = F.__self__
+                    full_arguments |= arguments
+                    arguments = full_arguments
+                    del full_arguments
 
                 # filter dictionary
                 if not self._exclude_args is None or not self._include_args is None:
+                    argus     = set(arguments)
                     excl = set(self._exclude_args) if not self._exclude_args is None else set()
                     if not self._exclude_args is None: 
                         if self._exclude_args > argus:
@@ -3937,7 +4047,7 @@ class CacheCallable(object):
                     for arg in excl:
                         if arg in arguments:
                             del arguments[arg]
-                    del excl
+                    del excl, argus
 
                 if len(exclude_types) > 0:
                     excl = []
@@ -3948,41 +4058,45 @@ class CacheCallable(object):
                         if arg in arguments:
                             del arguments[arg]
                                 
-                # did the user provide a label or unique ID?
                 if uid_or_label is None:
+                    # no label or unique ID
+                    assert not self.unique
                     uid_or_label = name
                     
+                elif self._uid_label_params is None:
+                    # label function or string does not need any parameters
+                    assert not self.unique
+                    uid_or_label = uid_or_label if isinstance( uid_or_label, str ) else uid_or_label()
+                    
                 else:
-                    if self._name_of_name_arg in arguments:
-                        error(f"{name}: '{self._name_of_name_arg}' is a reserved keyword and used as parameter name for the function name. Found it also in the function parameter list. Use 'name_of_name_arg' to change the internal parameter name used.")
-
-                    # add standard arguments
-                    full_arguments = OrderedDict()
-                    if is_method:
-                        assert not 'self' in set(arguments), ("__self__ found in bound method argument list...?", F.__qualname__, execute.cache_info.signature.bind(*args,**kwargs).arguments )
-                        full_arguments['self'] = F.__self__                    
-                    full_arguments[self._name_of_name_arg] = name
-                    for k,v in arguments.items():
-                        full_arguments[k] = v
-                    arguments = full_arguments
-                    del full_arguments, k, v
+                    # function or format string required parameters
+                    # add parameters in order of label/uid parameters
+                    assert not self._uid_label_params is None
+                    
+                    fmt_arguments = {}
+                    for k in self._uid_label_params:
+                        if k == self._name_of_func_name_arg:
+                            if self._name_of_func_name_arg in arguments:
+                                error(f"{name}: '{self._name_of_func_name_arg}' is a reserved keyword for '{which}' which refers to the current function name. "
+                                      "Found it also in the function parameter list. Use 'name_of_func_name_arg' to change the internal parameter name used.")
+                            fmt_arguments[k] = name
+                        else:
+                            if not k in arguments:
+                                args_ = [ f"'{_}'" for _ in arguments ]
+                                raise ValueError(f"Error while generating '{which}' for '{name}': formatting function expected a parameter '{k}' which is not present "+\
+                                                 f"in the list of parameters passed to '{name}': {fmt_list(args_)}.")
+                            fmt_arguments[k] = arguments[k]
 
                     # call format or function                    
                     if isinstance( uid_or_label, str ):
-                        try:
-                            uid_or_label = str.format( uid_or_label, **arguments )
-                        except KeyError as e:
-                            raise KeyError(e, f"Error while generating id for '{name}' using format string '{uid_or_label}': {e}. Available arguments: {list(arguments)}")
-
+                        uid_or_label = str.format( uid_or_label, **fmt_arguments )
                     else:
-                        which = 'uid' if not self._uid is None else 'label'
                         try:
-                            uid_or_label = uid_or_label(**arguments)
-                        except TypeError as e:
-                            raise TypeError(e, f"Error while generating '{which}' for '{name}' using a function: {e}. Available arguments: {list(arguments)}")
+                            uid_or_label = uid_or_label(**fmt_arguments)
                         except Exception as e:
-                            raise type(e)(f"Error while generating '{which}' for '{name}': attempt to call '{which}' of type {type(uid_or_label)} failed: {e}")
-                        assert isinstance(uid_or_label, str), ("Error:", which, "callable must return a string. Found",type(uid_or_label))
+                            raise type(e)(f"Error while generating '{which}' for '{name}': attempt to call '{which}' of callable type {type(uid_or_label)} failed: {e}")
+                        if not isinstance(uid_or_label, str):
+                            raise ValueError("Error calling callable '{which}' for '{name}': callable must return a string. Found {type(uid_or_label))}")
 
                 if self.unique:
                     if not is_filename(uid_or_label):
@@ -3998,7 +4112,6 @@ class CacheCallable(object):
             # determine version, cache mode
             # ------------------
 
-            version_   = self._version if not self._version is None else F.version.unique_id64
             cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else self.cache_mode
             del override_cache_mode
 
@@ -4007,7 +4120,7 @@ class CacheCallable(object):
 
             execute.cache_info.label    = str(label) if not label is None else None
             execute.cache_info.filename = filename # that is the unique ID for this call
-            execute.cache_info.version  = version_
+            execute.cache_info.version  = version
             
             if self.cache_controller.keep_last_arguments:
                 info_arguments = OrderedDict()
@@ -4026,11 +4139,11 @@ class CacheCallable(object):
                     pass
                 tag = Tag()
                 if not is_new:
-                    r = self._subdir.read( filename, tag, version=version_ )
+                    r = self._subdir.read( filename, tag, version=version )
                 else:
                     try:
                         execute.__new_during_read = True
-                        r = self._subdir.read( filename, tag, version=version_ )
+                        r = self._subdir.read( filename, tag, version=version )
                     finally:
                         execute.__new_during_read = False
                         
@@ -4039,7 +4152,7 @@ class CacheCallable(object):
                         track_cached_files += self._fullFileName(filename)
                     execute.cache_info.last_cached = True 
                     if not debug_verbose is None:
-                        debug_verbose.write(f"cache({name}): read '{label}' version 'version {version_}' from cache '{self._subdir.full_file_name(filename)}'.")
+                        debug_verbose.write(f"cache({name}): read '{label}' version 'version {version}' from cache '{self._subdir.full_file_name(filename)}'.")
                     if is_new:
                         assert r.__magic_cache_call_init__ is None, ("**** Internal error. __init__ should reset __magic_cache_call_init__", F.__qualname__, label)
                         r.__magic_cache_call_init__ = False # since we called __new__, __init__ will be called next
@@ -4060,7 +4173,7 @@ class CacheCallable(object):
                 assert r.__magic_cache_call_init__ is None, ("**** Internal error. __init__ should reset __magic_cache_call_init__")
             
             if cache_mode.write:
-                self._subdir.write(filename,r,version=version_)      
+                self._subdir.write(filename,r,version=version)      
                 if not track_cached_files is None:
                     track_cached_files += self._subdir.full_file_name(filename)
             execute.cache_info.last_cached = False
@@ -4072,9 +4185,9 @@ class CacheCallable(object):
             
             if not debug_verbose is None:
                 if cache_mode.write:
-                    debug_verbose.write(f"cache({name}): called '{label}' version 'version {version_}' and wrote result into '{self._subdir.full_file_name(filename)}'.")
+                    debug_verbose.write(f"cache({name}): called '{label}' version 'version {version}' and wrote result into '{self._subdir.full_file_name(filename)}'.")
                 else:
-                    debug_verbose.write(f"cache({name}): called '{label}' version 'version {version_}' but did *not* write into '{self._subdir.full_file_name(filename)}'.")
+                    debug_verbose.write(f"cache({name}): called '{label}' version 'version {version}' but did *not* write into '{self._subdir.full_file_name(filename)}'.")
 
             if return_cache_uid:
                 return filename, r

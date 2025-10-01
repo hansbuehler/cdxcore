@@ -266,11 +266,10 @@ class UniqueHash( object ):
         """ Return copy of `self`. """
         return UniqueHash( **{ k:v for k,v in self.__dict__.items() if not k[:1] == "_"} )
 
-    def __call__(self, *args, debug_trace : DebugTrace = None, **kwargs) -> str:
+    def __call__(__self__, # LEAVE THIS NAME. **kwargs might contain 'self' arguments.
+                 *args, debug_trace : DebugTrace = None, **kwargs) -> str:
         """
-        :meta public:
-            
-        Returns a unique hash for the `arg` and `kwargs` parameters passed to this function.
+        Returns a unique hash for the ``arg`` and ``kwargs`` parameters passed to this function.
         
         Example::
             
@@ -289,7 +288,7 @@ class UniqueHash( object ):
         args, kwargs:
             Parameters to hash.
             
-        debug_trace : :class:`cdxcore.uniquehash.DebugTrace`
+        debug_trace : :class:`cdxcore.uniquehash.DebugTrace` | None, default ``None``
             Allows tracing of hashing activity for debugging purposes.
             Two implementations of ``DebugTrace`` are available:
                 
@@ -302,13 +301,13 @@ class UniqueHash( object ):
         Returns
         -------
         Hash : str
-            String of at most `length`
+            String of at most ``self.length``.
         """
-        h, _ = self._mk_blake( h=self.length//2 )
+        h, _ = __self__._mk_blake( h=__self__.length//2 )
         if len(args) > 0:
-            self._hash_any( h, args, debug_trace = debug_trace )
+            __self__._hash_any( h, args, debug_trace = debug_trace )
         if len(kwargs) > 0:
-            self._hash_any( h, kwargs, debug_trace = debug_trace )
+            __self__._hash_any( h, kwargs, debug_trace = debug_trace )
         return h.hexdigest()
 
     # Utility functions

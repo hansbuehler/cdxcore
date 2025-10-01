@@ -26,6 +26,7 @@ import_local()
 Imports
 """
 from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot
+from cdxcore.version import version
 import numpy as np
 
 class Test(unittest.TestCase):
@@ -277,6 +278,15 @@ class A(object):
 class B(object):
     def __init__(self, x):
         self.x = x
+     
+raw_sub = VersionedCacheRoot("?/subdir_cache_test2", exclude_arg_types=[A] )
+
+class C(object):
+    def __init__(self, x):
+        self.x = x
+    @raw_sub.cache("0.1")
+    def f(self, y):
+        return self.x*y
         
 class Test(unittest.TestCase):
 
@@ -311,7 +321,7 @@ class Test(unittest.TestCase):
         _ = f(A(2))
         self.assertTrue( f.cache_info.last_cached )
         
-        @sub.cache("1.0", label=lambda x, **_: f"f({x})")
+        @sub.cache("1.0", label=lambda x: f"f({x})")
         def f(x):
             return x
         
@@ -320,7 +330,7 @@ class Test(unittest.TestCase):
         uid, _ = f(1, return_cache_uid=True)
         self.assertEqual( uid[:5], "f(1) " )
         
-        @sub.cache("1.0", uid=lambda x, **_: f"f({x})")
+        @sub.cache("1.0", uid=lambda x: f"f({x})")
         def f(x):
             return x
         
@@ -329,6 +339,77 @@ class Test(unittest.TestCase):
         uid, _ = f(1, return_cache_uid=True)
         self.assertEqual( uid, "f(1)" )
         
+        # test member caching
+        
+        c = C(2.)
+        _ = c.f(3)
+        self.assertFalse( c.f.cache_info.last_cached )
+        _ = c.f(3)
+        self.assertTrue( c.f.cache_info.last_cached )
+        _ = c.f(2)
+        self.assertFalse( c.f.cache_info.last_cached )
+        
+        # test versioning
+        
+        @version("F")
+        def F(x):
+            return x
+        
+        @sub.cache("G")
+        def G(x):
+            return x
+        
+        @sub.cache("H", dependencies=[F,G])
+        def H(x):
+            return G(x)*F(x)
+
+        _ = H(2.)
+        self.assertEqual( H.cache_info.version, "H { Test.test_cache.<locals>.F: F, Test.test_cache.<loc 3fabc694" )        
+        self.assertEqual( H.cache_info.version, H.version.unique_id64 )        
+
+        # decorate live member functions
+        
+        class AA(object):
+            def __init__(self,x):
+                self.x = x
+            def f(self,y):
+                return self.x*y
+        
+        a = AA(x=1)
+        f = sub.cache("0.1", label=lambda y : f"a.f({y})")(a.f)  # <- decorate bound 'f'.
+        _ = f(y=2)  
+        self.assertFalse( f.cache_info.last_cached )
+        self.assertEqual( f.cache_info.version, "0.1" )
+        _ = f(y=2)  
+        self.assertTrue( f.cache_info.last_cached )
+                
+        # funcname
+
+        sub = VersionedCacheRoot("?/subdir_cache_test", exclude_arg_types=[A], keep_last_arguments=True)
+        
+        @sub.cache("0.1", label=lambda new_func_name, func_name, x, y : f"{new_func_name}(): {func_name} {x} {y}", name_of_func_name_arg="new_func_name")
+        def f( func_name, x, y ):
+            pass
+        f("test",1,y=2)
+        self.assertEqual( repr(f.cache_info.arguments), "OrderedDict({'func_name': 'test', 'x': '1', 'y': '2'})" )
+        
+        # this should just work
+        @sub.cache("0.1", label=lambda func_name, x : f"{func_name} {x}")
+        def f( func_name, x ):
+            pass
+        with self.assertRaises(RuntimeError):
+            f("test",1)        
+            
+        # cuttinf off
+        @sub.cache("0.1", uid=lambda x,y: f"h2({x},{y})_______________________________________________________________________", exclude_args='debug') 
+        def h2(x,y,debug=False):
+            if debug:
+                print(f"h(x={x},y={y})")  
+            return x*y
+        h2(1,1)        
+# %%
+        self.assertEqual( h2.cache_info.filename, "h2(1,1)________________________________ 46a70d67" )
+
         
 if __name__ == '__main__':
     unittest.main()

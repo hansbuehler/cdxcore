@@ -457,16 +457,25 @@ class Test(unittest.TestCase):
             def __unique_hash__( self, unique_hash, debug_trace ):
                 return ( self._seed, self._size )
             
+        class E(A):
+            """ Fixed string """
+            def __init__(self):
+                self.__unique_hash__ = "some_string"
+            
         empty = unique_hash( ('Test.test_uniqueHash.<locals>.A') )
         hash1 = unique_hash( A() )
         hash2 = unique_hash( B() )
         hash3 = unique_hash( C() )
         hash4 = unique_hash( D() )
+        hash5 = unique_hash( E() )
+        h_5   = unique_hash( E().__unique_hash__ )
         self.assertEqual( empty, "653a05ac14649dbceebbd7f3d4a0b89f" )        
         self.assertEqual( hash1, empty )
         self.assertEqual( hash2, "ae7cc6d56596eaa20dcd6aedc6e89d85" )
         self.assertEqual( hash3, "5e387f9e86426319577d2121a4e1437b" )
         self.assertEqual( hash4, "c9b449e95339458df155752acadbebb1" )
+        self.assertEqual( hash5, "79ee12b070c036e874263c6f4d70df98" )
+        self.assertEqual( hash5, h_5 )
 
                     
             

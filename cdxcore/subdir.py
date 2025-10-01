@@ -2980,12 +2980,9 @@ class SubDir(object):
                 return x*y
             
         We can also use a function to generate a ``label``. In that case all parameters
-        to the function including its ``name`` are passed to the function. In below example
-        we eat any parameters we are not interested in with ``** _``:
+        to the function including its ``func_name`` are passed to the function.::
 
-        .. code-block:: python
-
-            @cache.cache("0.1", label=lambda x,y,**_: f"h({x},{y})", exclude_args='debug') 
+            @cache.cache("0.1", label=lambda x,y: f"h({x},{y})", exclude_args='debug') 
             def h(x,y,debug=False):
                 if debug:
                     print(f"h(x={x},y={y})")  
@@ -3019,7 +3016,7 @@ class SubDir(object):
         
         .. code-block:: python
 
-            @cache.cache("0.1", uid=lambda x,y,**_: f"h2({x},{y})", exclude_args='debug') 
+            @cache.cache("0.1", uid=lambda x,y: f"h2({x},{y})", exclude_args='debug') 
             def h2(x,y,debug=False):
                 if debug:
                     print(f"h(x={x},y={y})")  
@@ -3232,7 +3229,7 @@ class SubDir(object):
             @cache.cache_class("0.1")
             class A(object):
                 
-                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})")  # <-- 'self' is not passed to the lambda function; no need to add **_
+                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})")  # <-- 'self' is not passed to the lambda function
                 def __init__(self, x, debug):
                     if debug:
                         print("__init__",x)
@@ -3774,7 +3771,7 @@ class CacheCallable(object):
             which = "'uid'" if not uid is None else "'label'"
             if isinstance( F, str ):
                 r = _expected_str_fmt_args( F )
-                if len(r.positional) + len(r.posindices) > 0:
+                if r.positional + len(r.posindices) > 0:
                     raise ValueError("f{which} '{F}' cannot have positional arguments (empty brackets {} or brackets with integer position {1}). Use only named arguments.")
                 self._uid_label_params = list(r.keywords)
                 del r

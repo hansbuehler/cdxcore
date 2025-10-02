@@ -196,15 +196,28 @@ class Test(unittest.TestCase):
             # wrong version
         
     def test_new(self):
-        subdir = SubDir("my_directory")      # relative to current working directory
-        subdir = SubDir("./my_directory")    # relative to current working directory
-        subdir = SubDir("~/my_directory")    # relative to home directory
-        subdir = SubDir("!/my_directory")    # relative to default temp directory
+        subdir0 = SubDir("my_directory")      # relative to current working directory
+        subdir1 = SubDir("./my_directory")    # relative to current working directory
+        subdir2 = SubDir("~/my_directory")    # relative to home directory
+        subdir3 = SubDir("!/my_directory")    # relative to default temp directory
 
-        subdir = SubDir("my_directory", "~")      # relative to home directory
-        subdir = SubDir("my_directory", "!")      # relative to default temp directory
-        subdir = SubDir("my_directory", ".")      # relative to current directory
-        subdir2 = SubDir("my_directory", subdir)  # subdir2 is relative to `subdir`
+        subdir11 = SubDir("my_directory", ".")      # relative to home directory
+        subdir22 = SubDir("my_directory", "~")      # relative to default temp directory
+        subdir33 = SubDir("my_directory", "!")      # relative to current directory
+        subdir44 = SubDir("my_directory", subdir3)  # subdir2 is relative to `subdir`
+        
+        
+        self.assertEqual( subdir0.path, subdir11.path )
+        self.assertEqual( subdir1.path, subdir11.path )
+        self.assertEqual( subdir2.path, subdir22.path )
+        self.assertEqual( subdir3.path, subdir33.path )
+        self.assertEqual( subdir3.path + "my_directory/", subdir44.path )
+
+        subdir1 = SubDir("?/test")
+        subdir2 = SubDir("?/test")
+        
+        self.assertNotEqual( subdir1.path, subdir2.path )
+        del subdir1, subdir2
 
         # extension handling
         
@@ -218,7 +231,16 @@ class Test(unittest.TestCase):
         self.assertEqual( subdir.ext, ".json" )
         subdir = subdir("", fmt=SubDir.PICKLE )
         self.assertEqual( subdir.ext, ".pck" )
-    
+
+        subdir0 = SubDir("!/temp;*.bin")
+        subdir1 = SubDir("!/temp", ext="bin")
+        subdir2 = SubDir("!/temp", ext=".bin")
+        self.assertEqual( subdir0, subdir1 )
+        self.assertEqual( subdir0, subdir2 )
+
+        with self.assertRaises(ValueError):
+            subdir = SubDir("!/temp;*.bin", ext="notbin")
+            
         # version
         
         version = "0.1"
@@ -245,6 +267,37 @@ class Test(unittest.TestCase):
         test_format( SubDir.BLOSC, True )
         test_format( SubDir.GZIP, True )
         test_format( SubDir.JSON_PICKLE )
+        
+        # copy constructor with overwrite
+        
+        d1 = SubDir("?/test_subdir", ext="e1")
+        d2 = SubDir(d1)
+        self.assertEqual( d1.path, d2.path )
+        self.assertEqual( d1.fmt, d2.fmt )
+        self.assertEqual( d1.ext, d2.ext )
+
+        d1 = SubDir("?/test_subdir", ext="e1")
+        d2 = SubDir(d1, ext="e2")
+        self.assertEqual( d1.path, d2.path )
+        self.assertEqual( d1.fmt, d2.fmt )
+        self.assertEqual( d1.ext, ".e1" )
+        self.assertEqual( d2.ext, ".e2" )
+
+        d1 = SubDir("?/test_subdir", fmt=SubDir.BLOSC )
+        d2 = SubDir(d1, fmt=SubDir.GZIP )
+        self.assertEqual( d1.path, d2.path )
+        self.assertEqual( d1.fmt, SubDir.BLOSC )
+        self.assertEqual( d2.fmt, SubDir.GZIP )
+        self.assertEqual( d1.ext, ".zbsc" )
+        self.assertEqual( d2.ext, ".pgz" )
+
+        d1 = SubDir("?/test_subdir", ext="tmp", fmt=SubDir.BLOSC )
+        d2 = SubDir(d1, fmt=SubDir.GZIP )
+        self.assertEqual( d1.path, d2.path )
+        self.assertEqual( d1.fmt, SubDir.BLOSC )
+        self.assertEqual( d2.fmt, SubDir.GZIP )
+        self.assertEqual( d1.ext, ".tmp" )
+        self.assertEqual( d2.ext, d1.ext )
 
     def test_cache_mode(self):
 
@@ -288,12 +341,19 @@ class C(object):
     def f(self, y):
         return self.x*y
         
-class Test(unittest.TestCase):
+class Test2(unittest.TestCase):
 
     def test_cache( self ):
         
+        sub = SubDir("!/xx", ext="ABC")
+        self.assertEqual( sub.ext, ".ABC")
+
         sub = VersionedCacheRoot("?/subdir_cache_test", exclude_arg_types=[A] )
-        
+
+        subsub = sub("sub", ext="tst")
+        x = subsub.full_file_name( "hallo")
+        self.assertEqual( x[-9:], "hallo.tst" )
+
         @sub.cache("1.0")
         def f(x):
             return x
@@ -364,7 +424,7 @@ class Test(unittest.TestCase):
             return G(x)*F(x)
 
         _ = H(2.)
-        self.assertEqual( H.cache_info.version, "H { Test.test_cache.<locals>.F: F, Test.test_cache.<loc 3fabc694" )        
+        self.assertEqual( H.cache_info.version, "H { Test2.test_cache.<locals>.F: F, Test2.test_cache.<l 19b17778" )        
         self.assertEqual( H.cache_info.version, H.version.unique_id64 )        
 
         # decorate live member functions
@@ -406,8 +466,7 @@ class Test(unittest.TestCase):
             if debug:
                 print(f"h(x={x},y={y})")  
             return x*y
-        h2(1,1)        
-# %%
+        h2(1,1)
         self.assertEqual( h2.cache_info.filename, "h2(1,1)________________________________ 46a70d67" )
 
         

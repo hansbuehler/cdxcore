@@ -628,12 +628,9 @@ class CacheController( object ):
     When a parameter object of this type
     is assigned to a :class:`cdxcore.subdir.SubDir`,
     then it is passed on when sub-directories are
-    created. This way all ``SubDir`` have the same
-    caching behaviour.
+    created. This way all sub directories have the same
+    caching behaviour. 
     
-    See :class:`cdxcore.subdir.CacheController` for
-    a list of control parameters.
-
     Parameters
     ----------
     exclude_arg_types : list[type], optional
@@ -803,16 +800,18 @@ class SubDir(object):
         Parent directory. 
         
         If ``parent`` is a :class:`cdxcore.subdir.SubDir` then its parameters are used
-        as default values here.
+        as default values.
         
     ext : str | None, default ``None``
-        Extension for files managed by this ``SubDir``. All files will share the same extension.
+        Extension for files managed by this ``SubDir``. All files managed by ``self`` will share the same extension.
 
-        If set to ``""`` no extension is assigned to this directory. That means, for example, that
-        :meth:`cdxcore.subdir.SubDir.files` returns all files contained in the directory, not
+        If set to ``""`` no extension is assigned to this directory. That mean that
+        all files are considered. For example,
+        :meth:`cdxcore.subdir.SubDir.files` then returns all files contained in the directory, not
         just files with a specific extension.
         
-        If ``None``, use an extension depending on ``fmt``:
+        If ``ext`` is ``None``, then use ``parent.ext`` or if ``parent`` was provided, or otherwise
+        the extension defined by ``fmt``:
             
         * 'pck' for the default PICKLE format.
         * 'json' for JSON_PLAIN.
@@ -823,7 +822,9 @@ class SubDir(object):
     fmt : :class:`cdxcore.subdir.Format` | None, default ``Format.PICKLE``
 
         One of the :class:`cdxcore.subdir.Format` codes.
-        If ``ext`` is left to ``None`` then setting the a format will also set the corrsponding ``ext``.
+        
+        If ``ext`` is left to ``None`` and ``parent`` is ``None`` 
+        then setting the a format will also set the corrsponding ``ext``.
 
     create_directory : bool | None, default ``False``
     
@@ -836,7 +837,7 @@ class SubDir(object):
     cache_controller : :class:`cdxcore.subdir.CacheController` | None, default ``None``
     
         An object which fine-tunes the behaviour of :meth:`cdxcore.subdir.SubDir.cache`.
-        See that function's documentation for further details. Default is ``None``.
+        See :class:`cdxcore.subdir.CacheController` documentation for further details. 
 
     delete_everything : bool, default ``False``
     
@@ -849,7 +850,7 @@ class SubDir(object):
         
         Note, however, that this will only be executed once the object is garbage collected.
 
-        Default is, for some good reason, ``False``.            
+        Default is, for some good reason, is ``False``.            
     """
 
     class __RETURN_SUB_DIRECTORY(object):
@@ -907,6 +908,7 @@ class SubDir(object):
 
         """
         create_directory = bool(create_directory) if not create_directory is None else None
+        ext              = SubDir._extract_ext(ext) if not ext is None else None
         
         # copy constructor support
         if isinstance(name, SubDir):
@@ -918,6 +920,7 @@ class SubDir(object):
             self._cctrl  = name._cctrl if cache_controller is None else cache_controller
             self._tclean = False # "_clean" is not inherited
             if delete_everything: raise ValueError( "Cannot use 'delete_everything' when cloning a directory")
+            assert self._ext=="" or self._ext==self.EXT_FMT_AUTO or self._ext[0] == ".", ("Extension error", self._ext)
             return
 
         # reconstruction from a dictionary
@@ -930,6 +933,7 @@ class SubDir(object):
             self._cctrl  = name['_cctrl'] if cache_controller is None else cache_controller
             self._tclean = name['_tclean']
             if delete_everything: raise ValueError( "Cannot use 'delete_everything' when cloning a directory")
+            assert self._ext=="" or self._ext==self.EXT_FMT_AUTO or self._ext[0] == ".", ("Extension error", self._ext)
             return
 
         # parent
@@ -965,12 +969,15 @@ class SubDir(object):
                 _ext = name[ext_i+3:]
                 if not ext is None and ext != _ext:
                     raise ValueError( txtfmt("Canot specify an extension both in the name string ('%s') and as 'ext' ('%s')", _name, ext))
-                ext  = _ext
+                ext  = SubDir._extract_ext(_ext)
                 name = name[:ext_i]
+                del _ext
+            del ext_i
         if ext is None:
             self._ext = self.EXT_FMT_AUTO if parent is None else parent._ext
         else:
-            self._ext = SubDir._extract_ext(ext)
+            self._ext = ext
+        assert self._ext=="" or self._ext==self.EXT_FMT_AUTO or self._ext[0] == ".", ("Extension error", self._ext)
             
         # create_directory
         if create_directory is None:
@@ -1050,7 +1057,8 @@ class SubDir(object):
         If neither of these matches the first character, ``name``
         is returned as is.
         
-        This function does not support ``"?"``.
+        This function does not support ``"?"`` because ``"?"`` used in the constructor
+        represents a new directory every time it is used.
         """
         if len(name) < 2 or name[0] not in ['.','!','~'] or name[1] not in ["\\","/"]:
             return name
@@ -1146,6 +1154,7 @@ class SubDir(object):
         Returns the common extension of the files in this directory, including leading ``'.'``.
         Resolves ``"*"`` into the extension associated with the current :class:`cdxcore.subdir.Format`.
         """
+        assert self._ext=="" or self._ext==self.EXT_FMT_AUTO or self._ext[0] == ".", ("Extension error", self._ext)
         return self._ext if self._ext != self.EXT_FMT_AUTO else self._auto_ext(self._fmt)
 
     def auto_ext( self, ext_or_fmt : str|Format = None ) -> str:
@@ -1167,10 +1176,13 @@ class SubDir(object):
             The extension with leading ``'.'``.
         """
         if isinstance(ext_or_fmt, Format):
-            return self._auto_ext(ext_or_fmt)
+            r = self._auto_ext(ext_or_fmt)
         else:
             ext = self._ext if ext_or_fmt is None else SubDir._extract_ext(ext_or_fmt)
-            return ext if ext != self.EXT_FMT_AUTO else self._auto_ext(self._fmt)
+            r = ext if ext != self.EXT_FMT_AUTO else self._auto_ext(self._fmt)
+            del ext
+        assert r=="" or r[0] == ".", ("Extension error", self._ext, ext_or_fmt)
+        return r
 
     def auto_ext_fmt( self, *, ext : str = None, fmt : Format = None ) -> tuple[str]:
         """
@@ -1266,6 +1278,7 @@ class SubDir(object):
         # remove internal characters
         verify( ext[0] != "!", "Extension '%s' cannot start with '!' (this symbol indicates the temp directory)", ext, exception=ValueError )
         verify( ext[0] != "~", "Extension '%s' cannot start with '~' (this symbol indicates the user's directory)", ext, exception=ValueError )
+        verify( ext[0] != "?", "Extension '%s' cannot start with '?' (this symbol indicates a temporary directory)", ext, exception=ValueError )
         return "." + ext
             
     # -- public utilities --
@@ -1302,6 +1315,7 @@ class SubDir(object):
         verify( file[0] != "?", "Key '%s' cannot start with '?' (this symbol indicates the user's directory)", file, exception=ValueError )
 
         ext = self.auto_ext( ext )
+        assert len(ext) == 0 or ext[0]==".", ("Extension error", ext)
         if len(ext) > 0 and file[-len(ext):] != ext:
             return self._path + file + ext
         return self._path + file
@@ -2924,7 +2938,7 @@ class SubDir(object):
                          
         You can define certain types as non-functional for *all* functions wrapped
         by :meth:`cdxcore.subdir.SubDir.cache` when construcing
-        the :class:`cdccore.cache.CacheController` parameter for in :class:`cdxcore.subdir.SubDir`:
+        the :class:`cdxcore.cache.CacheController` parameter for in :class:`cdxcore.subdir.SubDir`:
         
         .. code-block:: python
 
@@ -2949,7 +2963,7 @@ class SubDir(object):
         
         Key default behaviours of :class:`cdxcore.uniquehash.NamedUniqueHash`:
             
-        * The ``NamedUniqueHash`` hashes objects via their ``__dict__`` or ``__slot__`` members.
+        * :class:`cdxcore.uniquehash.NamedUniqueHash` hashes objects via their ``__dict__`` or ``__slot__`` members.
           This can be overwritten for a class by implementing ``__unique_hash__``; see :class:`cdxcore.uniquehash.NamedUniqueHash`.
           
         * Function members of objects or any members starting with '_' are not hashed
@@ -3133,7 +3147,8 @@ class SubDir(object):
             a.x = 2
             _ = a.f(y=1)   # 'a' changed: compute f and store result
             b = A(x=2)
-            _ = b.f(y=1)   # same unique call ID as previous call -> restore result from disk
+            _ = b.f(y=1)   # same unique call ID as previous call
+                           # -> restore result from disk
             
         **WARNING**
         :class:`cdxcore.uniquehash.UniqueHash` does *not* by default process members of objects or dictionaries
@@ -3154,7 +3169,8 @@ class SubDir(object):
         .. code-block:: python
         
             from cdxcore.subdir import SubDir, version
-            cache   = SubDir("!/.cache", cache_controller : CacheController(debug_verbose=Context("all")))
+            cache   = SubDir("!/.cache", cache_controller =
+                             CacheController(debug_verbose=Context("all")))
             cache.delete_all_content()   # for illustration
 
             class A(object):
@@ -3229,7 +3245,8 @@ class SubDir(object):
             @cache.cache_class("0.1")
             class A(object):
                 
-                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})")  # <-- 'self' is not passed to the lambda function
+                # NOTE: 'self' is not passed to the lambda function "uid"
+                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})") 
                 def __init__(self, x, debug):
                     if debug:
                         print("__init__",x)
@@ -3370,8 +3387,6 @@ class SubDir(object):
             function name. If there is already a parameter ``func_name`` for the function, an error will be raised.
             Use this flag to change the parameter name. Example::
 
-            .. code-block:: python
-
                 from cdxcore.subdir import SubDir
                 cache = SubDir("?/temp")
 
@@ -3455,7 +3470,7 @@ class SubDir(object):
                   xy = f( x=1, y=2 )
                   uid = f.cache_info.filename
         """
-        return CacheCallable(subdir = self,
+        return _CacheCallable(subdir = self,
                              version = version,
                              dependencies = dependencies,
                              label = label,
@@ -3726,7 +3741,7 @@ def _expected_str_fmt_args(fmt: str):
                          keywords=kws
                        )
 
-class CacheCallable(object):
+class _CacheCallable(object):
     """
     Wrapper for a cached function.
     
@@ -3857,7 +3872,7 @@ class CacheCallable(object):
         init_cache_callable = getattr(C__init__, "init_cache_callable", None)
         if init_cache_callable is None:
             raise RuntimeError("'{F.__qualname__}': must also decorate __init__")
-        assert type(init_cache_callable).__name__ == CacheCallable.__name__, (f"*** Internal error: '{C.__qualname__}': __init__ has wrong type for 'init_cache_callable': {type(init_cache_callable)} ?")
+        assert type(init_cache_callable).__name__ == _CacheCallable.__name__, (f"*** Internal error: '{C.__qualname__}': __init__ has wrong type for 'init_cache_callable': {type(init_cache_callable)} ?")
         
         C__init__.init_cache_callable = None # tell the __init__ wrapper we have processed this information
         

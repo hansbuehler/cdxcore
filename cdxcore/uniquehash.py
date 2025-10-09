@@ -1096,7 +1096,7 @@ def unique_hash64( *args, **kwargs ) -> str:
 def named_unique_filename48_8( label : str, *args, **kwargs ) -> str:
     """
     Returns a unique and valid filename which is composed of `label` and a unique ID
-    computed using all of `label`, `args`, and `kwargs`.
+    computed using all of `label`, `args`, and `kwargs`. ``label`` is not assumed to be unique.
     
     Consider a use cases where an experiment defined by ``definition``
     has produced ``results`` which we wish to :mod:`pickle` to disk.

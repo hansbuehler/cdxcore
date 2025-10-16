@@ -300,12 +300,14 @@ To test existence of 'file' in a directory, use one of::
 Deleting files
 ^^^^^^^^^^^^^^
 
-To delete a 'file', use any of the following::
+To delete a file, use either of the following::
 
     subdir.delete("file")
     del subdir['file']
 
-All of these are *silent*, and will not throw errors if ``file`` does not exist.
+All of these are *silent*, and will by default not throw errors if ``file`` does not exist.
+
+
 In order to throw an error use::
 
     subdir.delete('file', raise_on_error=True)
@@ -320,7 +322,7 @@ A few member functions assist in deleting a number of files:
 Caching
 ^^^^^^^
 
-A :class:`cdxcore.subdir.SubDir` object offers an advanced context for caching calls to :class:`collection.abc.Callable``
+A :class:`cdxcore.subdir.SubDir` object offers an advanced context for caching calls to :class:`collection.abc.Callable`
 objects with :dec:`cdxcore.subdir.SubDir.cache`.
 
 .. code-block:: python
@@ -341,13 +343,13 @@ This involves keying the cache by the function name and its current parameters u
 and monitoring the functions version using :dec:`cdxcore.version.version`. The caching behaviour itself can be controlled by
 specifying the desired :class:`cdxcore.subdir.CacheMode`.
 
-See :dec:`cdxcore.subdir.SubDir.cache` for full feature set.
+**See** :dec:`cdxcore.subdir.SubDir.cache` **for full feature set.**
 
 Import
 ------
 .. code-block:: python
 
-    import cdxcore.uniquehash as uniquehash
+    from cdxcore.subdir import SubDir
     
 Documentation
 -------------
@@ -786,8 +788,11 @@ class SubDir(object):
 
         * ``'.'`` for current directory.
         * ``'~'`` for home directory.
-        * ``'!'`` for system default temp directory.
-        * ``'?'`` for a temporary temp directory. In this case ``delete_everything_upon_exit`` is always ``True``.
+        * ``'!'`` for system default temp directory. Note that outside any administator imposed policies, sub directories 
+          of ``!`` are permanent.
+        * ``'?'`` for a temporary temp directory; see :meth:`cdxcore.subdir.SubDir.temp_temp_dir` regarding semantics.
+        Most importantly, every ``SubDir`` will be constructed with a different (truly) temporary sub directory.
+        If used,  ``delete_everything_upon_exit`` is always ``True``.
  
         The directory name may also contain a formatting string for defining ``ext`` on the fly:
         for example use ``"!/test;*.bin"`` to specify a directory ``"test"`` in the user's
@@ -1285,9 +1290,7 @@ class SubDir(object):
 
     def full_file_name(self, file : str, *, ext : str = None) -> str:
         """
-        Returns fully qualified file name.
-        
-        The function tests that ``file`` does not contain directory information.
+        Returns fully qualified file name, based on a given unqualified file name (e.g. without path or extension).
 
         Parameters
         ----------
@@ -1319,13 +1322,25 @@ class SubDir(object):
         if len(ext) > 0 and file[-len(ext):] != ext:
             return self._path + file + ext
         return self._path + file
-    full_file_name = full_file_name # backwards compatibility
 
     @staticmethod
     def temp_dir() -> str:
         """
         Return system temp directory. Short-cut to :func:`tempfile.gettempdir`.
-        Result contains trailing ``'/'``.
+        
+        This function creates a "permanent temporary" directoy (i.e. under ``/tmp/`` for Linux or ``%TEMP%`` for Windows).
+        Most importantly, it is somewhat persisient: you expect it to be there after a reboot.
+        
+        To cater for the use case of a one-off temporary directory use :meth:`cdxcore.subdir.SubDir.temp_temp_dir`.
+
+        This function is called when the ``!`` parameter is used when constructing
+        :class:`cdxcore.subdir.SubDir` objects.
+
+        Returns
+        -------
+            Path : str
+                This function returns a string contains trailing ``'/'``.
+       
         """
         d = tempfile.gettempdir()
         assert len(d) == 0 or not (d[-1] == '/' or d[-1] == '\\'), ("*** Internal error 13123212-1", d)
@@ -1334,9 +1349,17 @@ class SubDir(object):
     @staticmethod
     def temp_temp_dir() -> str:
         """
-        Return a temporary temp directory name using :func:`tempfile.mkdtemp`. 
-        Noet that this function will return a different directory upon every function call.
+        Returns a temporary temp directory name using :func:`tempfile.mkdtemp` which is temporary 
+        for the current process and thread, and is not guaranteed to be  persisted e.g. when the system is rebooted.        
+        Accordingly, this function will return a different directory upon every function call.
 
+        This function is called when the ``?/`` is used when constructing
+        :class:`cdxcore.subdir.SubDir` objects.
+
+        **Implementation notoce:**
+        
+        In most cirsumstances, a temporary temp directioy is *not* deleted from a system upon reboot.
+        Do not rely on regular clean ups.
         It is strongly recommended to clean up after usage, for example using the pattern::
             
             from cdxcore.subdir import SubDir
@@ -1349,7 +1372,11 @@ class SubDir(object):
             finally:
                 shutil.rmtree(tmp_dir)
  
-        Result contains trailing ``'/'``.
+        Returns
+        -------
+            Path : str
+                This function returns a string contains trailing ``'/'``.
+       
         """
         d = tempfile.mkdtemp()
         assert len(d) == 0 or not (d[-1] == '/' or d[-1] == '\\'), ("*** Internal error 13123212-1", d)
@@ -1359,7 +1386,15 @@ class SubDir(object):
     def working_dir() -> str:
         """
         Return current working directory. Short-cut for :func:`os.getcwd`.
-        Result contains trailing ``'/'``.
+
+        This function is called when the ``./`` is used when constructing
+        :class:`cdxcore.subdir.SubDir` objects.
+
+        Returns
+        -------
+            Path : str
+                This function returns a string contains trailing ``'/'``.
+       
         """
         d = os.getcwd()
         assert len(d) == 0 or not (d[-1] == '/' or d[-1] == '\\'), ("*** Internal error 13123212-2", d)
@@ -1369,7 +1404,15 @@ class SubDir(object):
     def user_dir() -> str:
         """
         Return current working directory. Short-cut for :func:`os.path.expanduser` with parameter ``' '``.
-        Result contains trailing ``'/'``.
+
+        This function is called when the ``~/`` is used when constructing
+        :class:`cdxcore.subdir.SubDir` objects.
+
+        Returns
+        -------
+            Path : str
+                This function returns a string contains trailing ``'/'``.
+       
         """
         d = os.path.expanduser('~')
         assert len(d) == 0 or not (d[-1] == '/' or d[-1] == '\\'), ("*** Internal error 13123212-3", d)
@@ -1709,7 +1752,7 @@ class SubDir(object):
         -------
         Content : type | list
             For a single ``file`` returns the content of the file if successfully read, or ``default`` otherwise.
-            If ``file``` is a list, this function returns a list of contents.
+            If ``file`` is a list, this function returns a list of contents.
                 
         Raises
         ------
@@ -1924,7 +1967,7 @@ class SubDir(object):
             obj :
                 Object to write, or list thereof if ``file`` is a list.
                 
-            raise_on_error : bool
+            raise_on_error : bool, default ``
                 If ``False``, this function will return ``False`` upon failure.
 
             version : str | None, default ``None``
@@ -2352,15 +2395,15 @@ class SubDir(object):
 
         Parameters
         ----------
-       file :
-           Filename, or list of filenames.
-           
-       ext : str | None, default ``None``
-           Extension to be used:
-               
-           * ``None`` for the directory default.
-           * ``""`` to not use an automatic extension.
-           * ``"*"`` to use the extension associated with the format of the directory.
+        file :
+            Filename, or list of filenames.
+            
+        ext : str | None, default ``None``
+            Extension to be used:
+                
+            * ``None`` for the directory default.
+            * ``""`` to not use an automatic extension.
+            * ``"*"`` to use the extension associated with the format of the directory.
 
         Returns
         -------
@@ -2498,7 +2541,7 @@ class SubDir(object):
         
         The file name is generated by applying a unique hash
         to the current directory, ``file``, the current process and thread IDs, and
-        :func:`datetime.datetime.now`.
+        :meth:`datetime.datetime.now`.
         
         If ``file`` is not ``None`` it will be used as a label.
         
@@ -2951,16 +2994,17 @@ class SubDir(object):
             ctrl    = CacheController(exclude_arg_types=[Debugger])   # <- exclude 'Debugger' parameters from hasing
             cache   = SubDir("!/.cache")
 
-            @cache.cache("0.1", dependencies=[f], exclude_args='debug')
+            @cache.cache("0.1", dependencies=[f])
             def g(x,y,debugger : Debugger): # <-- 'debugger' is a non-functional parameter
                 debugger.output(f"h(x={x},y={y})")  
                 return g(x,y)**2
             
         **Unique IDs and File Naming**
                          
-        The unique call ID of a decorated functions is by default generated by its fully qualified name
+        The *nique call ID of a decorated function* is by logicaly generated by its fully qualified name
         and a unique hash of its functional parameters.
         
+        By default, :class:`cdxcore.uniquehash.NamedUniqueHash` is used to compute unique hashes.
         Key default behaviours of :class:`cdxcore.uniquehash.NamedUniqueHash`:
             
         * :class:`cdxcore.uniquehash.NamedUniqueHash` hashes objects via their ``__dict__`` or ``__slot__`` members.
@@ -3044,11 +3088,11 @@ class SubDir(object):
             
         In particular, the filename is now ``h2(1,1).pck`` without any hash.
         If ``uid`` is used the parameter of the function are not hashed. Like ``label`` 
-        the parameter ``uid`` can also be a :func:`str.format` string or a callable.
+        the parameter ``uid`` can also be a :meth:`str.format` string or a callable.
             
         **Controlliong which Parameters to Hash**
             
-        To specify which parameters are pertinent for identifying a unique id, use:
+        To specify which parameters are pertinent for identifying a unique ID, use:
             
         * ``include_args``: list of functions arguments to include. If ``None``, use all parameteres as input in the next step
         
@@ -3057,7 +3101,7 @@ class SubDir(object):
         * ``exclude_arg_types``: a list of types to exclude.
           This is helpful if control flow is managed with dedicated data types.
           An example of such a type is :class:`cdxcore.verbose.Context` which is used to print hierarchical output messages.
-          Types can be globally excluded using a :class:`cdccore.cache.CacheController`
+          Types can be globally excluded using a :class:`cdxcore.subdir.CacheController`
           when calling
           :class:`cdxcore.subdir.SubDir`.
                        
@@ -3150,7 +3194,8 @@ class SubDir(object):
             _ = b.f(y=1)   # same unique call ID as previous call
                            # -> restore result from disk
             
-        **WARNING**
+        **WARNING:**
+
         :class:`cdxcore.uniquehash.UniqueHash` does *not* by default process members of objects or dictionaries
         which start with a "_". This behaviour can be changed using :class:`cdxcore.subdir.CacheController`.
         For reasonably complex objects it is recommended to implement for your objects 
@@ -3311,12 +3356,15 @@ class SubDir(object):
         version : str | None, default ``None``
             Version of the function.
             
-            * If ``None`` then a common `F`` must be decorated manually with :dec:`cdxcore.version.version`.
-            * If set, the function ``F`` is automatically first decorated with :dec:`cdxcore.version.version` for you.
+            * If ``None`` then a common ``F`` must be decorated manually 
+              ith :dec:`cdxcore.version.version`.
+            * If set, the function ``F`` is automatically first decorated
+              with :dec:`cdxcore.version.version` for you.
             
         dependencies : list[type] | None, default ``None``
             A list of version dependencies, either by reference or by name.
-            See :dec:`cdxcore.version.version` for details on name lookup if strings are used.
+            See :dec:`cdxcore.version.version` for details on
+            name lookup if strings are used.
         
         label : str | Callable | None, default ``None``
             Specify a human-readable label for the function call given its parameters.
@@ -3404,7 +3452,8 @@ class SubDir(object):
             
             .. code-block:: python
 
-                @cache.cache("0.1", label=lambda new_func_name, func_name, x : f"{new_func_name}(): {func_name} {x}", name_of_func_name_arg="new_func_name")
+                @cache.cache("0.1", x : f"{new_func_name}(): {func_name} {x}", 
+                                    name_of_func_name_arg="new_func_name")
                 def f( func_name, x ):
                     pass
 
@@ -3412,25 +3461,26 @@ class SubDir(object):
         -------
         Decorated F: Callable
         
-            A decorator ``cache(F)`` whose ``__call__`` implements the cached call to ``F``.
+            A decorated ``F`` whose ``__call__`` implements the cached call to ``F``.
             
-            This callable has a member ``cache_info``
+            This decorator has a member ``cache_info``
             of type :class:`cdxcore.subdir.CacheInfo`
             which can be used to access information on caching activity.
 
-            * Information available at any time after decoration:**
+            * Information available at any time after decoration:
                 
               * ``F.cache_info.name`` : qualified name of the function
               * ``F.cache_info.signature`` : signature of the function
         
-            * Additonal information available during a call to a decorated function F, and thereafter:                    
+            * Additonal information available during a call to a decorated function ``F``, and thereafter
+              (these proprties are not thread-safe):
                 
               * ``F.cache_info.version`` : unique version string reflecting all dependencies.
               * ``F.cache_info.filename`` : unique filename used for caching logic during the last function call.
               * ``F.cache_info.label`` : last label generated, or ``None``.
               * ``F.cache_info.arguments`` : arguments parsed to create a unique call ID, or ``None``.
 
-            * Additonal information available after a call to ``F``:
+            * Additonal information available after a call to ``F`` (these proprties are not thread-safe):
                 
               * ``F.cache_info.last_cached`` : whether the last function call returned a cached object.
                 
@@ -3453,6 +3503,7 @@ class SubDir(object):
               If ``True``, then the decorated function will return a tuple ``uid, result``
               where ``uid`` is the unique filename generated for this function call,
               and where ``result`` is the actual result from the function, cached or not.
+              This ``uid`` is thread-safe.
               
               Usage::
                   

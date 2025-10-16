@@ -504,10 +504,10 @@ class DynaAx(_DynaDeferred):
     
     def plot(self, *args, scalex=True, scaley=True, data=None, **kwargs ):
         """
-        Wrapper around :func:`matplotlib.axes.Axes.plot`.
+        Wrapper around :meth:`matplotlib.axes.Axes.plot`.
 
         This function wrapper does not support the ``data`` interface
-        of :func:`matplotlib.axes.Axes.plot`.
+        of :meth:`matplotlib.axes.Axes.plot`.
 
         If automatic limits are not used, this is a wrapper with deferred pass-through.
         If automatic limits are used, then this function will update 
@@ -516,7 +516,7 @@ class DynaAx(_DynaDeferred):
         Parameters
         ----------
             args, scalex, scaley, data, kwargs : ...
-                See :func:`matplotlib.axes.plot`.
+                See :meth:`matplotlib.axes.plot`.
             
         Returns
         -------
@@ -626,12 +626,12 @@ class _DynaGridSpec(_DynaDeferred):
 
 class DynaFig(_DynaDeferred):
     """
-    Deferred wrapper around :class:`matplotlib.pyplot.figure`.
+    Deferred wrapper around :class:`matplotlib.figure.Figure`.
     
-    Wraps matplotlib :class:`matplotlib.pyplot.figure`. Provides a simple :meth:`cdxcore.dynaplot.DynaFig.add_subplot` without the need to pre-specify axes positions
+    Provides a simple :meth:`cdxcore.dynaplot.DynaFig.add_subplot` without the need to pre-specify axes positions
     as is common for :mod:`matplotlib`.
     
-    See :func:`cdxcore.dynaplot.figure` for more information.
+    Construct elements of this class with :func:`cdxcore.dynaplot.figure`.
     """
 
     def __init__(self, title    : str|None = None, *,
@@ -645,7 +645,10 @@ class DynaFig(_DynaDeferred):
         """
         __init__
         """
-        
+        if not fig_size is None:
+            verify( not 'figsize' in fig_kwargs, "Cannot specify both `figsize` and `fig_size`", exception=ValueError)
+            fig_kwargs['figsize'] = fig_size
+                
         self._hdisplay     = None
         self._axes         = []   #: 
                                  #: 
@@ -674,10 +677,6 @@ class DynaFig(_DynaDeferred):
         #: (which sets ``%matplotlib inline``).
 
         verify( not 'cols' in fig_kwargs, "Unknown keyword 'cols'. Did you mean 'columns'?", exception=ValueError)
-        
-        if not fig_size is None:
-            verify( not 'figsize' in fig_kwargs, "Cannot specify both `figsize` and `fig_size`", exception=ValueError)
-            fig_kwargs['figsize'] = fig_size
         
         dyna_title = ( title if len(title) <= 20 else ( title[:17] + "..." ) ) if not title is None else None
         _DynaDeferred.__init__(self, f"figure('{dyna_title}')" if not title is None else "figure()" )
@@ -808,6 +807,25 @@ class DynaFig(_DynaDeferred):
         return ax
 
     add_plot = add_subplot
+
+    def add_subplots( self, titles : list[str]|int ) -> tuple[DynaAx]:
+        """
+        Generate a number of sub-plots in one function call.
+        
+        Parameters
+        ----------
+        titles : list[str] | int
+            Either a list of plot titles, or a number.
+            
+        Returns
+        -------
+            Sub-plots: tuple
+                A tuple of sub-plots, one for each ``title``.
+        """
+        if isinstance( titles, int ):
+            return tuple( self.add_subplot() for _ in range(titles) )
+        else:
+            return tuple( self.add_subplot(title) for title in titles )
     
     def add_axes( self, 
                   rect      : tuple, 
@@ -949,7 +967,8 @@ class DynaFig(_DynaDeferred):
         """
         Saves the figure to a file.
         
-        Wrapper around :func:`matplotlib.pyplot.savefig`. Essentially, this function writes the figure to a file]
+        Wrapper around :func:`matplotlib.pyplot.savefig`. Essentially, `this function <https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html>`__
+        writes the figure to a file
         rather than displaying itl.
 
         Parameters
@@ -1008,7 +1027,8 @@ class DynaFig(_DynaDeferred):
     
     @staticmethod
     def store():
-        """ Create a FigStore(). Such a store allows managing graphical elements (artists) dynamically. """
+        """ Create a :class:`cdxcore.dynaplot.FigStore`. Such a store allows managing graphical elements (artists) dynamically. See the examples
+        in the introduction. """
         return FigStore()
 
     def close(self, render          : bool = True, 
@@ -1022,7 +1042,7 @@ class DynaFig(_DynaDeferred):
         Parameters
         ----------
             render : bool, default ``True``
-                If  ``True``, the default, this function will call :meth:`cdxcore.dynaplot.DynaFig,render` and therefore renders the figure before closing the figure.
+                If  ``True``, the default, this function will call :meth:`cdxcore.dynaplot.DynaFig.render` and therefore renders the figure before closing the figure.
             clear  : bool, default ``False``
                 If ``True``, all axes will be cleared. *This is experimental.* The default is ``False``.
         """
@@ -1052,7 +1072,7 @@ class DynaFig(_DynaDeferred):
         
     def delaxes( self, ax : DynaAx, *, render : bool = False ):
         """
-        Equivalent of :func:`matplotlib.figure.Figure.delaxes`, but this function can also take a list.
+        Equivalent of :meth:`matplotlib.figure.Figure.delaxes`, but this function can also take a list.
         """
         verify( not self._closed, "Cannot call render() after close() was called")
         if isinstance( ax, Collection ):
@@ -1085,6 +1105,7 @@ def figure( title    : str|None = None, *,
             columns  : int = 5,
             tight    : bool = True,
             draw_mode: int = MODE.DEFAULT,
+            add_plots: int|list|None = None,
             **fig_kwargs ):
     """
     Creates a dynamic figure of type :class:`cdxcore.dynaplot.DynaFig`.
@@ -1101,7 +1122,8 @@ def figure( title    : str|None = None, *,
     
     2) Call :meth:`cdxcore.dynaplot.DynaFig.render` to place those plots.
     
-    3) Call :meth:`cdxcore.dynaplot.DynaFig.close` to close the figure and avoid duplicate copies in Jupyter.
+    3) Call :meth:`cdxcore.dynaplot.DynaFig.close` to close the figure and avoid duplicate copies in Jupyter; a convient wrapper is to use
+      ``with`` to ensure ``close()`` gets called. This pattern is used below.
     
     **Examples:**
 
@@ -1131,6 +1153,8 @@ def figure( title    : str|None = None, *,
     defer all other function calls to the figure
     object until :meth:`cdxcore.dynaplot.DynaFig.render`
     or :meth:`cdxcore.dynaplot.DynaFig.close` are called.
+    Whenever you use ``with`` at the end of the context window :meth:`cdxcore.dynaplot.DynaFig.close`
+    will be called for you.
     
     The following direct members are important for using the framework:
     
@@ -1155,7 +1179,7 @@ def figure( title    : str|None = None, *,
             An optional title which will be passed to :meth:`matplotlib.pyplot.suptitle`.
             
         fig_size : tuple[int] | None, default ``None``
-            By default the ``fig_size`` of the underlying :class:`matplotlib.pyplot.figure`
+            By default the ``fig_size`` of the underlying :func:`matplotlib.pyplot.figure`
             will be derived from the number of plots vs ``cols``, ``row_size`` and ``col_size``
             as ``(col_size* (N%col_num),  row_size (N//col_num))``.
             
@@ -1178,7 +1202,7 @@ def figure( title    : str|None = None, *,
             
             Note that when ``tight`` is ``True`` and :meth:`cdxcore.dynaplot.DynaFig.add_axes` 
             is called a :class:`UserWarning` is generated. Turn ``tight`` off to avoid this.
-
+            
         draw_mode : int, default ``MODE.DEFAULT``
             A combination of :class:`cdxcore.dynaplot.MODE` flags on how to draw plots
             once they were rendered. The required function call differs by IPython platform.
@@ -1199,7 +1223,7 @@ def figure( title    : str|None = None, *,
         figure: :class:`cdxcore.dynaplot.DynaFig`
             A dynamic figure. 
     """
-    return DynaFig( title=title,
+    fig = DynaFig(  title=title,
                     row_size=row_size,
                     col_size=col_size,
                     fig_size=fig_size,
@@ -1208,6 +1232,7 @@ def figure( title    : str|None = None, *,
                     draw_mode=draw_mode,
                     **fig_kwargs
                     )
+    return fig
 
 # ----------------------------------------------------------------------------------
 # Utility class for animated content
@@ -1369,8 +1394,8 @@ def color(i : int, table : str ="css4"):
     i : int
         Integer number. Colors will be rotated.
 
-    table : str, optional
-        Which color table from :func:`matplotlib.colors` to use: `"css4"`, `"base"`, `"tableau"` or `"xkcd"`.
+    table : str, default ``css4``
+        Which `color table from matplotlib <https://matplotlib.org/stable/users/explain/colors/index.html>`__ to use: `"css4"`, `"base"`, `"tableau"` or `"xkcd"`.
         Default is ``"css4"``.
 
     Returns

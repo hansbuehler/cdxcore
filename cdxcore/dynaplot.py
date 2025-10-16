@@ -808,7 +808,7 @@ class DynaFig(_DynaDeferred):
 
     add_plot = add_subplot
 
-    def add_subplots( self, titles : list[str]|int ) -> tuple[DynaAx]:
+    def add_subplots( self, *titles ) -> tuple[DynaAx]:
         """
         Generate a number of sub-plots in one function call.
         
@@ -822,7 +822,9 @@ class DynaFig(_DynaDeferred):
             Sub-plots: tuple
                 A tuple of sub-plots, one for each ``title``.
         """
-        if isinstance( titles, int ):
+        if len(titles) == 0:
+            return ()
+        if len(titles) == 1 and isinstance(titles[0], int):
             return tuple( self.add_subplot() for _ in range(titles) )
         else:
             return tuple( self.add_subplot(title) for title in titles )

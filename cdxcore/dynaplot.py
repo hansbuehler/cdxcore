@@ -401,18 +401,18 @@ class DynaAx(_DynaDeferred):
         else:
             assert not col is None and spec_pos is None and rect is None, "Consistency error 4"
             
-        self.fig_id      = fig_id
-        self.fig_list    = fig_list
-        self.row         = row
-        self.col         = col
-        self.spec_pos    = spec_pos
-        self.axes_rect   = rect
-        self.title       = title
-        self.plots       = {}
-        self.kwargs      = dict(kwargs)
-        self.ax          = None
-        self.projection  = projection
-        self.__auto_lims = None
+        self._fig_id      = fig_id
+        self._fig_list    = fig_list
+        self._row         = row
+        self._col         = col
+        self._spec_pos    = spec_pos
+        self._axes_rect   = rect
+        self._title       = title
+        self._plots       = {}
+        self._kwargs      = dict(kwargs)
+        self._ax          = None
+        self._projection  = projection
+        self.__auto_lims  = None
         assert not self in fig_list
         
         if not row is None:
@@ -433,58 +433,58 @@ class DynaAx(_DynaDeferred):
         Creates the underlying (deferred) :class:`matplotlib.pyplot.axis` by calling all "caught" functions in sequece for the figure ``plt_fig``.
         'rows' and 'cols' count the columns and rows specified by add_subplot() and are ignored by add_axes()
         """
-        assert self.ax is None, "Internal error; function called twice?"
+        assert self._ax is None, "Internal error; function called twice?"
         
         def handle_kw_share( kw ):
             """ handle sharex and sharey """
-            v = self.kwargs.pop(kw, None)
+            v = self._kwargs.pop(kw, None)
             if v is None:
                 return
             if isinstance( v, Axes ):
-                self.kwargs[kw] = v
+                self._kwargs[kw] = v
             assert isinstance( v, DynaAx ), ("Cannot",kw,"with type:", type(v))
-            assert not v.ax is None, ("Cannot", kw, "with provided axis: it has bnot been creatred yet. That usually means that you mnixed up the order of the plots")
-            self.kwargs[kw] = v.ax
+            assert not v._ax is None, ("Cannot", kw, "with provided axis: it has bnot been creatred yet. That usually means that you mnixed up the order of the plots")
+            self._kwargs[kw] = v._ax
             
         handle_kw_share("sharex")
         handle_kw_share("sharey")
         
-        if not self.row is None:
+        if not self._row is None:
             # add_axes
-            num     = 1 + self.col + self.row*cols
-            self.ax = plt_fig.add_subplot( rows, cols, num, projection=self.projection, **self.kwargs )
-        elif not self.spec_pos is None:
+            num     = 1 + self._col + self._row*cols
+            self._ax = plt_fig.add_subplot( rows, cols, num, projection=self._projection, **self._kwargs )
+        elif not self._spec_pos is None:
             # add_subplot with grid spec
-            self.ax = plt_fig.add_subplot( self.spec_pos.deferred_result, projection=self.projection, **self.kwargs )            
+            self._ax = plt_fig.add_subplot( self._spec_pos.deferred_result, projection=self._projection, **self._kwargs )            
         else:
             # add_axes
-            self.ax = plt_fig.add_axes( self.axes_rect, projection=self.projection, **self.kwargs )        
+            self._ax = plt_fig.add_axes( self._axes_rect, projection=self._projection, **self._kwargs )        
 
-        if not self.title is None:
-            self.ax.set_title(self.title)
+        if not self._title is None:
+            self._ax.set_title(self._title)
 
         # handle common functions which expect an 'axis' as argument
         # and auto-translate any DynaAx's 
         # Just sharex() and sharey() for the moment.
-        ref_ax    = self.ax
+        ref_ax    = self._ax
         ax_sharex = ref_ax.sharex
         def sharex(self, other):
             if isinstance(other, DynaAx):
-                verify( not other.ax is None, "Cannot sharex() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
-                other = other.ax
+                verify( not other._ax is None, "Cannot sharex() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
+                other = other._ax
             return ax_sharex(other)
         ref_ax.sharex = types.MethodType(sharex,ref_ax)
 
         ax_sharey = ref_ax.sharey
         def sharey(self, other):
             if isinstance(other, DynaAx):
-                verify( not other.ax is None, "Cannot sharey() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
-                other = other.ax
+                verify( not other._ax is None, "Cannot sharey() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
+                other = other._ax
             return ax_sharey(other)
         ref_ax.sharey = types.MethodType(sharey,ref_ax)
 
         # call all deferred operations
-        self.deferred_resolve( self.ax )
+        self.deferred_resolve( self._ax )
         
     def remove(self):
         """
@@ -493,10 +493,10 @@ class DynaAx(_DynaDeferred):
         a removal from the actual visualization until :meth:`cdxcore.dynaplot.DynaFig.render` 
         is called.
         """
-        assert self in self.fig_list, ("Internal error: axes not contained in figure list")
-        self.fig_list.remove(self)
-        self.ax.remove()
-        self.ax = None
+        assert self in self._fig_list, ("Internal error: axes not contained in figure list")
+        self._fig_list.remove(self)
+        self._ax.remove()
+        self._ax = None
         #gc.collect()
         
     # automatic limit handling
@@ -601,7 +601,7 @@ class _DynaGridSpec(_DynaDeferred):
         self.grid   = None
         self.nrows  = nrows
         self.ncols  = ncols
-        self.kwargs = dict(kwargs)
+        self._kwargs = dict(kwargs)
         _DynaDeferred.__init__(self,f"gridspec#{cnt}({nrows},{ncols})")
 
     def __str__(self):
@@ -610,12 +610,12 @@ class _DynaGridSpec(_DynaDeferred):
     def _initialize( self, plt_fig ):
         """ Lazy initialization """
         assert self.grid is None, ("_initialized twice?")
-        if len(self.kwargs) == 0:
+        if len(self._kwargs) == 0:
             self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols )
         else:
             # wired error in my distribution
             try:
-                self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols, **self.kwargs )
+                self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols, **self._kwargs )
             except TypeError as e:
                 estr = str(e)
                 if estr != "GridSpec.__init__() got an unexpected keyword argument 'kwargs'":
@@ -656,13 +656,15 @@ class DynaFig(_DynaDeferred):
         self._fig          = None
         self._row_size     = int(row_size)
         self._col_size     = int(col_size)
-        self._cols         = int(columns)
+        self._cols         = int(columns) if not columns is None else None
         self._tight        = bool(tight)
         self._tight_para   = None
         self._fig_kwargs   = dict(fig_kwargs)
         if self._tight:
             self._fig_kwargs['tight_layout'] = True
-        verify( self._row_size > 0 and self._col_size > 0 and self._cols > 0, "Invalid input.", exception=ValueError)
+        verify( self._row_size > 0, "'row_size' must be positive", exception=ValueError)
+        verify( self._col_size > 0, "'col_size' must be positive", exception=ValueError)
+        verify( self._cols is None or self._cols > 0, "'columns' must be positive or None", exception=ValueError)
         self._this_row    = 0
         self._this_col    = 0
         self._max_col     = 0
@@ -788,9 +790,16 @@ class DynaFig(_DynaDeferred):
             
         else:
             new_row = bool(new_row) if not new_row is None else False
-            if (self._this_col >= self._cols) or ( new_row and not self._this_col == 0 ):
-                self._this_col = 0
-                self._this_row = self._this_row + 1
+            
+            if new_row:
+                if self._this_col > 0:
+                    self._this_row = self._this_row + 1
+                    self._this_col = 0
+            else:
+                if not self._cols is None and ( self._this_col >= self._cols ):
+                    self._this_row = self._this_row + 1
+                    self._this_col = 0
+
             if self._max_col < self._this_col:
                 self._max_col = self._this_col
             ax = DynaAx( fig_id=hash(self),
@@ -808,14 +817,36 @@ class DynaFig(_DynaDeferred):
 
     add_plot = add_subplot
 
-    def add_subplots( self, *titles ) -> tuple[DynaAx]:
+    def add_subplots( self, *titles, sharex : DynaAx|bool|None = None, sharey : DynaAx|bool|None = None, **kwargs ) -> list[DynaAx]:
         """
         Generate a number of sub-plots in one function call.
+        Use strings to generate subplots with such titles, ``None`` for a new row, and integers
+        to mass-generate a number of plots.
         
+        This example generates a 2x2 block of plots::
+            
+            from cdxcore.dynaplot import figure
+            
+            with figure("Test", col_size=4, row_size=4) as fig:
+                axA1, axA1, axB1, axB2 = fig.add_subplot("A1", "A2", None, "B1", "B2")
+            
         Parameters
         ----------
-        titles : list[str] | int
-            Either a list of plot titles, or a number.
+        titles : list
+            A list if strings, integers and ``None``'s: a string generates a sub-plot with that title;
+            an int generates as many subplots, and ``None`` starts a new row.
+            
+            Note that the number of columns is usually limited by the ``columns`` parameter
+            when :func:`cdxcore.dynaplot.figure` is called. You can set ``columns`` to ``None``
+            to freely generate blocks of graphs.
+            
+        sharex : DynaAx | bool | None, default ``None``
+            Can be used to share the x axis either with a specific axis, or with the first axis generated
+            by this function call (``True``). If ``False`` or ``None`` this keyword has no effect.
+            
+        sharey : DynaAx | bool | None, default ``None``
+            Can be used to share the y axis either with a specific axis, or with the first axis generated
+            by this function call (``True``). If ``False`` or ``None`` this keyword has no effect.
             
         Returns
         -------
@@ -824,10 +855,31 @@ class DynaFig(_DynaDeferred):
         """
         if len(titles) == 0:
             return ()
-        if len(titles) == 1 and isinstance(titles[0], int):
-            return tuple( self.add_subplot() for _ in range(titles) )
-        else:
-            return tuple( self.add_subplot(title) for title in titles )
+        r = []
+        for tt in titles:
+            if tt is None:
+                self.next_row()
+            elif isinstance(tt,int):
+                verify( tt>=0, "'titles': found negative integer?", exception=ValueError)
+                r += [ self.add_subplot(**kwargs) for _ in range(tt) ]
+            else:
+                verify( isinstance(tt,str), lambda : f"'titles' must contain None, int's or strings. Found type {type(tt)}.", exception=ValueError)
+                r.append( self.add_subplot(tt, **kwargs) )
+        start = 0
+        if isinstance(sharex, bool):
+            start  = 1
+            sharex = None if not sharex or len(r) == 0 else r[0]
+        if not sharex is None:
+            for ax in r[start:]:
+                ax.sharex(sharex)
+        start = 0
+        if isinstance(sharey, bool):
+            start  = 1
+            sharey = None if not sharey or len(r) == 0 else r[0]
+        if not sharey is None:
+            for ax in r[start:]:
+                ax.sharey(sharey)
+        return r
     
     def add_axes( self, 
                   rect      : tuple, 

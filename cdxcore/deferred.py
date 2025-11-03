@@ -320,6 +320,7 @@ class Deferred(object):
         self._deferred_dependants     = []             # list of all direct dependent actions
         
         if action == "":
+            # top level element
             info                          = "$"+info
             self._deferred_sources        = {id(self):info}
             self._deferred_info           = info
@@ -403,9 +404,10 @@ class Deferred(object):
             if not x.deferred_was_resolved:
                 return f"{{{x._deferred_info}}}"    
             x = x._deferred_live
-        return str(x)
+        return self._deferred_to_str(x)
 
     def _deferred_fmt_args(self, args, kwargs ):
+        """ format arguments """
         args_   = [ self._deferred_to_argstr(x) for x in args ]
         kwargs_ = { k: self._deferred_to_argstr(x) for k,x in kwargs.items() }
         fmt_args = ""
@@ -727,13 +729,26 @@ class Deferred(object):
     # =========
     # The following are deferred function calls on the object subject of the action ``self``.
     
-    def _act( self, action     : str, *,
-                    args       : Collection = [],
-                    kwargs     : Mapping = {},
-                    num_args   : int = None,
-                    fmt        : str = None
+    def _deferred_act( self, action     : str, *,
+                             args       : Collection = [],
+                             kwargs     : Mapping = {},
+                             num_args   : int|None = None,
+                             fmt        : str|None = None
                     ):
-        """ Standard action handling """
+        """
+        Standard action handling
+        
+        Parameters
+        ----------
+            action : str
+                The name of the action, e.g. the function name, __getattr__ etc.
+            
+            args, kwargs :
+                Parameters passed to the call.
+                
+            num_args, fmt : int, str
+                If not None then fmt() is a format string which expects ``num_args`` parameters.
+        """
 
         # we already have a live object --> action directly
         if self._deferred_was_resolved:
@@ -799,7 +814,7 @@ class Deferred(object):
 
     def __getattr__(self, attr ):
         """ Create attribute access """
-        private_str = "deferred_"    
+        private_str = "deferred_"
         #print("__getattr__", attr, self.__dict__.get(private_str+"info", "?"))
         if attr in self.__dict__ or\
                    attr[:2] == "__" or\
@@ -817,7 +832,7 @@ class Deferred(object):
             #print("__getattr__: live", attr)
             return getattr(self._deferred_live, attr)
         #print("__getattr__: act", attr)
-        return self._act("__getattr__", args=[attr], num_args=1, fmt="{parent}.{arg0}")
+        return self._deferred_act("__getattr__", args=[attr], num_args=1, fmt="{parent}.{arg0}")
     
     def __setattr__(self, attr, value):
         """ Create attribute access """
@@ -840,7 +855,7 @@ class Deferred(object):
             #print("__setattr__: live", attr)
             return setattr(self._deferred_live, attr, value)
         #print("__setattr__: act", attr)
-        return self._act("__setattr__", args=[attr, value], num_args=2, fmt="{parent}.{arg0}={arg1}")
+        return self._deferred_act("__setattr__", args=[attr, value], num_args=2, fmt="{parent}.{arg0}={arg1}")
 
     def __delattr__(self, attr):
         """ Create attribute access """
@@ -863,7 +878,7 @@ class Deferred(object):
             #print("__delattr__: live", attr)
             return delattr(self._deferred_live, attr)
         #print("__delattr__: act", attr)
-        return self._act("__delattr__", args=[attr], num_args=1, fmt="del {parent}.{arg0}")
+        return self._deferred_act("__delattr__", args=[attr], num_args=1, fmt="del {parent}.{arg0}")
 
     @staticmethod
     def _deferred_handle( action : str,
@@ -873,7 +888,7 @@ class Deferred(object):
         def act(self, *args, **kwargs):
             if not "_ready_for_the_deferred_magic_" in self.__dict__:
                 return getattr( self, action )(*args,**kwargs)
-            r = self._act(action, args=args, kwargs=kwargs, num_args=num_args, fmt=fmt )
+            r = self._deferred_act(action, args=args, kwargs=kwargs, num_args=num_args, fmt=fmt )
             return r if return_deferred else self
         act.__name__ = action
         act.__doc__  = f"Create ``{action}`` action"

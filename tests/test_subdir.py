@@ -340,6 +340,15 @@ class C(object):
     @raw_sub.cache("0.1")
     def f(self, y):
         return self.x*y
+     
+@raw_sub.cache_class("0.1")
+class D(object):
+    @raw_sub.cache_init(uid=lambda x : f"D({x})")
+    def __init__(self, x=2):
+        self.x = x
+    @raw_sub.cache("0.1")
+    def f(self, y):
+        return self.x*y
         
 class Test2(unittest.TestCase):
 
@@ -469,7 +478,41 @@ class Test2(unittest.TestCase):
         h2(1,1)
         self.assertEqual( h2.cache_info.filename, "h2(1,1)________________________________ 46a70d67" )
 
+        with self.assertRaises(RuntimeError):
+            # using 'func_name' as parameter
+            @sub.cache("0.1", label=lambda func_name, x : f"{func_name} {x}")
+            def f( func_name, x ):
+                pass
+            f("test",1)
+            
+        with self.assertRaises(ValueError):
+            # 'z' does not exist
+            @sub.cache("0.1", label=lambda x, z : f"x={x}, z={x}")
+            def f(x,y):
+                return x*y
+            _ = f(1,2)
+            
+        # classes
         
+        self.assertEqual(D.version, "0.1")
+        self.assertEqual(D.__new__.version, "0.1")
+
+        d = D(2)
+        self.assertEqual(D.cache_info.last_cached, False)
+        self.assertEqual(D.cache_info.filename, "D(2)")
+        self.assertEqual(d.x,2)
+        d = D(x=2)
+        self.assertEqual(D.cache_info.last_cached, True)
+        self.assertEqual(d.x,2)
+        d = D()
+        self.assertEqual(D.cache_info.last_cached, True)
+        self.assertEqual(d.x,2)
+        d = D(x=1)
+        self.assertEqual(D.cache_info.last_cached, False)
+        self.assertEqual(d.x,1)
+    
+
+
 if __name__ == '__main__':
     unittest.main()
 

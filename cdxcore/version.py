@@ -137,9 +137,11 @@ Documentation
 -------------
 """
 import inspect as inspect
+import types as types
 from .util import fmt_list
 from .uniquehash import UniqueLabel
 from collections.abc import Callable
+import functools as functools
 
 uniqueLabel64 = UniqueLabel(max_length=64,id_length=8)
 uniqueLabel60 = UniqueLabel(max_length=60,id_length=8)
@@ -655,14 +657,34 @@ def version( version              : str = "0.0.1" ,
                 if not gversion._class is None:
                     continue
                 gversion._class = f
+        elif isinstance(f, types.BuiltinFunctionType):
+            # in order to be able to assign f.version we create
+            # a wrapper around f
+            def custom(*args, **kwargs):
+                return f(*args,**kwargs)
+            functools.update_wrapper( custom, f )
+            custom.__name__ = f"VersionBuiltinFunctionWrapper({custom.__name__})"
+            return wrap(custom)
                 
         version_ = Version(f, version, dep, auto_class=auto_class )
+        
+        # we assign the Version to 'f'
+
+        e = None
         try:
             f.version = version_
-        except AttributeError:
+            assert type(f.version).__name__ == Version.__name__
+            return f
+        except AttributeError as e_:
+            e = e_
+
+        try:
             f.__dict__['version'] = version_
-        del version_
-        assert type(f.version).__name__ == Version.__name__
-        return f
+            assert type(f.version).__name__ == Version.__name__
+            return f
+        except AttributeError:
+            pass
+
+        raise AttributeError(f"Failed to assign 'version' element to type {type(f)}: {e}") from e
     return wrap
 

@@ -98,6 +98,9 @@ def Ag(x,z):
     a = AA()
     return Af(x*2,z)+a.h(z)
 
+class Empty:
+    pass
+
 class Test(unittest.TestCase):
     
     def test_version(self):
@@ -139,6 +142,16 @@ class Test(unittest.TestCase):
         self.assertEqual( Ag.version.unique_id48, "0.0.1 { AA.h: 0.4.1, Af: 0.0.2 { Ah: 0.3.0 } }")
         self.assertEqual( Ag.version.dependencies,('0.0.1', {'AA.h': '0.4.1', 'Af': ('0.0.2', {'Ah': '0.3.0'})}) )
             
+        # built in 
+        print2 = version("0.1")(print)        
+        self.assertEqual( print2.version, "0.1")
+        self.assertEqual( print2.__name__, "VersionBuiltinFunctionWrapper(print)")
+        
+        Empty.__new__ = version("0.1")(Empty.__new__)
+        _ = Empty()
+        self.assertEqual( Empty.__new__.version, "0.1")
+        self.assertEqual( Empty.__new__.__name__, "VersionBuiltinFunctionWrapper(__new__)")
+        
 if __name__ == '__main__':
     unittest.main()
 

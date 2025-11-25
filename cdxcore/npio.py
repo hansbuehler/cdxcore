@@ -200,7 +200,7 @@ def _tofile(f : int, array : np.ndarray, cont_block_size_mb : int ):
     if saved != length*dsize:
         raise IOError( f"wrote only {fmt_digits(saved) } bytes of a block of {fmt_digits(length*dsize)} bytes")
 
-def to_file( file               : str|int,
+def to_file(file               : str|int,
             array              : np.ndarray, *,
             buffering          : int = -1,
             cont_block_size_mb : int|None = None

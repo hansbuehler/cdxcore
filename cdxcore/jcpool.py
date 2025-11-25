@@ -589,6 +589,40 @@ class JCPool( object ):
                 return a dictionary.
         """
         return _parallel( self._pool, jobs )
+    
+    def __call__(self, jobs : Sequence|Mapping) -> Iterable:
+        """
+        Process a number of jobs in parallel using the current multiprocessing pool.
+        
+        All functions used in ``jobs`` must have been decorated using :dec:`cdxcore.jcpool.JCPool.delayed`.
+        
+        This function returns an iterator which yields results as soon as they 
+        are computed.
+        
+        If ``jobs`` is a ``Sequence`` you can also use
+        :meth:`cdxcore.jcpool.JCPool.parallel_to_list` to retrieve
+        a :class:`list` of all results upon completion of the last job. Similarly, if ``jobs`` 
+        is a ``Mapping``, use :meth:`cdxcore.jcpool.JCPool.parallel_to_dict` to retrieve
+        a :class:`dict` of results upon completion of the last job.
+        
+        Parameters
+        ----------
+            jobs :  Sequence | Mapping
+                Can be a :class:`Sequence` containing ``Callable`` functions,
+                or a :class:`Mapping` whose values are ``Callable`` functions.
+
+                Each ``Callable`` used as part of either must
+                have been decorated with :dec:`cdxcore.jcpool.JCPool.delayed`.
+                
+        Returns
+        -------
+            parallel : Iterator
+                An iterator which yields results as soon as they are available.   
+                If ``jobs`` is a :class:`Mapping`, then the resutling iterator will generate tuples with the first
+                element equal to the mapping key of the respective function job. This function will *not*
+                return a dictionary.
+        """
+        return _parallel( self._pool, jobs )
 
     def parallel_to_dict(self, jobs : Mapping) -> dict:
         """

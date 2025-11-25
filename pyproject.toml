@@ -6,12 +6,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdxcore"
-version = "0.1.36"
+version = "0.1.37"
 description = "Basic Python Tools; upgraded cdxbasics"
 authors = [{ name = "Hans Buehler", email = "github@buehler.london" }]
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ['numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil',
+dependencies = ['numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil', 'polars',
 	 'jsonpickle', 'numba', 'joblib', 'blosc', 'mkdocstrings[python]>=0.18']
 classifiers = [
     "Programming Language :: Python :: 3",

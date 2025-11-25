@@ -140,12 +140,36 @@ class UniqueHash( object ):
 
     .. code-block:: python
 
-        __unique_hash__( self, uniqueHash : UniqueHash, debug_trace : DebugTrace  )
+        __unique_hash__( self, unique_hash : UniqueHash, debug_trace : DebugTrace  )
         
     This function may return a unique string, or any other non-None Python object which will then again be hashed.
     A common use case is to ignore the parameters to this function and return a tuple of members of the class which are
-    pertinent for hashing.
-            
+    pertinent for hashing::
+
+        class CustomHash(object):
+            def __init__(self, x):
+                self.x  = x
+                self.x2 = x*2 # dervied data; no need to hash
+            def __unique_hash__( self, unique_hash : UniqueHash, debug_trace : DebugTrace  ):
+                return ( self.x, )
+
+    More generally, ``uniqueHash`` can be used to hash any elements in the object. If used, you should also pass ``debug_trace``::
+        
+        class CustomHash(object):
+            def __init__(self, x):
+                self.x  = x
+                self.x2 = x*2 # dervied data; no need to hash
+            def __unique_hash__( self, unique_hash : UniqueHash, debug_trace : DebugTrace  ):
+                return unique_hash(self.x, debug_trace=debug_trace)
+
+    Finally, users may also simply set ``__unique_hash__`` to a given unique string computed ahead of time::
+
+        class CustomHash(object):
+            def __init__(self, x):
+                self.x  = x
+                self.x2 = x*2 # dervied data; no need to hash
+                self.__unique_hash__ = str(x)
+                        
     **Dictionaries**
     
     Since Python 3.6 `dictionaries preserve the order <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__
@@ -830,7 +854,7 @@ class DebugTraceVerbose(DebugTrace):
         if strsize<=3: ValueError("'strsize' must exceed 3")
         self.strsize = strsize
         self.verbose = Context("all") if verbose is None else verbose
-    def _update( self, x, msg : str = None ):
+    def _update( self, x, msg : str = None, is_topic : bool = False ):
         """ Notify processing of 'x', with an optional process 'msg'
         :meta private:
         """#@private
@@ -840,20 +864,20 @@ class DebugTraceVerbose(DebugTrace):
         if len(xstr) > self.strsize:
             xstr = xstr[:self.strsize-3] + "..."
         if msg is None or len(msg) == 0:
-            self.verbose.write( f"{type(x).__name__}: '{xstr}'" )
+            self.verbose.write( f"{'Entering ' if is_topic else 'Using '}{type(x).__name__}: '{xstr}'" )
         else:
-            self.verbose.write( f"{msg} {type(x).__name__}: '{xstr}'" )
+            self.verbose.write( f"{'Entering ' if is_topic else 'Using '}{msg} {type(x).__name__}: '{xstr}'" )
     def _update_topic( self, x, msg : str = None ):
         """ Notify and return a sub-trace context
         :meta private:
         """#@private
-        self._update( x, msg )
+        self._update( x, msg, is_topic=True )
         return DebugTraceVerbose( self.strsize, self.verbose(1) )    
     def _warning( self, msg : str):
         """ Issue warning
         :meta private:"""#@private
         self.verbose.write( msg )
-                
+        
 # =============================================================================
 # Utility wrappers
 # =============================================================================
@@ -1096,7 +1120,9 @@ def unique_hash64( *args, **kwargs ) -> str:
 def named_unique_filename48_8( label : str, *args, **kwargs ) -> str:
     """
     Returns a unique and valid filename which is composed of `label` and a unique ID
-    computed using all of `label`, `args`, and `kwargs`. ``label`` is not assumed to be unique.
+    computed using all of `label`, `args`, and `kwargs`.
+    
+    ``label`` is not assumed to be unique.
     
     Consider a use cases where an experiment defined by ``definition``
     has produced ``results`` which we wish to :mod:`pickle` to disk.

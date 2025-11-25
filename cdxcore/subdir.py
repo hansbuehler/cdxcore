@@ -371,6 +371,7 @@ from enum import Enum
 from functools import update_wrapper
 from string import Formatter
         
+import polars as pl
 import json as json
 import gzip as gzip
 import blosc as blosc
@@ -434,12 +435,14 @@ class Format(Enum):
     JSON_PLAIN = 2   #: ``json`` format.
     BLOSC = 3        #: :mod:`blosc` binary compressed format.
     GZIP = 4         #: :mod:`gzip` binary compressed format.
+    POLARS_PARQUET = 10     #: :mod:`gzip` binary compressed format.
     
 PICKLE = Format.PICKLE
 JSON_PICKLE = Format.JSON_PICKLE
 JSON_PLAIN = Format.JSON_PLAIN
 BLOSC = Format.BLOSC
 GZIP = Format.GZIP
+POLARS_PARQUET = Format.POLARS_PARQUET
 
 class VersionPresentError(RuntimeError):
     """
@@ -881,6 +884,9 @@ class SubDir(object):
     GZIP = Format.GZIP
     """ :meta private: """
     
+    POLARS_PARQUET = Format.POLARS_PARQUET
+    """ :meta private: """
+    
     RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
     """ :meta private: """
     
@@ -1237,6 +1243,8 @@ class SubDir(object):
             return ".zbsc"
         if fmt == Format.GZIP:
             return ".pgz"
+        if fmt == Format.POLARS_PARQUET:
+            return ".prq"
         error("Unknown format '%s'", str(fmt))
 
     @staticmethod
@@ -1569,6 +1577,20 @@ class SubDir(object):
                             handle_pickle_error(e)
                         return data
 
+            elif fmt == Format.POLARS_PARQUET:
+                ok   = True
+                if not version is None:
+                    meta         = pl.read_parquet_metadata(full_file_name)
+                    test_version = meta.get("version", None)
+                    if handle_version == SubDir.VER_RETURN:
+                        return test_version
+                    ok = (version == "*" or test_version == version)
+                if ok:
+                    if handle_version == SubDir.VER_CHECK:
+                        return True
+                    data = pl.read_parquet(full_file_name)
+                    return data
+                
             elif fmt == Format.BLOSC:
                 # we do not write 
                 # any version information if not requested
@@ -1645,6 +1667,7 @@ class SubDir(object):
                         else:
                             assert fmt == Format.JSON_PLAIN, ("Internal error: unknown Format", fmt)
                             return json.loads( f.read() )
+                        
             else:
                 raise NotImplementedError(fmt, txtfmt("Unknown format '%s'", fmt ))
 
@@ -2000,7 +2023,7 @@ class SubDir(object):
         
         if version is None and fmt in [Format.BLOSC, Format.GZIP]:
             # blosc and gzip have unexpected side effects
-            # a version is attempted to be read but is not present
+            # if a version is attempted to be read but is not present
             # (e.g. blosc causes a MemoryError)
             version = ""            
 
@@ -2018,6 +2041,12 @@ class SubDir(object):
                             f.write(len8)
                             f.write(version_)
                         pickle.dump(obj,f,-1)
+
+                elif fmt == Format.POLARS_PARQUET:
+                    # only if a version is provided write it into the file
+                    if not isinstance( obj, pl.DataFrame ):
+                        raise ValueError(f"When using format POLARS_PARQUET you must save only polars DataFrames. Found type '{type(obj)}'.")
+                    obj.write_parquet( full_file_name, metadata = None if version is None else dict(version=version) )
 
                 elif fmt == Format.BLOSC:
                     # only if a version is provided write it into the file
@@ -3807,6 +3836,7 @@ class _CacheCallable(object):
                     label                : Callable = None,
                     uid                  : Callable = None,
                     name                 : str = None,
+                    sub_dir              : Callable = None,
                     exclude_args         : set[str] = None,
                     include_args         : set[str] = None,
                     exclude_arg_types    : set[type] = None,
@@ -3825,6 +3855,7 @@ class _CacheCallable(object):
         self._dependencies          = list(dependencies) if not dependencies is None else None
         self._label                 = label
         self._uid                   = uid
+        self._sub_dir               = sub_dir
         self._name                  = str(name) if not name is None else None
         self._exclude_args          = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
         self._include_args          = set(include_args) if not include_args is None and len(include_args) > 0 else None
@@ -3888,6 +3919,10 @@ class _CacheCallable(object):
     def uid_label_params(self) -> list:
         """ Returns the ``set`` of parameters the ``uid`` or ``label`` function expects """
         return self._uid_label_params 
+    @property
+    def sub_dir(self) -> Callable:
+        """ Returns the ``set`` of parameters the ``uid`` or ``label`` function expects """
+        return self._sub_dir
     
     def __call__(self, F : Callable):
         """
@@ -4011,7 +4046,6 @@ class _CacheCallable(object):
         # check validity
         # --------------
         # Cannot currently decorate classes.
-
     
         is_method   = inspect.ismethod(F) or isinstance(F, types.BuiltinMethodType)# for *bound* methods
         is_function = inspect.isfunction(F) or isinstance(F, types.BuiltinFunctionType)

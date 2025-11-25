@@ -430,6 +430,10 @@ class PrettyObject(MutableMapping):
             """
             def __init__(self):
                 self.__keys = None
+                
+            def pop(_, position : int = 0):
+                key = _.keys[position]
+                return self.pop(key)
             
             def __getitem__(_, position):
                 key = _.keys[position]

@@ -510,6 +510,16 @@ class Test2(unittest.TestCase):
         d = D(x=1)
         self.assertEqual(D.cache_info.last_cached, False)
         self.assertEqual(d.x,1)
+        
+        # sub directory
+        @sub.cache("0.1", label="f {x} {y}" ,in_sub_dir="{x}")
+        def f( x, y ):
+            pass
+        f("xx",y=2)
+        self.assertEqual( f.cache_info.sub_dir, "xx" )
+        self.assertEqual( f.cache_info.filename, "f xx 2 eb09ef86" )
+        
+        
     
 
 

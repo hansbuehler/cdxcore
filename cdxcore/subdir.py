@@ -1084,10 +1084,11 @@ class SubDir(object):
     def create_directory( self ):
         """
         Creates the current directory if it doesn't exist yet.
+        Returns ``self``.
         """
         # create directory/clean up
         if self._path is None:
-            return
+            return self
         # create directory
         if not os.path.exists( self._path[:-1] ):
             try:
@@ -1097,6 +1098,7 @@ class SubDir(object):
                 pass
         if not os.path.isdir(self._path[:-1]):
             raise NotADirectoryError(txtfmt( "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] ))
+        return self
 
     def path_exists(self) -> bool:
         """ Whether the current directory exists """
@@ -1807,7 +1809,6 @@ class SubDir(object):
         ----------
         file : str
             A filename, or a list thereof. 
-
  
         version : str
             Specifies the version to compare the file's version with.
@@ -2870,7 +2871,7 @@ class SubDir(object):
     
     def __getstate__(self):
         """ Return state to pickle """
-        return dict( path=self._path, ext=self._ext, fmt=self._fmt, crt=self._crt )    
+        return dict( path=self._path, ext=self._ext, fmt=self._fmt, crt=self._crt, cctrl=self._cctrl, tclean=self._tclean )    
 
     def __setstate__(self, state):
         """ Restore pickle """
@@ -2878,6 +2879,8 @@ class SubDir(object):
         self._ext = state['ext']
         self._fmt = state['fmt']
         self._crt = state['crt']
+        self._cctrl = state['cctrl']
+        self._tclean = state['tclean']
 
     @staticmethod
     def as_format( format_name : str ) -> int:

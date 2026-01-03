@@ -547,8 +547,29 @@ class Test2(unittest.TestCase):
             self.assertEqual( f.cache_info.sub_dir, "xx" )
             self.assertEqual( f.cache_info.filename, "f xx 2 eb09ef86" )
         
-    
+    def test_cache_subdir(self):
+        
+        @version("0.1")
+        def f( x ):
+            return x*2
 
+        root = SubDir("?/cache_test")
+
+        f_1 = root.cache()(f)
+        f_1(2)
+        self.assertEqual(f_1.cache_info.path[-11:], "cache_test/")
+        
+        f_2 = root.cache( in_sub_dir=lambda x : f"D{x:d}")(f)
+        f_2(2)
+        self.assertEqual(f_2.cache_info.path[-14:], "cache_test/D2/")
+
+        f_3 = root.cache( label=lambda x, func_name : f"E{x:d}/{func_name} {x}")(f)
+        f_3(2)
+        self.assertEqual(f_3.cache_info.path[-14:], "cache_test/E2/")
+
+        f_4 = root.cache( in_sub_dir="D{x}", label=lambda x, func_name : f"E{x:d}/{func_name} {x}")(f)
+        f_4(2)
+        self.assertEqual(f_4.cache_info.path[-17:], "cache_test/D2/E2/")
 
 if __name__ == '__main__':
     unittest.main()

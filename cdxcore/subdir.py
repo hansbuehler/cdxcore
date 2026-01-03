@@ -3290,72 +3290,6 @@ class SubDir(object):
         This, together with the comments on hashing objects above, ensures that (hashed) changes to ``a`` will
         be reflected in the unique call ID for the member function.
 
-        Caching Classes
-        ^^^^^^^^^^^^^^^
-
-        Classes can also be cached. In this case the creation of a class is cached, i.e. a call to
-        the class constructor restores the respectiv object from disk.
-
-        This is done in two steps:
-            
-        1) first, the class itself is decorated using 
-           :dec:`cdxcore.subdir.SubDir.cache`
-           to provide version information at class level. Only version information are provided here.
-           
-           You can use :dec:`cdxcore.subdir.SubDir.cache_class` as an alias.
-           
-        2) Secondly, decorate ``__init__``. You do not need to specify a version
-           for ``__init__`` as its version usually coincides with the version of the class. At ``__init__``
-           you define how unique IDs are generated from the parameters passed to object construction.
-           
-           You can use :dec:`cdxcore.subdir.SubDir.cache_init` as an alias.
-
-        Simple example:
-            
-        .. code-block:: python
-    
-            from cdxcore.subdir import SubDir
-            cache   = SubDir("!/.cache")
-            cache.delete_all_content()   # for illustration
-            
-            @cache.cache_class("0.1")
-            class A(object):
-                
-                @cache.cache_init(exclude_args=['debug'])
-                def __init__(self, x, debug):
-                    if debug:
-                        print("__init__",x)
-                    self.x = x
-                    
-            a = A(1)    # caches 'a'
-            b = A(1)    # reads the cached object into 'b'
-
-        **Technical Comments**
-        
-        The function ``__init__`` does not actually return a value; for this reason
-        behind the scenes it is actually ``__new__`` which is being decorated.
-        Attempting to cache-decorate ``__new__`` manually will lead to an exception.
-
-        A nuance for ``__init__`` vs ordinary member function is that the
-        ``self`` parameter is non-functional
-        (in the sense that it is an empty object when ``__init__`` is called).
-        ``self`` is therefore automatically excluded from computing a unique call ID.
-        That also means ``self`` is not part of the arguments passed to ``uid``:
-        
-        .. code-block:: python
-        
-            @cache.cache_class("0.1")
-            class A(object):
-                
-                # NOTE: 'self' is not passed to the lambda function "uid"
-                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})") 
-                def __init__(self, x, debug):
-                    if debug:
-                        print("__init__",x)
-                    self.x = x
-
-        Decorating classes with ``__slots__`` does not yet work.
-                                    
         Managing Caching Accross a Project
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -3434,6 +3368,8 @@ class SubDir(object):
             Use ``uid`` instead if ``label`` represents valid unique filenames. You cannot specify both ``uid`` and ``label``.
             If neither ``uid`` and ``label`` are present, ``name`` will be used.
             
+            A ``label`` can start with a directory, i.e. ``lablel : lambda x, y : f"x/y"`` is a valid pattern.
+            
             **Usage:**
             
             * If ``label`` is a ``Callable`` then ``label( func_name=name, **parameters )`` will be called
@@ -3460,6 +3396,8 @@ class SubDir(object):
             Alternative to ``label`` which is assumed to generate a unique cache file name. It has the same
             semantics as ``label``. When used, parameters to the decorated function are not hashed
             as the ``uid`` is assumed to be already unique. The string must be a valid file name
+
+            A ``uid`` can start with a directory.
             
             Use ``label`` if the id is not unique. You cannot specify both ``uid`` and ``label``.
             If neither ``uid`` and ``label`` are present, ``name`` will be used (as non-unique ``label``).
@@ -3647,6 +3585,74 @@ class SubDir(object):
         """
         return self.cache( label=label, uid=uid, name=name, exclude_args=exclude_args, include_args=include_args, exclude_arg_types=exclude_arg_types )        
 
+"""
+        Caching Classes
+        ^^^^^^^^^^^^^^^
+
+        Classes can also be cached. In this case the creation of a class is cached, i.e. a call to
+        the class constructor restores the respectiv object from disk.
+
+        This is done in two steps:
+            
+        1) first, the class itself is decorated using 
+           :dec:`cdxcore.subdir.SubDir.cache`
+           to provide version information at class level. Only version information are provided here.
+           
+           You can use :dec:`cdxcore.subdir.SubDir.cache_class` as an alias.
+           
+        2) Secondly, decorate ``__init__``. You do not need to specify a version
+           for ``__init__`` as its version usually coincides with the version of the class. At ``__init__``
+           you define how unique IDs are generated from the parameters passed to object construction.
+           
+           You can use :dec:`cdxcore.subdir.SubDir.cache_init` as an alias.
+
+        Simple example:
+            
+        .. code-block:: python
+    
+            from cdxcore.subdir import SubDir
+            cache   = SubDir("!/.cache")
+            cache.delete_all_content()   # for illustration
+            
+            @cache.cache_class("0.1")
+            class A(object):
+                
+                @cache.cache_init(exclude_args=['debug'])
+                def __init__(self, x, debug):
+                    if debug:
+                        print("__init__",x)
+                    self.x = x
+                    
+            a = A(1)    # caches 'a'
+            b = A(1)    # reads the cached object into 'b'
+
+        **Technical Comments**
+        
+        The function ``__init__`` does not actually return a value; for this reason
+        behind the scenes it is actually ``__new__`` which is being decorated.
+        Attempting to cache-decorate ``__new__`` manually will lead to an exception.
+
+        A nuance for ``__init__`` vs ordinary member function is that the
+        ``self`` parameter is non-functional
+        (in the sense that it is an empty object when ``__init__`` is called).
+        ``self`` is therefore automatically excluded from computing a unique call ID.
+        That also means ``self`` is not part of the arguments passed to ``uid``:
+        
+        .. code-block:: python
+        
+            @cache.cache_class("0.1")
+            class A(object):
+                
+                # NOTE: 'self' is not passed to the lambda function "uid"
+                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})") 
+                def __init__(self, x, debug):
+                    if debug:
+                        print("__init__",x)
+                    self.x = x
+
+        Decorating classes with ``__slots__`` does not yet work.
+"""                                   
+
 # ========================================================================
 # Caching, convenience
 # ========================================================================
@@ -3768,6 +3774,7 @@ class CacheInfo(object):
         self.signature   = inspect.signature(F)  #: :func:`inspect.signature` of the function.
     
         self.filename    = None                  #: Unique filename of the last function call.
+        self.path        = None                  #: path where the file was stored
         self.label       = None                  #: Label of the last function call.
         self.version     = None                  #: Last version used.
         
@@ -4267,10 +4274,18 @@ class _CacheCallable(object):
             
             uid_or_label = self.uid_or_label
             filename     = None
+            fn_sub_dir   = None
             if self.unique and self._uid_label_params is None:                    
                 # the string or function do not require any parameters, and is unique
                 assert not uid_or_label is None
                 filename  = uid_or_label if isinstance( uid_or_label, str ) else uid_or_label()
+
+                rix       = filename.rfind("/")
+                if rix != -1:
+                    if rix==len(filename)-1:
+                        raise ValueError(f"The unique filename '{filename}' computed for '{name}' terminates with '/'. That leaves nothing for a filename.")
+                    fn_sub_dir = filename[:rix+1]
+                    filename   = filename[rix+1:]
 
                 if not is_filename(filename):
                     raise ValueError(f"The unique filename '{filename}' computed for '{name}' contains invalid characters for filename. When using `uid` make sure that "+\
@@ -4284,7 +4299,6 @@ class _CacheCallable(object):
                 
                 # get dictionary of named arguments
                 arguments = get_arguments() if arguments is None else arguments
-
                                 
                 if uid_or_label is None:
                     # no label or unique ID
@@ -4292,6 +4306,13 @@ class _CacheCallable(object):
                     uid_or_label = name                    
                 else:
                     uid_or_label = expand( uid_or_label, self._uid_label_params, arguments )
+
+                rix       = uid_or_label.rfind("/")
+                if rix != -1:
+                    if rix==len(uid_or_label)-1:
+                        raise ValueError(f"The unique filename '{uid_or_label}' computed for '{name}' terminates with '/'. That leaves nothing for a filename.")
+                    fn_sub_dir   = uid_or_label[:rix+1]
+                    uid_or_label = uid_or_label[rix+1:]
 
                 if self.unique:
                     if not is_filename(uid_or_label):
@@ -4316,7 +4337,6 @@ class _CacheCallable(object):
             execute.cache_info.label    = str(label) if not label is None else None
             execute.cache_info.filename = filename # that is the unique ID for this call
             execute.cache_info.version  = version
-            execute.cache_info.sub_dir  = ""
             
             if self.cache_controller.keep_last_arguments:
                 info_arguments = OrderedDict()
@@ -4324,16 +4344,23 @@ class _CacheCallable(object):
                     info_arguments[argname] = str(argvalue)[:100]
                 execute.cache_info.arguments = info_arguments
                 del argname, argvalue
+                
+            # determine sub_dir if any
+            # ------------------------
             
-            # execute caching
-            # ---------------
-
             sub_dir = self._subdir
             if not self._in_sub_dir is None:
                 arguments = get_arguments()
                 sub_dir_name = expand( self._in_sub_dir, self._in_sub_dir_params, arguments ) 
                 sub_dir = sub_dir( sub_dir_name )
-                execute.cache_info.sub_dir  = sub_dir_name # that is the unique ID for this call
+                
+            if not fn_sub_dir is None:
+                sub_dir = sub_dir(fn_sub_dir)
+                
+            execute.cache_info.path  = sub_dir.path
+
+            # execute caching
+            # ---------------
 
             if cache_mode.delete:
                 sub_dir.delete( filename )

@@ -42,10 +42,6 @@ uniqueHashF = UniqueHash(32,parse_functions=True)
 namedUniqueHash32_8 = NamedUniqueHash( max_length=32, id_length=8, parse_underscore="protected" )
 uniqueLabel32_8 = UniqueLabel( max_length=32, id_length=8 )
 
-class TestEnum(Enum):
-    A = 1
-    B = 2
-
 class Test(unittest.TestCase):
     
     def __init__(self, *args, **kwargs):
@@ -483,6 +479,10 @@ class Test(unittest.TestCase):
         self.assertEqual( hash5, h_5 )
 
         # enum        
+        class TestEnum(Enum):
+            A = 1
+            B = 2
+        
         a = TestEnum.A
         b = TestEnum.B
         self.assertNotEqual( unique_hash(a), unique_hash(b) )

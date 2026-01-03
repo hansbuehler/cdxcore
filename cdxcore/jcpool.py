@@ -153,8 +153,15 @@ class _DictIterator(object):
             yield _DIF(k,f, self._merge_tuple), args, kwargs
     def __len__(self):#don't really need that but good to have
         return len(self._jobs)
-            
-def _parallel(pool, jobs : Iterable) -> Iterable:
+           
+class _NoPool(object):
+    def __init__(self):
+        self._jobs = None
+    def __call__(self, jobs):
+        for func, args, kargs in jobs:
+            yield func(*args,**kargs)
+    
+def _parallel(pool : joblib_Parallel|_NoPool, jobs : Iterable) -> Iterable:
     """
     Process 'jobs' in parallel using the current multiprocessing pool.
     All (function) values of 'jobs' must be generated using self.delayed.
@@ -172,11 +179,10 @@ def _parallel(pool, jobs : Iterable) -> Iterable:
         If 'jobs' is a dictionary, then the resutling iterator will generate tuples with the first
         element equal to the dictionary key of the respective function job.
     """
-    if not isinstance(jobs, Mapping):
-        return pool( jobs )
-    return pool( _DictIterator(jobs,merge_tuple=True) )
+    jobs = jobs if not isinstance(jobs, Mapping) else _DictIterator(jobs,merge_tuple=True)
+    return pool( jobs )
 
-def _parallel_to_dict(pool, jobs : Mapping) -> Mapping:
+def _parallel_to_dict(pool : joblib_Parallel|_NoPool, jobs : Mapping) -> Mapping:
     """
     Process 'jobs' in parallel using the current multiprocessing pool.
     All values of the dictionary 'jobs' must be generated using self.delayed.
@@ -205,7 +211,7 @@ def _parallel_to_dict(pool, jobs : Mapping) -> Mapping:
         r = q
     return r
             
-def _parallel_to_list(pool, jobs : Sequence ) -> Sequence:
+def _parallel_to_list(pool : joblib_Parallel|_NoPool, jobs : Sequence ) -> Sequence:
     """
     Call parallel() and convert the resulting generator into a list.
 
@@ -415,7 +421,7 @@ class JCPool( object ):
         tmp_dir_ext            = unique_hash8( uuid.getnode(), os.getpid(), get_thread_id(), datetime.datetime.now() )
         num_workers            = int(num_workers)
         tmp_root_dir           = SubDir(tmp_root_dir) if not tmp_root_dir is None else None
-        self._tmp_dir          = tmp_root_dir(tmp_dir_ext, ext='') if not tmp_root_dir is None else None
+        self._tmp_dir          = tmp_root_dir(tmp_dir_ext, ext='', create_directory=False) if not tmp_root_dir is None else None
         self._verbose          = verbose if not verbose is None else Context("quiet")
         self._threading        = threading
 
@@ -423,13 +429,17 @@ class JCPool( object ):
             num_workers = max( self.cpu_count() + num_workers + 1, 1 )
         
         path_info = f" with temporary directory '{self.tmp_path}'" if not self.tmp_path is None else ''
-        with self._verbose.write_t(f"Launching {num_workers} processes{path_info}... ", end='') as tme:
-            self._pool = joblib_Parallel( n_jobs=num_workers, 
-                                          backend="loky" if not threading else "threading", 
-                                          return_as="generator_unordered", 
-                                          temp_folder=self.tmp_path,
-                                          **parallel_kwargs)
-            self._verbose.write(f"done; this took {tme}.", head=False)
+        if num_workers!=0:
+            with self._verbose.write_t(f"Launching {num_workers} processes{path_info}... ", end='') as tme:
+                self._pool = joblib_Parallel( n_jobs=num_workers, 
+                                              backend="loky" if not threading else "threading", 
+                                              return_as="generator_unordered", 
+                                              temp_folder=self.tmp_path,
+                                              **parallel_kwargs)
+                self._verbose.write(f"done; this took {tme}.", head=False)
+        else:
+            self._pool = _NoPool()
+            self._verbose.write("Note: not using any pooling.")
 
     def __del__(self):
         self.terminate()

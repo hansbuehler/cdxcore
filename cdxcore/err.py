@@ -259,6 +259,12 @@ def verify( cond : bool, text : str|Callable, *args, exception : Exception = Run
         text = _fmt(text=text,args=args,kwargs=kwargs,f=verify)
         raise exception( fmt(text, * args, ** kwargs) )
 
+def verify_inp( cond : bool, text : str|Callable, *args, **kwargs ):
+    """
+    A short cut for :func:``cdxcore.err.verify`` with ``exception=ValueError``
+    """
+    verify( cond, text, *args, exception=ValueError, **kwargs )
+
 _warn_skips = (os.path.dirname(__file__),)
 
 def warn( text : str|Callable, *args, warning = RuntimeWarning, stack_level : int = 1, **kwargs ):

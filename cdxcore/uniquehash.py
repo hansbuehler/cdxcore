@@ -62,6 +62,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import struct as struct
+from enum import Enum
 from .util import is_function, DEF_FILE_NAME_MAP, fmt_filename
 from .pretty import PrettyObject
 from .verbose import Context
@@ -395,7 +396,7 @@ class UniqueHash( object ):
         if isinstance( x, bytes ):
             h.update( x )
             if not debug_trace is None: debug_trace._update( x )
-            return
+            return            
         if isinstance( x, str ):
             h.update( x.encode('utf-8') )
             if not debug_trace is None: debug_trace._update( x )
@@ -466,6 +467,11 @@ class UniqueHash( object ):
         if isinstance(x,slice):
             if not debug_trace is None: debug_trace = debug_trace._update_topic( x )
             self._hash_any(h, (x.start,x.stop,x.step), debug_trace=debug_trace )
+            return
+        # enum
+        if isinstance( x, Enum):
+            if not debug_trace is None: debug_trace = debug_trace._update_topic( x, msg="Enum" )
+            self._hash_any(h, (x.name, x.value), debug_trace=debug_trace )
             return
         # test presence of __unique_hash__()
         # objects can now simply set this member to a string

@@ -693,8 +693,12 @@ class CacheController( object ):
         self.uniqueFileName         = UniqueLabel(max_length=max_filename_length,id_length=hash_length,filename_by=None)
         self.keep_last_arguments    = keep_last_arguments
 
+    def __unique_hash__( self, unique_hash, debug_trace ):
+        """ hash function """
+        return unique_hash(self.cache_mode,self.exclude_arg_types,self.keep_last_arguments,
+                           self.labelledFileName, self.uniqueFileName,debug_trace=debug_trace)
+            
 default_cacheController = CacheController()
-#
 
 # ========================================================================
 # SubDir
@@ -906,7 +910,7 @@ class SubDir(object):
     VER_RETURN   = 2
     """ :meta private: """
 
-    def __init__(self, name : str, 
+    def __init__(self, name : str|None, 
                        parent : str|type = None, *, 
                        ext : str = None, 
                        fmt : Format = None, 
@@ -966,7 +970,7 @@ class SubDir(object):
             self._fmt = fmt
             assert not self._fmt is None
 
-        # extension
+        # name
         if not name is None:
             if not isinstance(name, str): raise ValueError( txtfmt("'name' must be string. Found object of type %s", type(name) ))
             name   = name.replace('\\','/')
@@ -985,6 +989,8 @@ class SubDir(object):
                 name = name[:ext_i]
                 del _ext
             del ext_i
+            
+        # extension
         if ext is None:
             self._ext = self.EXT_FMT_AUTO if parent is None else parent._ext
         else:
@@ -2672,7 +2678,7 @@ class SubDir(object):
     # object interface
     # ----------------
 
-    def __call__(self, element : str,
+    def __call__(self, element : str|None = None,
                        default = RETURN_SUB_DIRECTORY,
                        raise_on_error : bool = False,
                        *,
@@ -2710,8 +2716,11 @@ class SubDir(object):
 
         Parameters
         ----------
-            element : str
+            element : str|None
                 File or directory name, or a list thereof.
+
+                ``element`` can be ``None`` if ``default`` is :attr:`cdxcore.subdir.SubDir.RETURN_SUB_DIRECTORY`` (its default value)
+                in which case ``__call__`` refers to the current directory.
                 
             default : optional
                 If specified, this function reads ``element`` with
@@ -2784,11 +2793,12 @@ class SubDir(object):
             Either the value in the file, a new sub directory, or lists thereof.
         """
         if default == SubDir.RETURN_SUB_DIRECTORY:
-            if not isinstance(element, str):
+            if not element is None and not isinstance(element, str):
                 if not isinstance(element, Collection): 
                     raise ValueError(txtfmt("'element' must be a string or an iterable object. Found type '%s;", type(element)))
                 return [ SubDir( k,parent=self,ext=ext,fmt=fmt,create_directory=create_directory) for k in element ]
             return SubDir(element,parent=self,ext=ext,fmt=fmt,create_directory=create_directory)
+        verify( not element is None, "Cannot use 'None' as filename", exception=ValueError)
         return self.read( file=element,
                           default=default,
                           raise_on_error=raise_on_error,
@@ -2865,6 +2875,19 @@ class SubDir(object):
         Returns a the subdirectory ``directory`` of ``self``.
         """
         return SubDir(directory,parent=self)
+    
+    # unique hash
+    # -----------
+    
+    def __unique_hash__( self, unique_hash, debug_trace ):
+        """ Default unique has iterates contents - so files contained in this directory """
+        return unique_hash(path=self._path,
+                           ext=self._ext, 
+                           fmt=self._fmt, 
+                           cctrl=self._cctrl, 
+                           #crt=self._crt, 
+                           #tclean=self._tclean
+                           debug_trace=debug_trace)
 
     # pickling
     # --------
@@ -3751,7 +3774,7 @@ class CacheInfo(object):
         self.last_cached = None                  #: Whether the last function call restored data from disk.
         
         if keep_last_arguments:             
-            self.arguments = None                #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` for the relevant :class:`cdxcore.subdir.CacheController`.
+            self.last_arguments = None                #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` for the relevant :class:`cdxcore.subdir.CacheController`.
 
 def _ensure_has_version( F,
                          version      : str = None,
@@ -3949,6 +3972,7 @@ class _CacheCallable(object):
         * Assigns a :dec:`cdxcore.version.version` for the class (if not yet present).
         * Extracts from ``__init__`` the wrapper to decorate`` __new__``.
         """
+        raise NotImplementedError("Decorating classes is not yet fully implemented")
         debug_verbose = self.cache_controller.debug_verbose
 
         if not inspect.isclass(C):

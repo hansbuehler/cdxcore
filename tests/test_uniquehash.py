@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import datetime as datetime
 from zoneinfo import ZoneInfo
+from enum import Enum
 
 def import_local():
     """
@@ -40,6 +41,10 @@ uniqueHashF = UniqueHash(32,parse_functions=True)
 
 namedUniqueHash32_8 = NamedUniqueHash( max_length=32, id_length=8, parse_underscore="protected" )
 uniqueLabel32_8 = UniqueLabel( max_length=32, id_length=8 )
+
+class TestEnum(Enum):
+    A = 1
+    B = 2
 
 class Test(unittest.TestCase):
     
@@ -476,6 +481,11 @@ class Test(unittest.TestCase):
         self.assertEqual( hash4, "c9b449e95339458df155752acadbebb1" )
         self.assertEqual( hash5, "79ee12b070c036e874263c6f4d70df98" )
         self.assertEqual( hash5, h_5 )
+
+        # enum        
+        a = TestEnum.A
+        b = TestEnum.B
+        self.assertNotEqual( unique_hash(a), unique_hash(b) )
 
                     
             

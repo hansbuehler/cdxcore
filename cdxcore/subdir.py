@@ -639,8 +639,9 @@ class CacheController( object ):
     
     Parameters
     ----------
-    exclude_arg_types : list[type], optional
-        List of types to exclude from producing unique ids from function arguments.
+    exclude_arg_types : list[type|str], optional
+        List of types or names of types to exclude from producing unique ids from function arguments.
+        Strings are compated to ``type(arg).__name__``.
 
         Defaults to ``[Context]``.
         
@@ -670,7 +671,7 @@ class CacheController( object ):
     """
     
     def __init__(self, *,
-                    exclude_arg_types  : list[type] = [Context],
+                    exclude_arg_types  : list[type|str] = [Context],
                     cache_mode         : CacheMode = CacheMode.ON,
                     max_filename_length: int = 48,
                     hash_length        : int = 8,
@@ -2930,7 +2931,7 @@ class SubDir(object):
                       in_sub_dir           : Callable|None = None,
                       exclude_args         : list[str]|None = None,
                       include_args         : list[str]|None = None,
-                      exclude_arg_types    :  list[type]|None = None,
+                      exclude_arg_types    : list[type|str]|None = None,
                       version_auto_class   : bool = True,
                       name_of_func_name_arg: str = "func_name"):
         """
@@ -3155,7 +3156,7 @@ class SubDir(object):
         
         * ``exclude_args``: list of function arguments to exclude, if not ``None``.
         
-        * ``exclude_arg_types``: a list of types to exclude.
+        * ``exclude_arg_types``: a list of types or names of type to exclude.
           This is helpful if control flow is managed with dedicated data types.
           An example of such a type is :class:`cdxcore.verbose.Context` which is used to print hierarchical output messages.
           Types can be globally excluded using a :class:`cdxcore.subdir.CacheController`
@@ -3417,10 +3418,10 @@ class SubDir(object):
             List of arguments to exclude from generating an unique ID. Examples of such non-functional arguments
             are workflow controls (debugging) and i/o elements.
             
-        exclude_arg_types : list[type] | None, default ``None``
-            List of parameter types to exclude from generating an unique ID. Examples of such non-functional arguments
-            are workflow controls (debugging) and i/o elements.
-            
+        exclude_arg_types : list[type|str] | None, default ``None``
+            List of parameter types or names of type to exclude from generating an unique ID. Examples of such non-functional arguments
+            are workflow controls (debugging) and i/o elements. Strings are compated to ``type(arg).__name__``.
+
         in_sub_dir : str | Callable | None, default ``None``
             Allows specifying a sub-directory for the cached files, using the same formatting logic as for ``label``.
             

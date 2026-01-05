@@ -876,12 +876,10 @@ class DynaFig(_DynaDeferred):
                 verify( tt>=0, "'titles': found negative integer?", exception=ValueError)
                 first_ix = len(r) if first_ix is None else first_ix
                 r += [ self.add_subplot(**kwargs) for _ in range(tt) ]
-                del add
             else:
                 verify( isinstance(tt,str), lambda : f"'titles' must contain None, int's or strings. Found type {type(tt)}.", exception=ValueError)
                 first_ix = len(r) if first_ix is None else first_ix
                 r.append( self.add_subplot(tt, **kwargs) )
-                del add
         
         # share either implicitly or from a given plot
         start = 0

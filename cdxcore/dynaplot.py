@@ -338,6 +338,7 @@ from .deferred import Deferred
 from .util import verify, warn
 from .dynalimits import AutoLimits
 from .pretty import PrettyObject as pdct
+from .err import verify_inp
 
 class MODE:
     """
@@ -820,7 +821,8 @@ class DynaFig(_DynaDeferred):
     def add_subplots( self, *titles, sharex : DynaAx|bool|None = None, sharey : DynaAx|bool|None = None, **kwargs ) -> list[DynaAx]:
         """
         Generate a number of sub-plots in one function call.
-        Use strings to generate subplots with such titles, ``None`` for a new row, and integers
+        
+        Use strings to generate subplots with such titles, ``\n`` for a new row, and integers
         to mass-generate a number of plots.
         
         This example generates a 2x2 block of plots::
@@ -828,16 +830,24 @@ class DynaFig(_DynaDeferred):
             from cdxcore.dynaplot import figure
             
             with figure("Test", col_size=4, row_size=4) as fig:
-                axA1, axA1, axB1, axB2 = fig.add_subplot("A1", "A2", None, "B1", "B2")
+                axA1, axA2, axB1, axB2 = fig.add_subplot("A1", "A2", "\n", "B1", "B2")
             
         Parameters
         ----------
         titles : list
-            A list if strings, integers and ``None``'s: a string generates a sub-plot with that title;
-            an int generates as many subplots, and ``None`` starts a new row.
-            
+            A list if strings, integers, ``\n`` and/or ``None``'s: a string generates a sub-plot with that title;
+            an int generates as many subplots, and ``\n`` starts a new row. ``None`` skips the entry.
+            This is useful when creating conditional lists of sub-plots, e.g.::
+                
+                from cdxcore.dynaplot import figure
+                
+                with figure("Test", col_size=4, row_size=4) as fig:
+                    axA1, axA2, axB1, axB2 = fig.add_subplot("A1", "A2" if show2 else None, "\n", "B1", "B2" if show2 else None)
+                    if show2: assert not axA2 is None and not axB2 is None
+                    if not show2: assert axA2 is None and axB2 is None
+                            
             Note that the number of columns is usually limited by the ``columns`` parameter
-            when :func:`cdxcore.dynaplot.figure` is called. You can set ``columns`` to ``None``
+            when :func:`cdxcore.dynaplot.figure` is called. You can set ``columns`` to ``\n``
             to freely generate blocks of graphs.
             
         sharex : DynaAx | bool | None, default ``None``
@@ -856,29 +866,42 @@ class DynaFig(_DynaDeferred):
         if len(titles) == 0:
             return ()
         r = []
+        first_ix = None
         for tt in titles:
             if tt is None:
+                r.append(None)
+            elif tt=="\n":
                 self.next_row()
             elif isinstance(tt,int):
                 verify( tt>=0, "'titles': found negative integer?", exception=ValueError)
+                first_ix = len(r) if first_ix is None else first_ix
                 r += [ self.add_subplot(**kwargs) for _ in range(tt) ]
+                del add
             else:
                 verify( isinstance(tt,str), lambda : f"'titles' must contain None, int's or strings. Found type {type(tt)}.", exception=ValueError)
+                first_ix = len(r) if first_ix is None else first_ix
                 r.append( self.add_subplot(tt, **kwargs) )
+                del add
+        
+        # share either implicitly or from a given plot
         start = 0
         if isinstance(sharex, bool):
-            start  = 1
-            sharex = None if not sharex or len(r) == 0 else r[0]
+            sharex = r[first_ix] if not first_ix is None else None
+            start  = (first_ix+1) if not first_ix is None else None
+            assert first_ix is None or not sharex is None, ("Internal error")
         if not sharex is None:
             for ax in r[start:]:
-                ax.sharex(sharex)
+                if not ax is None:
+                    ax.sharex(sharex)
         start = 0
         if isinstance(sharey, bool):
-            start  = 1
-            sharey = None if not sharey or len(r) == 0 else r[0]
+            sharey = r[first_ix] if not first_ix is None else None
+            start  = (first_ix+1) if not first_ix is None else None
+            assert first_ix is None or not sharey is None, ("Internal error")
         if not sharey is None:
             for ax in r[start:]:
-                ax.sharey(sharey)
+                if not ax is None:
+                    ax.sharey(sharey)
         return r
     
     def add_axes( self, 

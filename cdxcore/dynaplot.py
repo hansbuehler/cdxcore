@@ -328,7 +328,6 @@ from matplotlib.gridspec import GridSpec, SubplotSpec#NOQA
 import matplotlib.colors as mcolors
 from matplotlib.artist import Artist
 from matplotlib.axes import Axes
-from IPython import display
 import io as io
 import gc as gc
 import types as types
@@ -710,7 +709,7 @@ class DynaFig(_DynaDeferred):
         return self._fig
     
     @property
-    def hdisplay(self) -> display.DisplayHandle|None:
+    def hdisplay(self):
         """
         Returns the :class:`IPython.display.DisplayHandle` for the current display, if
         ``MODE.HDISPLAY`` was used for ``draw_mode`` when the figure was constructed, and if the figure
@@ -744,8 +743,8 @@ class DynaFig(_DynaDeferred):
         :meth:`cdxcore.dynaplot.DynaFig.render` or :meth:`cdxcore.dynaplot.DynaFig.close` is called.
         
         Thus this function cannot be called after :meth:`cdxcore.dynaplot.DynaFig.render` was called as then the geometry of the plots
-        is set. Use :meth:`cdxcore.dynaplot.DynaFig.add_axes` to draw plots at any time/.
-        
+        is set. Use :meth:`cdxcore.dynaplot.DynaFig.add_axes` to draw plots at any time.
+        1
         Parameters
         ----------
             title : str | None, default ``None``
@@ -846,8 +845,12 @@ class DynaFig(_DynaDeferred):
                     if show2: assert not axA2 is None and not axB2 is None
                     if not show2: assert axA2 is None and axB2 is None
                             
+            ``None`` will not create an empty slot; it will simply not generate the plot.
+            To generate empty slots or span plots over several columsn or rows,
+            use :meth:`cdxcore.dynaplot.DynaFig.add_subplot` with ``grid_spec``.
+                    
             Note that the number of columns is usually limited by the ``columns`` parameter
-            when :func:`cdxcore.dynaplot.figure` is called. You can set ``columns`` to ``\n``
+            when :func:`cdxcore.dynaplot.figure` is called. You can set ``columns`` to ``None``
             to freely generate blocks of graphs.
             
         sharex : DynaAx | bool | None, default ``None``
@@ -1025,6 +1028,7 @@ class DynaFig(_DynaDeferred):
             return
         if self.draw_mode & MODE.HDISPLAY:
             if self._hdisplay is None:
+                from IPython import display
                 self._hdisplay = display.display(display_id=True)
                 verify( not self._hdisplay is None, "Could not optain current IPython display ID from IPython.display.display(). Set DynaFig.MODE = 'canvas' for an alternative mode")
             self._hdisplay.update(self._fig)
@@ -1412,6 +1416,140 @@ class FigStore( object ):
 def store():
     """ Creates a :class:`cdxcore.dynaplot.FigStore` which can be used to dynamically update a figure. """
     return FigStore()
+
+# ----------------------------------------------------------------------------------
+# x/y lim support
+# ----------------------------------------------------------------------------------
+
+def min_o_min( *args, default : float|None = None ):
+    """
+    Computes minimum of minima.
+    
+    This function iterates through all arguments, and takes the minimum of all minima.
+    Parmaters can be numbers, `class:`numpy.ndarray` arrays or lists of the former.
+    
+    This function is useful when calling :meth:`matplotlib.axes.Axes.set_xlim`
+    or :meth:`matplotlib.axes.Axes.set_ylim`.
+    
+    Parameters
+    ----------
+        args : list[int|float|np.ndarray|None|list]
+            Numbers, `class:`numpy.ndarray` arrays or lists of the former.
+            Elements which are ``None`` are skipped.
+            
+        default : float|None, default ``None``
+            Default value if ``args`` was empty.
+            
+    Returns
+    -------
+        The minimum of all minima, or ``default`` if no elements were found.
+    """
+    
+    r = None
+    for a in args:
+        if a is None:
+            continue            
+        if isinstance(a, np.ndarray):
+            a = np.min(a)
+        elif isinstance(a, (int, float, np.number)):
+            a = float(a)
+        else:
+            a = min_o_min(*a)
+        r = min(r,a) if not r is None else a
+    return r if not r is None else default
+
+def max_o_max( *args, default : float|None = None ):
+    """
+    Computes maximum of maxima.
+    
+    This function iterates through all arguments, and takes the maximum of all maxima.
+    Parmaters can be numbers, `class:`numpy.ndarray` arrays or lists of the former.
+    
+    This function is useful to compute arguments for :meth:`matplotlib.axes.Axes.set_xlim`
+    or :meth:`matplotlib.axes.Axes.set_ylim`. 
+
+    Parameters
+    ----------
+        args : list[int|float|np.ndarray|None|list]
+            Numbers, `class:`numpy.ndarray` arrays or lists of the former.
+            Elements which are ``None`` are skipped.
+            
+        default : float|None, default ``None``
+            Default value if ``args`` was empty.
+            
+    Returns
+    -------
+        The maximum of all maxima, or ``default`` if no elements were found.
+    """
+    r = None
+    for a in args:
+        if a is None:
+            continue
+        if isinstance(a, np.ndarray):
+            a = np.max(a)
+        elif isinstance(a, (int, float, np.number)):
+            a = float(a)
+        else:
+            a = max_o_max(*a)
+        r = max(r,a) if not r is None else a
+    return r
+
+def m_o_m( *args, pos_floor : float|None = None, buf : float = 0.05, min_dx : float = 0.01 ):
+    """
+    Computes :func:`cdxcore.dynaplot.min_o_min` and :func:`cdxcore.dynaplot.max_o_max`
+    for ``args`` to obtain their minimum of minima and maximum of maxima.
+
+    This function is useful to compute arguments for :meth:`matplotlib.axes.Axes.set_xlim`
+    or :meth:`matplotlib.axes.Axes.set_ylim`.
+    
+    If ``pos_floor`` is ``None`` then the function returns::
+        
+        dx = max( min_dx, max_ - min_ )
+        return min_ - dx*buf, max_dx*buf
+    
+    If ``pos_floor`` is not ``None``, then the function floors ``min_ - dx*buf`` at ``pos_floor``.
+    
+    *Usage*::
+
+        from cdxcore.dynaplot import figure, m_o_m
+        import numpy as np
+            
+        x = np.random.normal(size=(10,))
+        y = np.random.normal(size=(8,2))
+        z = [ np.random.normal(size=(3,2)), 0.1, None ]
+        
+        with figure() as fig:
+            ax = fig.add_subplot()
+            ax.plot( x )
+            ax.plot( y )
+            ax.plot( z[1] )
+            ax.set_ylim( *m_o_m(x,y,z, min_dx=0.01) )                
+    
+    Returns
+    -------
+        min, max : float, float
+            The adjusted minimum and maximum values as discussed above.
+            The function returns ``None, None`` if ``args`` does not contain any numbers.
+    
+    """
+    min_ = min_o_min( *args )
+    if min_ is None:
+        return None, None
+    max_ = max_o_max( *args )
+    assert not max_ is None, ("Internal error - max None but min isn't??")
+    assert min_ <= max_, ("Min/max order wrong", min_, max_)
+
+    if buf is None or buf == 0.:
+        return min_, max_
+    
+    dx   = max( min_dx, max_ - min_ )
+    if pos_floor is None:
+        return min_ - dx*buf, max_ + dx*buf
+    else:
+        verify( min_ > 0., lambda : f"Cannot use 'buf' in 'pos' mode: 'min_o_min' of the inputs is not positive, but {min_:.4g}")
+        verify_inp( pos_floor >= 0., "'pos_floor' cannot be negative")
+        rmin = max( min_ - dx*buf, min_*pos_floor )
+        return rmin, max_+dx*buf
 
 # ----------------------------------------------------------------------------------
 # color management

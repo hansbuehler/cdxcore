@@ -4,4 +4,4 @@ Created on June 2022
 @author: hansb
 """
 
-__version__ = "0.1.44"  # auto-updated by setup.py
+__version__ = "0.1.45"  # auto-updated by setup.py

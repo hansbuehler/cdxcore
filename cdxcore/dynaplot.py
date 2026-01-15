@@ -1426,7 +1426,7 @@ def min_o_min( *args, default : float|None = None ):
     Computes minimum of minima.
     
     This function iterates through all arguments, and takes the minimum of all minima.
-    Parmaters can be numbers, `class:`numpy.ndarray` arrays or lists of the former.
+    Parmaters can be numbers, :class:`numpy.ndarray` arrays or lists of the former.
     
     This function is useful when calling :meth:`matplotlib.axes.Axes.set_xlim`
     or :meth:`matplotlib.axes.Axes.set_ylim`.
@@ -1434,7 +1434,7 @@ def min_o_min( *args, default : float|None = None ):
     Parameters
     ----------
         args : list[int|float|np.ndarray|None|list]
-            Numbers, `class:`numpy.ndarray` arrays or lists of the former.
+            Numbers, :class:`numpy.ndarray` arrays or lists of the former.
             Elements which are ``None`` are skipped.
             
         default : float|None, default ``None``
@@ -1442,7 +1442,8 @@ def min_o_min( *args, default : float|None = None ):
             
     Returns
     -------
-        The minimum of all minima, or ``default`` if no elements were found.
+        min : float|None
+            The minimum of all minima, or ``default`` if no elements were found.
     """
     
     r = None
@@ -1463,7 +1464,7 @@ def max_o_max( *args, default : float|None = None ):
     Computes maximum of maxima.
     
     This function iterates through all arguments, and takes the maximum of all maxima.
-    Parmaters can be numbers, `class:`numpy.ndarray` arrays or lists of the former.
+    Parmaters can be numbers, :class:`numpy.ndarray` arrays or lists of the former.
     
     This function is useful to compute arguments for :meth:`matplotlib.axes.Axes.set_xlim`
     or :meth:`matplotlib.axes.Axes.set_ylim`. 
@@ -1471,7 +1472,7 @@ def max_o_max( *args, default : float|None = None ):
     Parameters
     ----------
         args : list[int|float|np.ndarray|None|list]
-            Numbers, `class:`numpy.ndarray` arrays or lists of the former.
+            Numbers, :class:`numpy.ndarray` arrays or lists of the former.
             Elements which are ``None`` are skipped.
             
         default : float|None, default ``None``
@@ -1479,7 +1480,8 @@ def max_o_max( *args, default : float|None = None ):
             
     Returns
     -------
-        The maximum of all maxima, or ``default`` if no elements were found.
+        max : float|None
+            The maximum of all maxima, or ``default`` if no elements were found.
     """
     r = None
     for a in args:
@@ -1527,9 +1529,11 @@ def m_o_m( *args, pos_floor : float|None = None, buf : float = 0.05, min_dx : fl
     
     Returns
     -------
-        min, max : float, float
+        min, max : float|None, float|None
             The adjusted minimum and maximum values as discussed above.
             The function returns ``None, None`` if ``args`` does not contain any numbers.
+            Such result can be passed directly to :meth:`matplotlib.axes.Axes.set_xlim` or
+            :meth:`matplotlib.axes.Axes.set_ylim` as both accept ``None`` as default values.
     
     """
     min_ = min_o_min( *args )
@@ -1550,6 +1554,75 @@ def m_o_m( *args, pos_floor : float|None = None, buf : float = 0.05, min_dx : fl
         verify_inp( pos_floor >= 0., "'pos_floor' cannot be negative")
         rmin = max( min_ - dx*buf, min_*pos_floor )
         return rmin, max_+dx*buf
+
+# ----------------------------------------------------------------------------------
+# axis utilities
+# ----------------------------------------------------------------------------------
+
+def focus_line(left : float, 
+               right : float, 
+               N : int,*,
+               concentration : float = 0.9,
+               power : float|int=2,
+               focus : float|None = None,
+               focus_on_grid : bool = False,
+               eps : float=1E-8,
+               dtype : type = None ):
+    r"""
+    Returns a line from ``left`` to ``right`` which has more points in ``focus``.
+
+    This function computes a number of points on a line between ``left`` and ``right`` such that points around ``focus``
+    are more dense. The ``concentration`` parameter allowws to blend between linear and focused points.
+
+    The function is an appropriately scaled and shifted version of $x \mapsto x (1-c) + c\, x|x|^{p-1}$ where $c$ is concentration.
+
+    Parameters
+    ----------
+        left, right : float, float
+            Left hand and right hand points.
+
+        N : int,
+            Number of points; must be at least 3.
+
+        concentration : float, default ``0.9``
+            How much concentration: maximum is ``1`` while ``0`` give a linear distibution of points.
+
+        focus : float|None, default ``None``
+            Focus point. If not provided, the mid-point is used.
+
+        focus_on_grid : bool, default ``None``
+            Whether to place ``focus`` on the grid.
+
+        dtype : type, default ``None``
+            Numpy dtype.
+
+    Returns
+    -------
+        points : :class:`numpy.ndarray`
+            Numpy vector
+    """
+
+    left = float(left)
+    right = float(right)
+    if not focus is None:
+        verify_inp( left<focus and focus<right, "'left', 'focus', and 'right' must be in order")
+    else:
+        verify_inp( left<right, "'left' and 'right' must be in order")
+        focus = 0.5 * (left+right)
+        
+    verify_inp( N>=3, "'N' must be at least 3")
+    verify_inp( concentration >=0. and concentration <= 1., "'concentration' must be within [0,1]")
+
+    x     = np.linspace( - 1.,  +1., N )
+    x     = x*(1.-concentration)+concentration*x*( np.pow(np.abs(x), power-1 ) if power>1 else 1.)
+    assert np.abs( x[0]+x[-1] )<1E-8, ("Internal error", x[0], x[-1] )    
+    x     /= x[-1]
+    x[x<0.] *= (left-focus)/x[0]
+    x[x>0.] *= (right-focus)/x[-1]
+    x     += focus
+    x[0]  = left
+    x[-1] = right 
+    return x
 
 # ----------------------------------------------------------------------------------
 # color management

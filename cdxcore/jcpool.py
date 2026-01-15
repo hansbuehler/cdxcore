@@ -424,6 +424,7 @@ class JCPool( object ):
         self._tmp_dir          = tmp_root_dir(tmp_dir_ext, ext='', create_directory=False) if not tmp_root_dir is None else None
         self._verbose          = verbose if not verbose is None else Context("quiet")
         self._threading        = threading
+        self._no_pool          = num_workers == 0
 
         if num_workers < 0:
             num_workers = max( self.cpu_count() + num_workers + 1, 1 )
@@ -452,6 +453,10 @@ class JCPool( object ):
     def is_threading(self) -> bool:
         """ Whether we are threading or mulit-processing. """
         return self._threading
+    @property
+    def is_no_pool(self) -> bool:
+        """ Whether this is an actual pool or not (i.e. the pool was constructed with zero workers) """
+        return self._no_pool
     
     @staticmethod
     def cpu_count( only_physical_cores : bool = False ) -> int:
@@ -555,7 +560,7 @@ class JCPool( object ):
             wrapped F : Callable
                 Decorated function.
         """
-        if self._threading:
+        if self._threading or self._no_pool:
             return _jl_delayed(F)
         def delayed_function( *args, **kwargs ):
             JCPool._validate( F, args, kwargs )

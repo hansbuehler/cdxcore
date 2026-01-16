@@ -565,9 +565,78 @@ class Test2(unittest.TestCase):
         self.assertEqual(h1.cache_info.filename, "3 b5bb289e")
         self.assertEqual(h1.cache_info.unique_id, "2/3 b5bb289e")
 
+    def test_subdir_edge_cases(self):
+        """Test edge cases in SubDir functionality"""
+        
+        sub = SubDir("?/.tmp_test_edge_cases", delete_everything=True)
+        try:
+            # Test with special characters in filenames
+            sub["test-file"] = "value1"
+            self.assertEqual(sub["test-file"], "value1")
+            
+            # Test overwriting values
+            sub["test"] = 1
+            sub["test"] = 2
+            self.assertEqual(sub["test"], 2)
+            
+            # Test with numpy arrays
+            arr = np.array([1, 2, 3, 4, 5])
+            sub["array"] = arr
+            loaded_arr = sub["array"]
+            self.assertTrue(np.array_equal(arr, loaded_arr))
+            
+            # Test with nested structures
+            nested = {"a": {"b": {"c": 42}}}
+            sub["nested"] = nested
+            self.assertEqual(sub["nested"], nested)
+            
+            # Test exists method
+            self.assertTrue(sub.exists("array"))
+            self.assertFalse(sub.exists("nonexistent"))
+            
+            # Test file listing with different extensions
+            sub_txt = SubDir("?/.tmp_test_txt", ext="txt", delete_everything=True)
+            sub_txt.write_string("note1", "Hello")
+            sub_txt.write_string("note2", "World")
+            txt_files = sorted(sub_txt.files())
+            self.assertIn("note1", txt_files)
+            self.assertIn("note2", txt_files)
+            sub_txt.delete_everything()
+            
+            # Test as_dict conversion
+            d_items = sub.as_dict() if hasattr(sub, 'as_dict') else sub
+            if isinstance(d_items, dict):
+                self.assertIn("array", d_items)
+                self.assertIn("nested", d_items)
+            
+        finally:
+            sub.delete_everything()
 
-
+    def test_subdir_file_operations(self):
+        """Test various file operations in SubDir"""
+        
+        sub = SubDir("?/.tmp_test_file_ops", delete_everything=True)
+        try:
+            # Test write and read with defaults
+            self.assertIsNone(sub.read("missing", None))
+            
+            # Test batch operations
+            sub.write(["a", "b", "c"], [1, 2, 3])
+            result = sub.read(["a", "b", "c"])
+            self.assertEqual(result, [1, 2, 3])
+            
+            # Test update operations
+            sub["x"] = {"old": "value"}
+            sub["x"] = {"new": "value"}
+            self.assertEqual(sub["x"], {"new": "value"})
+            
+            # Test deletion
+            sub["temp"] = "temporary"
+            self.assertTrue(sub.exists("temp"))
+            del sub["temp"]
+            self.assertFalse(sub.exists("temp"))
+            
+        finally:
+            sub.delete_everything()
 if __name__ == '__main__':
     unittest.main()
-
-

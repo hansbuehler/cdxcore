@@ -274,7 +274,7 @@ def attach_shared_array(name : str, *,
         #shm.unlink() c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
     weakref.finalize(array, _finalize )
 
-    if not validate_shape is None and tuple(array.shape) != validate_shape: ValueError(f"Shared array {name} has shape {array.shape} not {validate_shape}", tuple(array.shape))
+    if not validate_shape is None and tuple(array.shape) != validate_shape: raise ValueError(f"Shared array {name} has shape {array.shape} not {validate_shape}", tuple(array.shape))
     if not validate_dtype is None and array.dtype != validate_dtype: raise ValueError(f"Shared array {name} has dtype {array.dtype} not {validate_dtype}", array.dtype)
     if read_only:
         array.flags.writeable  = False
@@ -368,7 +368,7 @@ def read_shared_array(file : int|str,
             return r, True
         
     if shape is None:
-        shape, dtype = read_dtype_and_shape( file, buffering=buffering )
+        dtype, shape = read_dtype_and_shape( file, buffering=buffering )
 
     if not validate_shape is None and shape != validate_shape: raise ValueError(f"File array {name} has shape {shape} not {validate_shape}", shape)
     if not validate_dtype is None and dtype != validate_dtype: raise ValueError(f"File array {name} has dtype {dtype} not {validate_dtype}", dtype)

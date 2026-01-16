@@ -841,10 +841,6 @@ Context.quiet.__doc__ = \
 A default ``Context`` with zero visibility.
 """
 
-Context.quiet.__doc__ = \
-"""
-A default ``Context`` with full visibility.
-"""
 
 
     

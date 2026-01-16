@@ -483,6 +483,84 @@ class Test(unittest.TestCase):
         finally:
             shutil.rmtree(tmp_dir)
 
+    def test_config_edge_cases(self):
+        """Test edge cases and error handling in Config"""
+        
+        # Test empty config
+        config = Config()
+        config.done()
+        self.assertTrue(config.is_empty)
+        
+        # Test config value conversion with type constraints
+        config = Config(val="5")
+        result = config("val", 0, int, "test conversion")
+        self.assertEqual(result, 5)
+        self.assertIsInstance(result, int)
+        config.done()
+        
+        # Test config with None values
+        config = Config(optional=None)
+        result = config("optional", "default", (None, str), "optional parameter")
+        self.assertIsNone(result)
+        config.done()
+        
+        # Test config inconsistency detection
+        config = Config(x=1)
+        config("x", 1, int, "parameter x")
+        with self.assertRaises(Exception):
+            config("x", 2, int, "parameter x")  # Different default
+        config.done()
+        
+        # Test shallow copy shares usage tracking
+        config1 = Config(x=1)
+        config2 = Config(config1)
+        _ = config1("x", 0, int, "test")
+        self.assertTrue("x" in config1._done)
+        self.assertTrue("x" in config2._done)  # shared tracking
+        config1.done(include_children=False)
+        config2.done(include_children=False)
+        
+        # Test clean copy is independent
+        config1 = Config(x=1)
+        config2 = config1.clean_copy()
+        _ = config1("x", 0, int, "test")
+        self.assertTrue("x" in config1._done)
+        self.assertFalse("x" in config2._done)  # independent tracking
+        _ = config2("x", 0, int, "test")  # Read x in config2 as well
+        config1.done(include_children=False)
+        config2.done(include_children=False)
+        
+    def test_config_vector_operations(self):
+        """Test vector/list operations in Config"""
+        
+        config = Config()
+        config.items = [1, 2, 3]
+        
+        # Test reading as list
+        result = config("items", [], list, "list of items")
+        self.assertEqual(result, [1, 2, 3])
+        config.done()
+        
+    def test_config_key_methods(self):
+        """Test Config key access methods"""
+        
+        config = Config(a=1, b=2, c=3)
+        
+        # Test keys iteration
+        keys_list = list(config.keys())
+        self.assertEqual(set(keys_list), {'a', 'b', 'c'})
+        
+        # Test values iteration
+        values_list = list(config.values())
+        self.assertEqual(set(values_list), {1, 2, 3})
+        
+        # Test items iteration
+        items_list = list(config.items())
+        self.assertEqual(len(items_list), 3)
+        
+        config.mark_done()
+        config.done()
+
         
 if __name__ == '__main__':
     unittest.main()

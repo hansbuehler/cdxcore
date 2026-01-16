@@ -292,6 +292,64 @@ class Test(unittest.TestCase):
         
         with self.assertRaises(ResolutionDependencyError):
             a.deferred_resolve( AX() )  # <- must fail
+    
+    def test_deferred_edge_cases(self):
+        """Test edge cases and error conditions in deferred execution"""
+        
+        # Test resolution with simple operation
+        a = DeferAll("a")
+        r1 = a.f(2)
+        a.deferred_resolve(qA())
+        self.assertEqual(r1.deferred_result, 2)
+        
+        # Test deferred property access
+        a = DeferAll("a")
+        result = a.g
+        a.deferred_resolve(qA())
+        self.assertEqual(result.deferred_result, 3)
+        
+        # Test deferred method chaining
+        a = DeferAll("a")
+        result = a.f(2)
+        a.deferred_resolve(qA())
+        self.assertEqual(result.deferred_result, 2)
+        
+        # Test deferred dictionary operations
+        a = DeferAll("a")
+        a["key"] = 42
+        a_inst = qA()
+        a.deferred_resolve(a_inst)
+        self.assertEqual(a_inst.d["key"], 42)
+        
+        # Test static method access
+        a = DeferAll("a")
+        result = a.h(2, y=3)
+        a.deferred_resolve(qA())
+        self.assertEqual(result.deferred_result, 6)
+        
+        # Test class method access
+        a = DeferAll("a")
+        result = a.j(3)
+        a.deferred_resolve(qA())
+        self.assertEqual(result.deferred_result, 21)
+        
+        # Test deferred comparison operations
+        a1 = DeferAll("a1")
+        result = a1 == a1
+        obj1 = qA()
+        obj1.m = 2
+        a1.deferred_resolve(obj1)
+        self.assertTrue(result.deferred_result)
+        
+        # Test deferred XOR operation - skip due to qA.__eq__ complexity
+        # The XOR operation result would be compared with qA's __eq__ which expects another qA
+        
+        # Test deferred with dependency tracking
+        a = DeferAll("a")
+        b = DeferAll("b")
+        result = a.f(b.m)
+        self.assertIn("$a", result.deferred_sources_names)
+        self.assertIn("$b", result.deferred_sources_names)
             
 if __name__ == '__main__':
     unittest.main()

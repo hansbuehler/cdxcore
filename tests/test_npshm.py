@@ -91,8 +91,64 @@ class Test(unittest.TestCase):
         finally:
             sub.delete_everything(keep_directory=False)
             
+    def test_npshm_edge_cases(self):
+        """Test edge cases in shared memory numpy arrays"""
+        
+        sub = SubDir("?;*.bin", delete_everything_upon_exit=True )
+        try:
+            np.random.seed(1234)
+            
+            # Test 1D shared array
+            test_name_1d = f"test_1d_{np.random.randint(0x100**2)}"
+            array_1d = create_shared_array(test_name_1d, shape=(100,), dtype=np.float32, force=True, full=0)
+            array_1d[:] = np.arange(100, dtype=np.float32)
+            
+            attached_1d = attach_shared_array(test_name_1d, read_only=True)
+            self.assertTrue(np.allclose(attached_1d, array_1d))
+            
+            # Test 3D shared array
+            test_name_3d = f"test_3d_{np.random.randint(0x100**2)}"
+            array_3d = create_shared_array(test_name_3d, shape=(10, 20, 5), dtype=np.int32, force=True, full=-1)
+            self.assertTrue(np.all(array_3d == -1))
+            
+            attached_3d = attach_shared_array(test_name_3d, validate_shape=(10, 20, 5), validate_dtype=np.int32)
+            self.assertEqual(attached_3d.shape, (10, 20, 5))
+            
+            # Test different dtypes
+            for dtype in [np.float32, np.int32, np.uint32, np.float64]:
+                test_name = f"test_{dtype.__name__}_{np.random.randint(0x100**2)}"
+                arr = create_shared_array(test_name, shape=(5, 5), dtype=dtype, force=True, full=1)
+                self.assertEqual(arr.dtype, dtype)
+                attached = attach_shared_array(test_name, validate_dtype=dtype)
+                self.assertEqual(attached.dtype, dtype)
+            
+            # Test shape validation
+            test_name_validate = f"test_validate_{np.random.randint(0x100**2)}"
+            array_validate = create_shared_array(test_name_validate, shape=(15, 10), dtype=np.int32, force=True)
+            
+            # Should succeed with correct shape
+            attached_validate = attach_shared_array(test_name_validate, validate_shape=(15, 10))
+            self.assertEqual(attached_validate.shape, (15, 10))
+            
+            # Should fail with wrong shape
+            with self.assertRaises((OSError, ValueError)):
+                attach_shared_array(test_name_validate, validate_shape=(10, 15))
+            
+            # Test read_only access prevents modification
+            test_name_readonly = f"test_readonly_{np.random.randint(0x100**2)}"
+            array_rw = create_shared_array(test_name_readonly, shape=(5, 5), dtype=np.int32, force=True)
+            array_rw[:] = 42
+            
+            array_ro = attach_shared_array(test_name_readonly, read_only=True)
+            self.assertTrue(np.all(array_ro == 42))
+            
+            # Modifying array_rw should still be visible in read_only version
+            array_rw[0, 0] = 99
+            self.assertEqual(array_ro[0, 0], 99)
+            
+        finally:
+            sub.delete_everything(keep_directory=False)
             
 if __name__ == '__main__':
     unittest.main()
-
 

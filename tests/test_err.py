@@ -72,7 +72,48 @@ class Test(unittest.TestCase):
                 warn_if(True,"one {one} two {two}", one=1, two=2, warning=RuntimeWarning)
             warn_if(False,"one {one} two {two}", one=1, two=2, warning=RuntimeWarning)
 
-if __name__ == '__main__':
-    unittest.main()
+    def test_err_edge_cases(self):
+        """Test edge cases and error conditions in error handling"""
+        
+        # Test verify with various conditions
+        verify(True, "Should pass")  # Should not raise
+        
+        # Test verify with False condition
+        with self.assertRaises(RuntimeError):
+            verify(False, "Test error message")
+        
+        # Test verify with custom exception type
+        with self.assertRaises(ValueError):
+            verify(False, "Test error", exception=ValueError)
+        
+        # Test verify with lambda formatting
+        value = 42
+        with self.assertRaises(RuntimeError):
+            verify(False, lambda: f"Value is {value}")
+        
+        # Test error always raises
+        with self.assertRaises(RuntimeError):
+            error("Test error")
+        
+        # Test error with custom exception
+        with self.assertRaises(TypeError):
+            error("Test error", exception=TypeError)
+        
+        # Test warn issues warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            warn("Test warning")
+            self.assertEqual(len(w), 1)
+            self.assertIn("Test warning", str(w[0].message))
+        
+        # Test warn_if only warns when condition is True
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            warn_if(True, "Should warn")
+            self.assertEqual(len(w), 1)
+            
+            warn_if(False, "Should not warn")
+            self.assertEqual(len(w), 1)  # Still 1, not 2
+
 
 

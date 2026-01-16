@@ -318,7 +318,7 @@ Import
 ------
 .. code-block:: python
 
-    fronm cdxcore.dynaplot import figure
+    from cdxcore.dynaplot import figure
     
 Documentation
 -------------
@@ -1038,7 +1038,6 @@ class DynaFig(_DynaDeferred):
             self._fig.canvas.draw()
         if self.draw_mode & MODE.PLT_SHOW:
             plt.show()
-        #gc.collect() # for some unknown reason this is required in VSCode
 
     def savefig(self, fname : str,
                       silent_close : bool = True, 

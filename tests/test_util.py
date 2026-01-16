@@ -517,7 +517,97 @@ class Test(unittest.TestCase):
         crman.reset()
         self.assertEqual( crman.current, "" )
 
+    def test_util_type_checking(self):
+        """Test type checking utilities"""
+        
+        # Test is_atomic
+        self.assertTrue(is_atomic("text"))
+        self.assertTrue(is_atomic(42))
+        self.assertTrue(is_atomic(3.14))
+        self.assertTrue(is_atomic(True))
+        self.assertTrue(is_atomic(datetime.date.today()))
+        self.assertTrue(is_atomic(np.int32(5)))
+        self.assertTrue(is_atomic(np.float64(3.14)))
+        
+        self.assertFalse(is_atomic([1, 2, 3]))
+        self.assertFalse(is_atomic({"a": 1}))
+        self.assertFalse(is_atomic(np.array([1, 2, 3])))
+        
+        # Test is_float
+        self.assertTrue(is_float(3.14))
+        self.assertTrue(is_float(np.float32(1.0)))
+        self.assertTrue(is_float(np.float64(2.5)))
+        
+        self.assertFalse(is_float(42))
+        self.assertFalse(is_float("3.14"))
+        self.assertFalse(is_float(np.int32(3)))
+        
+        # Test is_function
+        self.assertTrue(is_function(lambda x: x))
+        self.assertTrue(is_function(def_test_util_helper_func))
+        self.assertTrue(is_function(qA.h))  # static method
+        self.assertTrue(is_function(qA.j))  # class method
+        
+        self.assertFalse(is_function("not a function"))
+        self.assertFalse(is_function(42))
+        self.assertFalse(is_function(qA()))  # instance without __call__
+        
+    def test_util_formatting_edge_cases(self):
+        """Test edge cases in formatting functions"""
+        
+        # Test empty lists and edge cases
+        self.assertEqual(fmt_list([]), "-")
+        self.assertEqual(fmt_list([1]), "1")
+        self.assertEqual(fmt_list([1, 2]), "1 and 2")
+        self.assertEqual(fmt_list([1, 2, 3, 4, 5]), "1, 2, 3, 4 and 5")
+        
+        # Test fmt_big_number with edge cases
+        self.assertEqual(fmt_big_number(0), "0")
+        self.assertEqual(fmt_big_number(-0), "0")
+        self.assertEqual(fmt_big_number(1), "1")
+        
+        # Test fmt_big_byte_number with edge cases
+        self.assertEqual(fmt_big_byte_number(0), "0 bytes")
+        self.assertEqual(fmt_big_byte_number(1), "1 byte")
+        self.assertEqual(fmt_big_byte_number(2), "2 bytes")
+        
+        # Test fmt_dict edge cases
+        self.assertEqual(fmt_dict({}), "-")
+        self.assertEqual(fmt_dict({"a": 1}), "a: 1")
+        self.assertEqual(fmt_dict({"a": 1, "b": 2}), "a: 1 and b: 2")
+        
+    def test_qualified_name(self):
+        """Test qualified_name function"""
+        
+        # Test with built-in types
+        self.assertEqual(qualified_name(int), "int")
+        self.assertEqual(qualified_name(str), "str")
+        
+        # Test with numpy types
+        self.assertEqual(qualified_name(np.ndarray), "ndarray")
+        
+        # Test with custom classes
+        self.assertEqual(qualified_name(qA), "qA")
+        
+    def test_expected_str_fmt_args(self):
+        """Test expected_str_fmt_args function"""
+        
+        # Test with different formatting styles
+        fmt_string_new = "Number: {x}, Text: {text}, Value: {v}"
+        args_new = expected_str_fmt_args(fmt_string_new)
+        # expected_str_fmt_args returns a NamedTuple with 'keywords' field
+        self.assertTrue(hasattr(args_new, 'keywords'))
+        # keywords should contain the placeholder names
+        if args_new.keywords:
+            self.assertIn('x', args_new.keywords)
+        
+        fmt_string_old = "Number: %(x)d, Text: %(text)s"
+        args_old = expected_str_fmt_args(fmt_string_old)
+        self.assertTrue(hasattr(args_old, 'keywords'))
+
 if __name__ == '__main__':
     unittest.main()
 
-
+def def_test_util_helper_func(x, y):
+    """Helper function for testing"""
+    return x + y

@@ -1854,7 +1854,7 @@ class Config(OrderedDict):
             return False
         return OrderedDict.__eq__(self, other)
 
-    def __neq__(self, other):
+    def __ne__(self, other):
         """ Equality operator comparing 'name' and standard dictionary content """        
         if type(self).__name__ == type(other).__name__:  # allow comparison betweenn different imports
             return False

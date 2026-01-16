@@ -83,7 +83,7 @@ Validation by directly execution ``F`` with an object of type ``A`` confirms the
 .. code-block:: python
 
     t1, t2 = F(A(x=2))
-    print(, t1, ",", t2)                                 # -> 9 , False
+    print(t1, ",", t2)                                 # -> 9 , False
 
 Limitations
 ^^^^^^^^^^^
@@ -177,7 +177,7 @@ Documentation
 """
 
 from .err import verify
-from. util import qualified_name, fmt_list
+from .util import qualified_name, fmt_list
 from .verbose import Context
 from collections.abc import Collection, Sequence, Mapping
 

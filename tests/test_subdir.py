@@ -25,7 +25,7 @@ import_local()
 """
 Imports
 """
-from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot
+from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker
 from cdxcore.version import version
 from cdxcore.uniquehash import unique_hash16
 import numpy as np
@@ -365,19 +365,6 @@ class C(object):
     def f(self, y):
         return self.x*y
 
-CACHE_CLASSES_OK= False
-if CACHE_CLASSES_OK:
-    @raw_sub.cache_class("0.1")
-    class D(object):
-        @raw_sub.cache_init(uid=lambda x : f"D({x})")
-        def __init__(self, x=2):
-            self.x = x
-        @raw_sub.cache("0.1")
-        def f(self, y):
-            return self.x*y
-else:
-    D = None
-
 class Test2(unittest.TestCase):
 
     def test_cache( self ):
@@ -405,14 +392,32 @@ class Test2(unittest.TestCase):
         
         # a new B object each time -> no caching
         _ = f(B(1))
+        _ = f(B(1))
+        self.assertTrue( f.cache_info.last_cached )
+        _ = f(B(1))
         _ = f(B(2))
+        self.assertFalse( f.cache_info.last_cached )
+        _ = f(B(1))
+        _ = f(B(1), override_cache_mode="clear")
         self.assertFalse( f.cache_info.last_cached )
 
         # same B object each time -> no caching
         _ = f(B(1))
         _ = f(B(1))
         self.assertTrue( f.cache_info.last_cached )
-        
+        _ = f(B(1), cache_generate_only=True)
+        self.assertEqual(_, None)
+        self.assertTrue( f.cache_info.last_cached )
+        _ = f(B(3), cache_generate_only=True)
+        self.assertFalse( f.cache_info.last_cached )
+        self.assertNotEqual(_, None)
+
+        with self.assertRaises(ValueError):
+            _ = f(B(2), cache_generate_only=True, override_cache_mode="clear")
+        _ = f(B(23), override_cache_mode="readonly")
+        _ = f(B(23))
+        self.assertFalse( f.cache_info.last_cached )
+                
         # a new A object each time -> caching, as we ignore 'A' types
         _ = f(A(1))
         _ = f(A(2))
@@ -439,7 +444,7 @@ class Test2(unittest.TestCase):
         # test member caching
         
         c = C(2.)
-        _ = c.f(3)
+        _ = c.f(y=3)
         self.assertFalse( c.f.cache_info.last_cached )
         _ = c.f(3)
         self.assertTrue( c.f.cache_info.last_cached )
@@ -469,16 +474,16 @@ class Test2(unittest.TestCase):
         class AA(object):
             def __init__(self,x):
                 self.x = x
-            def f(self,y):
+            def afa(self,y):
                 return self.x*y
         
         a = AA(x=1)
-        f = sub.cache("0.1", label=lambda y : f"a.f({y})")(a.f)  # <- decorate bound 'f'.
-        _ = f(y=2)  
-        self.assertFalse( f.cache_info.last_cached )
-        self.assertEqual( f.cache_info.version, "0.1" )
-        _ = f(y=2)  
-        self.assertTrue( f.cache_info.last_cached )
+        faa = sub.cache("0.1", label=lambda y : f"a.f({y})")(a.afa)  # <- decorate bound 'f'.
+        _ = faa(y=2)  
+        self.assertFalse( faa.cache_info.last_cached )
+        self.assertEqual( faa.cache_info.version, "0.1" )
+        _ = faa(y=2)  
+        self.assertTrue( faa.cache_info.last_cached )
                 
         # funcname
 
@@ -520,38 +525,15 @@ class Test2(unittest.TestCase):
                 return x*y
             _ = f(1,2)
             
-        # classes
-        if CACHE_CLASSES_OK:
-            self.assertEqual(D.version, "0.1")
-            self.assertEqual(D.__new__.version, "0.1")
-    
-            d = D(2)
-            self.assertEqual(D.cache_info.last_cached, False)
-            self.assertEqual(D.cache_info.filename, "D(2)")
-            self.assertEqual(d.x,2)
-            d = D(x=2)
-            self.assertEqual(D.cache_info.last_cached, True)
-            self.assertEqual(d.x,2)
-            d = D()
-            self.assertEqual(D.cache_info.last_cached, True)
-            self.assertEqual(d.x,2)
-            d = D(x=1)
-            self.assertEqual(D.cache_info.last_cached, False)
-            self.assertEqual(d.x,1)
-            
-            # sub directory
-            @sub.cache("0.1", label="f {x} {y}" ,in_sub_dir="{x}")
-            def f( x, y ):
-                pass
-            f("xx",y=2)
-            self.assertEqual( f.cache_info.sub_dir, "xx" )
-            self.assertEqual( f.cache_info.filename, "f xx 2 eb09ef86" )
         
     def test_cache_subdir(self):
         
         @version("0.1")
         def f( x ):
             return x*2
+        @version("0.1")
+        def h(x,y):
+            return x*y
 
         root = SubDir("?/cache_test")
 
@@ -570,6 +552,20 @@ class Test2(unittest.TestCase):
         f_4 = root.cache( in_sub_dir="D{x}", label=lambda x, func_name : f"E{x:d}/{func_name} {x}")(f)
         f_4(2)
         self.assertEqual(f_4.cache_info.path[-17:], "cache_test/D2/E2/")
+
+        h1 = root.cache( uid=lambda x,y : f"{x}/{y}")(h)
+        h1(2,3)
+        self.assertEqual(h1.cache_info.path[-13:], "cache_test/2/")
+        self.assertEqual(h1.cache_info.filename, "3")
+        self.assertEqual(h1.cache_info.unique_id, "2/3")
+
+        h1 = root.cache( label=lambda x,y : f"{x}/{y}")(h)
+        h1(2,3)
+        self.assertEqual(h1.cache_info.path[-13:], "cache_test/2/")
+        self.assertEqual(h1.cache_info.filename, "3 b5bb289e")
+        self.assertEqual(h1.cache_info.unique_id, "2/3 b5bb289e")
+
+
 
 if __name__ == '__main__':
     unittest.main()

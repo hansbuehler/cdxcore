@@ -21,7 +21,9 @@ from collections import OrderedDict
 from sortedcontainers import SortedDict
 import numpy as np
 import pandas as pd
-from .err import fmt, _fmt, verify, error, warn_if, warn #NOQA
+from .err import fmt, _fmt, verify, error, warn_if, warn ,verify_inp #NOQA
+import inspect as inspect
+from string import Formatter
 
 # =============================================================================
 # basic indentification short cuts
@@ -156,7 +158,7 @@ def getsizeof(obj):
     """
     return _get_recursive_size(obj,None)    
 
-def qualified_name( x, module : bool = False ):
+def qualified_name( x, module : bool|str = False ):
     """
     Return qualified name including module name of some Python element.
     
@@ -172,6 +174,8 @@ def qualified_name( x, module : bool = False ):
     by the return type of the property::
         
         class A(object):
+            def __init__(self):
+                self.x = 1
             @property
                 def p(self):
                     return x
@@ -184,24 +188,38 @@ def qualified_name( x, module : bool = False ):
         x : any
             Some Python element.
             
-        module : bool, optional
+        module : bool|str, default ``False``
             Whether to also return the containing module if available.
+            Use a string as separator to append the module name
+            to the returned name::
+                
+                # define in module test.py                
+                def f():
+                    pass
+                
+                # in another module
+                from test import f
+                qualified_name(f,"@") -> f@test
+                
     Returns
     -------
         qualified name : str
             The name, if ``module`` is ``False``.
             
-        (qualified name, module) : tuple
+        (qualified name, module_name) : tuple
             The name, if ``module`` is ``True``.
             Note that the module name returned might be ``""`` if no module
             name could be determined.
+            
+        ``{qualified name}{module}{module_name}`` : str
+            If ``module`` is a string.
             
     Raises
     ------
         :class:`RuntimeError` if not qualfied name for ``x`` or its type could be found.
     """
     if x is None:
-        if not module:
+        if isinstance(module, str) or not module:
             return "None"
         else:
             return "None", ""
@@ -219,13 +237,15 @@ def qualified_name( x, module : bool = False ):
         name = getattr(type(x), "__name__", None)
     if name is None:
         name = str(type(x))
-    if not module:
+    if not isinstance(module, str) and not module:
         return name
 
-    module = getattr(x, "__module__", None)
-    if module is None:
-        module = getattr(type(x), "__module__", "")
-    return name, module    
+    mdl = getattr(x, "__module__", None)
+    if mdl is None:
+        mdl = getattr(type(x), "__module__", "")
+    if isinstance(module, str):
+        return name + module + mdl
+    return name, mdl    
 
 # =============================================================================
 # string formatting
@@ -791,6 +811,191 @@ def is_filename( filename : str , by : str | Collection = "default" ) -> bool:
             return False
     return True
 
+
+def expected_str_fmt_args(fmt: str) -> Mapping:
+    """
+    Inspect a ``{}`` Python format string and report what arguments it expects.
+    
+    Returns
+    -------
+        Information : Mapping
+            A dictionary containing:
+                
+            * ``auto_positional``: count of'{}' fields
+            * ``positional_indices``: explicit numeric field indices used (e.g., ``{0}``, ``{2}``)
+            * ``keywords``: named fields used (e.g., ``{user}``, ``{price:.2f}``)
+    """
+    f = Formatter()
+    pos = set()
+    auto = 0
+    kws = set()
+
+    for literal, field, spec, conv in f.parse(fmt):
+        if field is None:
+            continue
+        # Keep only the first identifier before attribute/index access
+        head = field.split('.')[0].split('[')[0]
+        if head == "":               # '{}' → automatic positional
+            auto += 1
+        elif head.isdigit():         # '{0}', '{2}' → explicit positional
+            pos.add(int(head))
+        else:                        # '{name}' → keyword
+            kws.add(head)
+
+    from cdxcore.pretty import PrettyObject# avoid loop imports
+    return PrettyObject( positional=auto,
+                         posindices=pos,
+                         keywords=kws
+                       )
+
+class AcvtiveFormat( object ):
+    """
+    Format as a string or callable.
+    
+    This class allows a user to specify a format string either by a Python :func:`str.format` string
+    or a ``Callable``.
+    
+    Example::
+        
+        from cdxcore.util import AcvtiveFormat
+        
+        fmt = AcvtiveFormat("{x:.2f}", "test format" )
+        print( fmt(x=1) )
+
+        fmt = AcvtiveFormat(lambda x : "{x:.2f}", "test format" )
+        print( fmt(x=1) )
+        
+    The advantage of using the ``lambda x : {x:.2f}`` method is that it allows 
+    fairly complex formatting and data expressions at the formatting stage.
+
+    Parameters
+    ----------
+        fmt : str|Callabale
+            Either a Python :func:`str.format` string containing ``{}`` for formatting, or a callable which returns a string.
+            
+        label : str, default ``Format string``
+            A descriptive string for error messages referring the format string, typically in the format
+            ``f{which} '{fmt}' cannot have positional arguments...``
+            
+        name : str|None, default ``None``
+            A name for the formatting string. If not provided, the name will be auto-generated: If ``fmt`` is a string, this string will be used;
+           if ``fmt`` is a callable then :func:`cdxcore.util.qualified_name` is used.
+            
+        reserved_keywords : dict|None, default ``None``
+            Mechanism for defining default keywords which are provided by the environment, not the user.
+            For example::
+                
+                from cdxcore.util import AcvtiveFormat
+                
+                fmt = AcvtiveFormat("{name} {x:.2f}", "test format", reserved_keywords=dict(name="test") )
+                print( fmt(x=1) )
+                
+        strict : bool, default ``False``
+            If ``False`` this function does not validate that all arguments passed to :meth:`cdxcore.util.AcvtiveFormat.__call__`
+            have to be understood by the formatting function. This is usally the best solution as the calling entity
+            just passes everything and the formatter selects what it needs.
+            
+            Set to ``True` to validate that the passed arguments match excactly the expected arguments.
+    """            
+    
+    def __init__(self, fmt : str|Callable, label : str = "Format string", name : str|None = None, reserved_keywords : Mapping|None = None, strict : bool = False ):
+        """ __init__ """        
+        verify_inp( not fmt is None, "'fmt' cannot be None")
+
+        if isinstance( fmt, str ):
+            r = expected_str_fmt_args( fmt )
+            if r.positional + len(r.posindices) > 0:
+                raise ValueError("f{label}: '{fmt}' cannot have positional arguments (empty brackets {} or brackets with integer position {1}). Use only named arguments.")
+            r = list(r.keywords)
+            n = fmt if name is None else name
+        else:
+            if not inspect.isfunction(fmt) and not inspect.ismethod(fmt):
+                if not callable(fmt):
+                    raise ValueError(f"{label}: '{qualified_name(fmt,"@")}' is not callable")
+                fmt = fmt.__call__
+                assert inspect.isfunction(fmt) or inspect.ismethod(fmt), ("Internal error - function or method expected", fmt, type(fmt))
+            r = list( inspect.signature(fmt).parameters )
+            n = qualified_name(fmt,"@") if name is None else name
+            assert not n is None and not n == "None", ("None?", n, n is None, qualified_name(fmt,"@"), fmt)
+
+        self.label   = label      # a descriptive name for the meaning of the formatting string or function for error messages
+        self.name    = n          # a descriptive name for the formatting string or function itself, by default the string if it is a string, or the qualified name if not.
+            
+        self._fmt    = fmt 
+        self._strict = strict
+        self._required_all_arguments = r if len(r) > 0 else None # list of arguments this string or function expects
+        self._reserved_keywords     = reserved_keywords if not reserved_keywords is None else dict()
+        
+    @property
+    def is_simple_str(self) -> bool:
+        """ Whether the current object represents a string which does not require any arguments """
+        return  self._required_all_arguments is None
+        
+    def __str__(self) -> str:
+        return f"AcvtiveFormat({self.label}:{self.name})({fmt_list(sorted(self._required_all_arguments))})"
+    
+    @property
+    def required_arguments(self) -> set:
+        """ Returns a set of arguments ``__call__`` needs to format. This excludes ``reserved_keywords``. """
+        if self._required_all_arguments is None:
+            return set()
+        return set(self._required_all_arguments) - set(self._reserved_keywords)
+
+    def __call__( __self__call__, **arguments ) -> str:
+        """
+        Execute the format string.
+        
+        Parameters
+        ---------
+            arguments : Mapping
+                All arguments to be passed to the format string or function.
+                
+                If this object was constructed with ``strict=True`` then the list of arguments
+                must match :attr:`cdxcore.util.AcvtiveFormat.required_arguments`` except for :attr:`cdxcore.util.AcvtiveFormat.reserved_keywords``
+                
+        Returns
+        -------
+            text : str
+                Formatted string.
+        """
+        self = __self__call__ # ugly way of enuring that 'self' can be part of the arguments
+        if self._strict:
+            excess  = set(arguments) - self.required_arguments
+            if len(excess) > 0:
+                excess = sorted(excess)
+                raise ValueError(f"'{self.label}': formatting function '{self.name}' does not require arguments {fmt_list(excess)}")
+        
+        if self._required_all_arguments is None:
+            # label function or string does not need any parameters
+            return self._fmt if isinstance( self._fmt, str ) else self.fmt()
+            
+        fmt_arguments = {}
+        for k in self._required_all_arguments:
+            if k in self._reserved_keywords:
+                value   = self._reserved_keywords[k]
+                if k in arguments:
+                    error(f"{self.label}: '{k}' is a reserved keyword with value '{str(value)}'. "+\
+                          f"You cannot use it in the explicit parameter list for '{self.name}'.")
+                fmt_arguments[k] = value
+            else:
+                if not k in arguments:  
+                    args_ = [ f"'{_}'" for _ in arguments ]
+                    raise ValueError(f"'{self.label}': formatting function '{self.name}' expected a parameter '{k}' which is not present "+\
+                                     f"in the list of parameters: {fmt_list(args_)}.")
+                fmt_arguments[k] = arguments[k]
+
+        # call format or function                    
+        if isinstance( self._fmt, str ):
+            return str.format( self._fmt, **fmt_arguments )
+
+        try:
+            r = self._fmt(**fmt_arguments)
+        except Exception as e:
+            raise type(e)(f"'{self.label}': attempt to call '{self.name}' of type {type(self._fmt)} failed: {e}")
+        if not isinstance(r, str):
+            raise ValueError(f"'{self.label}': the callable '{self.name}' must return a string. Found {type(r) if not r is None else None}")
+        return r
+    
 # =============================================================================
 # Conversion of arbitrary python elements into re-usable versions
 # =============================================================================

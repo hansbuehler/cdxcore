@@ -27,7 +27,7 @@ import_local()
 
 from cdxcore.util import is_function, is_atomic, is_float, is_filename, qualified_name
 from cdxcore.util import fmt, fmt_seconds, fmt_list, fmt_dict, fmt_big_number, fmt_digits, fmt_big_byte_number, fmt_datetime, fmt_date, fmt_time, fmt_timedelta, fmt_filename, DEF_FILE_NAME_MAP
-from cdxcore.util import CRMan
+from cdxcore.util import CRMan, AcvtiveFormat, expected_str_fmt_args
 
 class qA(object):
 
@@ -413,6 +413,7 @@ class Test(unittest.TestCase):
         modname = __name__
 
         self.assertEqual( qualified_name(qualified_name,True), ("qualified_name", "cdxcore.util"))
+        self.assertEqual( qualified_name(qualified_name,"@"), "qualified_name@cdxcore.util")
         self.assertEqual( qualified_name(is_atomic,True), ("is_atomic", "cdxcore.util"))
         self.assertEqual( qualified_name(datetime.datetime,True), ("datetime", "datetime"))
         self.assertEqual( qualified_name(datetime.datetime.date,True), ("datetime.date", "builtins"))
@@ -452,7 +453,57 @@ class Test(unittest.TestCase):
         self.assertEqual( qualified_name(qb.g,True), ("int","builtins") )   # <-- property type
         self.assertEqual( qualified_name(qb.h,True), ("Test.test_basics.<locals>.qB.h",modname) )
         self.assertEqual( qualified_name(qb.j,True), ("Test.test_basics.<locals>.qB.j",modname) )
-     
+        
+        with self.assertRaises(ValueError):
+            af = AcvtiveFormat(None)
+
+        af = AcvtiveFormat("nothing")
+        self.assertEqual( af(), "nothing" )
+        self.assertTrue( af.is_simple_str )
+        af = AcvtiveFormat("nothing")
+        self.assertEqual( af(x=1), "nothing" ) # not strict
+        self.assertTrue( af.is_simple_str )
+        af = AcvtiveFormat("{x:.2f}")
+        self.assertEqual( af(x=0.011), "0.01" )
+        self.assertFalse( af.is_simple_str )
+        af = AcvtiveFormat("{x} {y} {z}")
+        self.assertEqual( af(z=3,y=2,x=1), "1 2 3" )
+        af = AcvtiveFormat("{x} {y} {z}")
+        self.assertEqual( af(z=3,y=2,x=1,u=0), "1 2 3" )# not strict
+        af = AcvtiveFormat("{a}: {x} {y} {z}", reserved_keywords=dict(a=10))
+        self.assertEqual( af(z=3,y=2,x=1), "10: 1 2 3" )
+        
+        with self.assertRaises(ValueError):
+            af = AcvtiveFormat("nothing", strict=True )
+            self.assertEqual( af(x=1), "nothing" )        
+        with self.assertRaises(ValueError):
+            af = AcvtiveFormat("{x} {y} {z}")
+            self.assertEqual( af(z=3,y=2,u=1), "1 2 3" )
+        with self.assertRaises(ValueError):
+            af = AcvtiveFormat("{x} {y} {z}", strict=True)
+            self.assertEqual( af(z=3,y=2,x=1,u=0), "1 2 3" )
+        with self.assertRaises(RuntimeError):
+            af = AcvtiveFormat("{a}: {x} {y} {z}", reserved_keywords=dict(a=10))
+            self.assertEqual( af(z=3,y=2,x=1,a=0), "10: 1 2 3" )
+
+        af = AcvtiveFormat(lambda x : f"{x:.2f}")
+        self.assertFalse( af.is_simple_str )
+        self.assertEqual( af(x=0.011), "0.01" )
+        af = AcvtiveFormat(lambda x,y,z : f"{x} {y} {z}")
+        self.assertEqual( af(z=3,y=2,x=1), "1 2 3" )
+        af = AcvtiveFormat(lambda a,x,y,z : f"{a}: {x} {y} {z}", reserved_keywords=dict(a=10))
+        self.assertEqual( af(z=3,y=2,x=1), "10: 1 2 3" )
+        
+        with self.assertRaises(ValueError):
+            af = AcvtiveFormat(lambda x,y,z: f"{x} {y} {z}")
+            self.assertEqual( af(z=3,y=2,u=1), "1 2 3" )
+        with self.assertRaises(ValueError):
+            af = AcvtiveFormat(lambda x,y,z: f"{x} {y} {z}", strict=True)
+            self.assertEqual( af(z=3,y=2,x=1,u=0), "1 2 3" )
+        with self.assertRaises(RuntimeError):
+            af = AcvtiveFormat(lambda a,x,y,z: f"{a}: {x} {y} {z}", reserved_keywords=dict(a=10))
+            self.assertEqual( af(z=3,y=2,x=1,a=0), "10: 1 2 3" )
+
     def test_crman(self):
         
         crman = CRMan()

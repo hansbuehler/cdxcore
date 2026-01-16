@@ -25,7 +25,6 @@ API Reference
 
    jcpool
 
-   filelock
    pretty 
    util
    err

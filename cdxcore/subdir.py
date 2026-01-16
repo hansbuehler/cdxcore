@@ -369,18 +369,17 @@ from collections import OrderedDict
 from collections.abc import Collection, Mapping, Callable, Iterable
 from enum import Enum
 from functools import update_wrapper
-from string import Formatter
         
 import polars as pl
 import json as json
 import gzip as gzip
 import blosc as blosc
 import sys as sys
-from .err import verify, error, warn, fmt as txtfmt
+from .err import verify, error, warn, fmt as txtfmt, verify_inp, warn_if
 from .pretty import PrettyObject
 from .verbose import Context
 from .version import Version, version as version_decorator, VersionError
-from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename, fmt_dict
+from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename, fmt_dict, AcvtiveFormat, qualified_name
 from .uniquehash import unique_hash48, UniqueLabel, NamedUniqueHash, named_unique_filename48_8
 
 """
@@ -3520,139 +3519,22 @@ class SubDir(object):
                   xy = f( x=1, y=2 )
                   uid = f.cache_info.filename
         """
-        return _CacheCallable(subdir = self,
-                             version = version,
-                             dependencies = dependencies,
-                             label = label,
-                             uid = uid,
-                             name = name,
-                             in_sub_dir = in_sub_dir,
-                             exclude_args = exclude_args,
-                             include_args = include_args,
-                             exclude_arg_types = exclude_arg_types,
-                             version_auto_class = version_auto_class,
-                             name_of_func_name_arg = name_of_func_name_arg)
-
-    def cache_class( self, 
-                     version             : str = None , *,
-                     dependencies        : list = None, 
-                     version_auto_class  : bool = True
-                     ):
-        """
-        Short-cut for :dec:`cdxcore.subdir.SubDir.cache` applied to classes
-        with a reduced number of available parameters.
-        
-        Example::
-
-            cache   = SubDir("!/.cache")
-            
-            @cache.cache_class("0.1")
-            class A(object):
-                
-                @cache.cache_init(exclude_args=['debug'])
-                def __init__(self, x, debug):
-                    if debug:
-                        print("__init__",x)
-                    self.x = x
-
-        """
-        return self.cache( version=version, dependencies=dependencies, version_auto_class=version_auto_class)        
-
-    def cache_init(  self, 
-                     label               : Callable = None,
-                     uid                 : Callable = None,
-                     name                : str|None = None, 
-                     exclude_args        : list[str] = None,
-                     include_args        : list[str] = None,
-                     exclude_arg_types   : list[type] = None,
-                     ):
-        """
-        Short-cut for :dec:`cdxcore.subdir.SubDir.cache` applied to decorating ``__init__``
-        with a reduced number of available parameters.
-        
-        Example::
-
-            cache   = SubDir("!/.cache")
-            
-            @cache.cache_class("0.1")
-            class A(object):
-                
-                @cache.cache_init(exclude_args=['debug'])
-                def __init__(self, x, debug):
-                    if debug:
-                        print("__init__",x)
-                    self.x = x
-
-        """
-        return self.cache( label=label, uid=uid, name=name, exclude_args=exclude_args, include_args=include_args, exclude_arg_types=exclude_arg_types )        
-
-"""
-        Caching Classes
-        ^^^^^^^^^^^^^^^
-
-        Classes can also be cached. In this case the creation of a class is cached, i.e. a call to
-        the class constructor restores the respectiv object from disk.
-
-        This is done in two steps:
-            
-        1) first, the class itself is decorated using 
-           :dec:`cdxcore.subdir.SubDir.cache`
-           to provide version information at class level. Only version information are provided here.
-           
-           You can use :dec:`cdxcore.subdir.SubDir.cache_class` as an alias.
-           
-        2) Secondly, decorate ``__init__``. You do not need to specify a version
-           for ``__init__`` as its version usually coincides with the version of the class. At ``__init__``
-           you define how unique IDs are generated from the parameters passed to object construction.
-           
-           You can use :dec:`cdxcore.subdir.SubDir.cache_init` as an alias.
-
-        Simple example:
-            
-        .. code-block:: python
-    
-            from cdxcore.subdir import SubDir
-            cache   = SubDir("!/.cache")
-            cache.delete_all_content()   # for illustration
-            
-            @cache.cache_class("0.1")
-            class A(object):
-                
-                @cache.cache_init(exclude_args=['debug'])
-                def __init__(self, x, debug):
-                    if debug:
-                        print("__init__",x)
-                    self.x = x
-                    
-            a = A(1)    # caches 'a'
-            b = A(1)    # reads the cached object into 'b'
-
-        **Technical Comments**
-        
-        The function ``__init__`` does not actually return a value; for this reason
-        behind the scenes it is actually ``__new__`` which is being decorated.
-        Attempting to cache-decorate ``__new__`` manually will lead to an exception.
-
-        A nuance for ``__init__`` vs ordinary member function is that the
-        ``self`` parameter is non-functional
-        (in the sense that it is an empty object when ``__init__`` is called).
-        ``self`` is therefore automatically excluded from computing a unique call ID.
-        That also means ``self`` is not part of the arguments passed to ``uid``:
-        
-        .. code-block:: python
-        
-            @cache.cache_class("0.1")
-            class A(object):
-                
-                # NOTE: 'self' is not passed to the lambda function "uid"
-                @cache.cache_init(uid=lambda x, debug: f"A.__init__(x={x})") 
-                def __init__(self, x, debug):
-                    if debug:
-                        print("__init__",x)
-                    self.x = x
-
-        Decorating classes with ``__slots__`` does not yet work.
-"""                                   
+        def wrap( F : Callable ):
+            wrapper = CacheWrapper(F=F,
+                                subdir = self,
+                                version = version,
+                                dependencies = dependencies,
+                                label = label,
+                                uid = uid,
+                                name = name,
+                                in_sub_dir = in_sub_dir,
+                                exclude_args = exclude_args,
+                                include_args = include_args,
+                                exclude_arg_types = exclude_arg_types,
+                                version_auto_class = version_auto_class,
+                                name_of_func_name_arg = name_of_func_name_arg)
+            return wrapper.wrapper()
+        return wrap
 
 # ========================================================================
 # Caching, convenience
@@ -3766,174 +3648,122 @@ class CacheInfo(object):
     Functions decorated with :dec:`cdxcore.subdir.SubDir.cache` 
     will have a member ``cache_info`` of this type
     """
-    def __init__(self, name, F, keep_last_arguments):
+    def __init__(self, name: str, idversion: str, keep_last_arguments : bool ):
         """
         :meta private:
         """
-        self.name        = name                  #: Decoded name of the function.
-        
-        self.signature   = inspect.signature(F)  #: :func:`inspect.signature` of the function.
-    
+        self.name        = name                  #: Decoded name of the function.        
+        self.unique_id   = None                  #: Unique ID of the last function call.
         self.filename    = None                  #: Unique filename of the last function call.
-        self.path        = None                  #: path where the file was stored
+        self.path        = None                  #: Fully qualified path where the file was stored.
         self.label       = None                  #: Label of the last function call.
-        self.version     = None                  #: Last version used.
-        
+        self.version     = idversion             #: (hash) version used. This is equal to ``F.version.unique_id64``.
         self.last_cached = None                  #: Whether the last function call restored data from disk.
         
         if keep_last_arguments:             
             self.last_arguments = None                #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` for the relevant :class:`cdxcore.subdir.CacheController`.
 
-def _ensure_has_version( F,
-                         version      : str = None,
-                         dependencies : list = None,
-                         auto_class   : bool = True,
-                         allow_default: bool = False):
-    """
-    Sets a version if requested, or ensures one is present
-    """
-    if version is None and not dependencies is None:
-        raise ValueError(f"'{F.__qualname__}: you cannot specify version 'dependencies' without specifying also a 'version'")
+class CacheWrapper(object):
     
-    version_info = getattr(F,"version", None)
-    if not version_info is None and type(version_info).__name__ != Version.__name__:
-        raise RuntimeError(f"'{F.__qualname__}: has a 'version' member, but it is not of class 'Version'. Found '{type(version_info).__name__}'")
-
-    if version is None:
-        if not version_info is None:
-            return F
-        if allow_default:
-            version = "0"
-        else:
-            raise ValueError(f"'{F.__qualname__}': cannot determine version. Specify 'version'")
-    elif not version_info is None:
-        raise ValueError(f"'{F.__qualname__}: function already has version information; cannot set version '{version}' again")
-    return version_decorator( version=version,
-                              dependencies=dependencies,
-                              auto_class=auto_class)(F)
-
-def _qualified_name( F, name = None ):
-    """
-    Return qualified name including module name, robustly
-    """
-    if name is None:
-        try:
-            name = F.__qualname__
-        except:
-            try:
-                name = F.__name__
-            finally:
-                pass
-            verify( not name is None, "Cannot determine qualified name for 'F': it has neither __qualname__ nor a type with a name. Please specify 'name'", exception=RuntimeError)
-        try:
-            name = name + "@" + F.__module__
-        except:
-            warn( f"Cannot determine module name for '{name}' of {type(F)}" )
-    return name
-
-def _expected_str_fmt_args(fmt: str):
-    """
-    Inspect a format string and report what arguments it expects.
-    Returns:
-      - auto_positional: count of automatic '{}' fields
-      - positional_indices: explicit numeric field indices used (e.g., {0}, {2})
-      - keywords: named fields used (e.g., {user}, {price})
-    """
-    f = Formatter()
-    pos = set()
-    auto = 0
-    kws = set()
-
-    for literal, field, spec, conv in f.parse(fmt):
-        if field is None:
-            continue
-        # Keep only the first identifier before attribute/index access
-        head = field.split('.')[0].split('[')[0]
-        if head == "":               # '{}' → automatic positional
-            auto += 1
-        elif head.isdigit():         # '{0}', '{2}' → explicit positional
-            pos.add(int(head))
-        else:                        # '{name}' → keyword
-            kws.add(head)
-
-    return PrettyObject( positional=auto,
-                         posindices=pos,
-                         keywords=kws
-                       )
-
-class _CacheCallable(object):
-    """
-    Wrapper for a cached function.
-    
-    This is the wrapper returned by :dec:`cdxcore.subdir.SubDir.cache`.    
-    """
-    
-    def __init__(self, 
-                    subdir               : SubDir, *,
-                    version              : str = None,
-                    dependencies         : list,
-                    label                : Callable = None,
-                    uid                  : Callable = None,
-                    name                 : str = None,
-                    in_sub_dir           : Callable = None,
-                    exclude_args         : set[str] = None,
-                    include_args         : set[str] = None,
-                    exclude_arg_types    : set[type] = None,
-                    version_auto_class   : bool = True,
-                    name_of_func_name_arg: str = "func_name"):
-        """
-        Utility class for :dec:`cdxcore.subdir.SubDir.cache`.
+    def __init__(self,  F                    : Callable,  
+                        subdir               : SubDir|str, *,
+                        version              : str|None = None,
+                        dependencies         : list|None = None,
+                        label                : str|Callable = None,
+                        uid                  : str|Callable = None,
+                        name                 : str = None,
+                        in_sub_dir           : str|Callable = None,
+                        exclude_args         : set[str] = None,
+                        include_args         : set[str] = None,
+                        exclude_arg_types    : set[type] = None,
+                        version_auto_class   : bool = True,
+                        name_of_func_name_arg: str = "func_name"):
         
-        *Do not use directly.*
-        """
-        if not label is None and not uid is None:
-            error("Cannot specify both 'label' and 'uid'.")
+        # check F
+        # -------
+        verify_inp( not F is None, "'F' cannot be None")
+        verify_inp( not inspect.isclass(F), lambda : f"Cannot wrap classes: {qualified_name(F,"@")}")
         
-        self._subdir                = SubDir(subdir)
-        self._input_version         = str(version) if not version is None else None
-        self._dependencies          = list(dependencies) if not dependencies is None else None
-        self._label                 = label
-        self._uid                   = uid
+        def assess(F):
+            qual_name   = qualified_name(F,"@") if name is None else str(name)
+            is_method   = inspect.ismethod(F) or isinstance(F, types.BuiltinMethodType)# for *bound* methods
+            is_function = inspect.isfunction(F) or isinstance(F, types.BuiltinFunctionType)
+    
+            if not is_method and not is_function:
+                # if F is neither a function or method, attempt to decorate (bound) __call__
+                if not callable(F):
+                    raise ValueError(f"'{qual_name}' is not callable")    
+                F_ = getattr(F, "__call__", None)
+                if F_ is None:
+                    raise ValueError(f"{qual_name}' is callable, but has no '__call__'. F is of type {type(F)}")
+                if not self.debug_verbose is None:
+                    self.debug_verbose.write(f"cache({qual_name}): 'F' is an object; will use bound __call__")
+                return assess(F.__call__)
+            
+            if is_method:
+                if getattr(F, "__self__", None) is None:
+                    raise RuntimeError(f"Method {qual_name} must have '__self__' member")
+            else:
+                assert is_function
+                if F.__name__ == "__new__":
+                    raise ValueError(f"You cannot decorate __new__ ('{qual_name}').")                    
+            return F, is_method, is_function, qual_name      
+                
+        F,\
+        self._is_method,\
+        self._is_function,\
+        qual_name                   = assess(F)
+
+        # process inputs
+        # --------------
+
+        self._subdir                = SubDir(subdir) if not isinstance(subdir,SubDir) else subdir
+        self._uid_or_label          = uid if label is None else label
+        self._unique                = not uid is None
         self._in_sub_dir            = in_sub_dir
-        self._name                  = str(name) if not name is None else None
+        self._name                  = str(name) if not name is None else qual_name
         self._exclude_args          = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
         self._include_args          = set(include_args) if not include_args is None and len(include_args) > 0 else None
-        self._exclude_arg_types     = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
-        self._version_auto_class    = bool(version_auto_class)
-        self._name_of_func_name_arg = str(name_of_func_name_arg)
-        self._uid_label_params      = None
+        self.cache_controller.versioned[self._name] = self
 
-        def get_parameters(F : str|Callable, which : str):
-            """ Returns the parameters requried by a stirng with {}'s, or by the function F """
-            which = "'uid'" if not uid is None else "'label'"
-            if isinstance( F, str ):
-                r = _expected_str_fmt_args( F )
-                if r.positional + len(r.posindices) > 0:
-                    raise ValueError("f{which} '{F}' cannot have positional arguments (empty brackets {} or brackets with integer position {1}). Use only named arguments.")
-                r = list(r.keywords)
-            else:
-                if not inspect.isfunction(F):
-                    if not callable(F):
-                        raise ValueError(f"{which} '{_qualified_name(F)}' is not callable")
-                    F = F.__call__
-                    assert inspect.isfunction(F), ("Internal error - function expected")
-                r = list( inspect.signature(F).parameters )
-            return r if len(r) > 0 else None
+        exclude_arg_types     = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else set()
+        global_exlc_at        = set(self.cache_controller.exclude_arg_types) if not self.cache_controller.exclude_arg_types is None and len(self.cache_controller.exclude_arg_types) > 0 else set()
+        self._exclude_types   = exclude_arg_types | global_exlc_at
+
+        # equip F with a version
+        # ----------------------
+
+        self._F          = self._ensure_has_version( F, version=str(version) if not version is None else None,
+                                                     dependencies=list(dependencies) if not dependencies is None else None,
+                                                     auto_class=bool(version_auto_class),
+                                                     allow_default=False )
+        self._signature  = inspect.signature(F)  
+
+
+        # uid/label
+        # ----------
         
-        self._uid_label_params  = get_parameters( self.uid_or_label, which = "'uid'" if not uid is None else "'label'" ) if not self.uid_or_label is None else None
-        self._in_sub_dir_params = get_parameters( self._in_sub_dir, which = "'in_sub_dir'" ) if not self._in_sub_dir is None else None
+        which                 = 'uid' if self._unique else 'label'     
+        name_of_func_name_arg = str(name_of_func_name_arg)
+        reserved             = {}
+        reserved[name_of_func_name_arg] = self._name
+        self._uid_or_label = self._uid_or_label if not self._uid_or_label is None else self._name
+        self._uid_or_label = AcvtiveFormat(self._uid_or_label,label=which,name=self._name,reserved_keywords=reserved ) 
+        self._in_sub_dir   = AcvtiveFormat(self._in_sub_dir,label="in_sub_dir",name=self._name,reserved_keywords=reserved ) if not self._in_sub_dir is None else None
+
+        # wrap up
+        # -------
+
+        if not self.debug_verbose is None:
+            self.debug_verbose.write(f"cache({self._name}): function registered for caching into '{self._subdir.path}'.")
 
     @property
-    def uid_or_label(self) -> Callable:
-        """ ID or label """
-        return self._uid if self._label is None else self._label
-    @property
-    def unique(self) -> bool:
-        """ Whether the ID is unique """
-        return not self._uid is None
+    def version(self) -> Version:
+        """ Returns the :class:`cdxcore.version.Version` information of F """
+        return self._F.version
     @property
     def cache_controller(self) -> CacheController:
-        """ Returns the :class:`cdxcore.subdir.CacheController` """
+        """ Returns the associated :class:`cdxcore.subdir.CacheController` of the underlying :class:`cdxcore.subdir.SubDir` """
         return self._subdir.cache_controller
     @property
     def cache_mode(self) -> CacheMode:
@@ -3943,497 +3773,323 @@ class _CacheCallable(object):
     def debug_verbose(self) -> Context:
         """ Returns the debug :class:`cdxcore.verbose.Context` used to print caching information, or ``None`` """
         return self.cache_controller.debug_verbose
-    @property
-    def labelledFileName(self) -> Callable:
-        """ Returns ``labelledFileName()`` of the underlying :class:`cdxcore.subdir.CacheController` """ 
-        return self.cache_controller.labelledFileName
-    @property
-    def uniqueFileName(self) -> Callable:
-        """ Returns ``uniqueFileName()`` of the underlying :class:`cdxcore.subdir.CacheController` """ 
-        return self.cache_controller.uniqueFileName
-    @property
-    def global_exclude_arg_types(self) -> list[type]:
-        """ Returns ``exclude_arg_types`` of the underlying :class:`cdxcore.subdir.CacheController` """ 
-        return self.cache_controller.exclude_arg_types
+
+    @staticmethod
+    def _ensure_has_version( F,
+                             version      : str = None,
+                             dependencies : list = None,
+                             auto_class   : bool = True,
+                             allow_default: bool = False):
+        """
+        Sets a version if requested, or ensures one is present
+        """
+        if version is None and not dependencies is None:
+            raise ValueError(f"'{F.__qualname__}: you cannot specify version 'dependencies' without specifying also a 'version'")
+        
+        version_info = getattr(F,"version", None)
+        if not version_info is None and type(version_info).__name__ != Version.__name__:
+            raise RuntimeError(f"'{F.__qualname__}: has a 'version' member, but it is not of class 'Version'. Found '{type(version_info).__name__}'")
     
-    def __call__(self, F : Callable):
-        """
-        Decorate ``F`` as cachable callable.
-        See :dec:`cdxcore.subdir.SubDir.cache` for documentation.
-        """
-        if inspect.isclass(F):
-            if not self._label is None: raise ValueError("'{F.__qualname__}': when decorating a class specify 'label' for __init__, not the class")
-            if not self._uid is None: raise ValueError("'{F.__qualname__}': when decorating a class specify 'uid' for __init__, not the class")
-            if not self._exclude_args is None: raise ValueError("'{F.__qualname__}': when decorating a class specify 'exclude_args' for __init__, not the class")
-            if not self._include_args is None: raise ValueError("'{F.__qualname__}': when decorating a class specify 'include_args' for __init__, not the class")
-            if not self._exclude_arg_types is None: raise ValueError("'{F.__qualname__}': when decorating a class specify 'exclude_arg_types' for __init__, not the class")
-            return self._wrap_class(F)
-
-        return self._wrap( F )
-        
-    def _wrap_class(self, C : type):
-        """
-        Wrap class
-        
-        This wrapper:
-            
-        * Assigns a :dec:`cdxcore.version.version` for the class (if not yet present).
-        * Extracts from ``__init__`` the wrapper to decorate`` __new__``.
-        """
-        raise NotImplementedError("Decorating classes is not yet fully implemented")
-        debug_verbose = self.cache_controller.debug_verbose
-
-        if not inspect.isclass(C):
-            raise ValueError(f"Attempt to wrap a class, but object does not seem to be a class: {type(C)}")
-         
-        # apply decorator provided for __init__ to __new__                    
-        C__init__                        = getattr(C, "__init__", None)
-        if C__init__ is None:
-            raise RuntimeError(f"'{C.__qualname__}': to cache a class, decorate both the class with cache_class, and __init__ with cache_init")
-        init_cache_callable              = getattr(C__init__, "init_cache_callable", None)
-        if init_cache_callable is None:
-            raise RuntimeError(f"'{C.__qualname__}': to cache a class, decorate both the class with cache_class, and __init__ with cache_init")
-        assert type(init_cache_callable).__name__ == _CacheCallable.__name__, (f"*** Internal error: '{C.__qualname__}': __init__ has wrong type for 'init_cache_callable': {type(init_cache_callable)} ?")
-        
-        C__init__.init_cache_callable     = None # tell the __init__ wrapper we have processed this information
-        
-        # validate consistency
-        # --------------------
-        # Version information is stored in the class, parameter/label information is stored in __init__
-        # see cache_class() vs cache_init
-        
-        if self._subdir != init_cache_callable._subdir: raise ValueError("cache_class() and cache_init() must be called from the same SubDir. Found '{self._subdir}' for the class '{C.__qualname__}' and '{init_cache_callable._subdir}' for __init__")
-        assert init_cache_callable._input_version is None, ("__init__ has version", init_cache_callable._input_version, "class", C )
-        assert init_cache_callable._dependencies is None, ("__init__ has dependencies", init_cache_callable._dependencies, "class", C )
-        assert self._label is None, ("Class has label", self._label, "class", C) 
-        assert self._uid is None, ("Class has uid", self._uid, "class", C) 
-        assert self._name is None, ("Class has name", self._name, "class", C) 
-        assert self._exclude_args is None, ("Class has _exclude_args", self._exclude_args, "class", C) 
-        assert self._include_args is None, ("Class has _include_args", self._include_args, "class", C) 
-        assert self._exclude_arg_types is None, ("Class has _exclude_arg_types", self._exclude_arg_types, "class", C) 
-
-        self._label                  = init_cache_callable._label
-        self._uid                    = init_cache_callable._uid
-        self._name                   = _qualified_name( C ) if init_cache_callable._name is None else init_cache_callable._name
-        self._exclude_args           = init_cache_callable._exclude_args
-        self._include_args           = init_cache_callable._include_args
-        self._exclude_arg_types      = init_cache_callable._exclude_arg_types
-        self._name_of_func_name_arg  = init_cache_callable._name_of_func_name_arg
-        self._uid_label_params       = init_cache_callable._uid_label_params
-        del init_cache_callable
-        
-        # check whether there is a __new__ present in the class.
-        # in that case just use that. Otherwise, create own
-        # wrapper.
-        
-        C__new__       = C.__dict__.get("__new__", None)
-
-        if not C__new__ is None:
-            # make sure it's __new__(cls...) not __new__(*args...)
-            sig_new   = inspect.signature(C__new__)
-            ps = list(sig_new.parameters.values())
-            if ps[0].kind == ps[0].VAR_POSITIONAL:
-                raise ValueError("Cannot cache a class whose __new__ is defined with *args as first argument. The first arument must be the class type")
-            
-        else:
-            def make_new_wrapper( the_new ):
-                def new_wrapper(_cls_, *args, **kwargs):
-                    return the_new(_cls_)                
-                new_wrapper.__name__ = f"Cache__new__Wrapper({C.__qualname__})"
-                new_wrapper._cache_new_av_ = None
-                return new_wrapper
-            C__new__ = make_new_wrapper( C.__new__ )
-            sig_new  = inspect.signature(C__new__)
-
-        class_parameter      = list(sig_new.parameters)[0]
-        self._exclude_args   = {class_parameter} if self._exclude_args is None else ( self._exclude_args | {class_parameter})
-        
-        # apply version
-        # this also ensures that __init__ picks up a version dependency on the class itself
-        # (as we forceed 'auto_class' to be true)
-            
-        C = _ensure_has_version( C, version=self._input_version,
-                                    dependencies=self._dependencies,
-                                    auto_class=self._version_auto_class)
-
-        C.__new__                         = self._wrap( C__new__, is_new = True )
-        C.__new__.cache_info.signature    = inspect.signature(C__init__)  # signature of __init__, which contains 'self' (it will become the class)
-        C.cache_info                      = C.__new__.cache_info
-
-        if not debug_verbose is None:
-            debug_verbose.write(f"cache_class({C.__qualname__}): class wrapped; class parameter '{class_parameter}' to __new__ will be ignored.")
-
-        return C
-
-    def _wrap(self, F : Callable, is_new : bool = False):
-        """
-        Decorate callable 'F'.
-        """
-        debug_verbose = self.cache_controller.debug_verbose
-        assert not inspect.isclass(F), ("Internal error - cannot handle classes directly. Use cache_class()")
-        
-        # check validity
-        # --------------
-        # Cannot currently decorate classes.
-    
-        is_method   = inspect.ismethod(F) or isinstance(F, types.BuiltinMethodType)# for *bound* methods
-        is_function = inspect.isfunction(F) or isinstance(F, types.BuiltinFunctionType)
-
-        if not is_method and not is_function:
-            assert not is_new
-            # if F is neither a function or method, attempt to decorate (bound) __call__
-            if not callable(F):
-                raise ValueError(f"{F.__qualname__}' is not callable")    
-            F_ = getattr(F, "__call__", None)
-            if F_ is None:
-                raise ValueError(f"{F.__qualname__}' is callable, but has no '__call__'. F is of type {type(F)}")
-            if not debug_verbose is None:
-                debug_verbose.write(f"cache({F.__qualname__}): 'F' is an object; will use bound __call__")
-            return self._wrap( F_, is_new=is_new )
-        
-        if is_method:
-            if getattr(F, "__self__", None) is None:
-                raise RuntimeError(f"Method {F.__qualname__} must have '__self__' member")
-        else:
-            assert is_function
-            # __new__ should not be decorated manually
-            if not is_new and F.__name__ == "__new__":
-                raise ValueError(f"You cannot decorate __new__ of '{F.__qualname__}' (see documentation of cache_class()).")
-
-        # handle __init__
-        # ---------------
-        
-        if F.__name__ == "__init__":
-            # the decorate __init__ has two purposes
-            # 1) during initializaton keep ahold of 'self' which will be the decorator for __new__ in fact
-            # 2) during runtime, deciding based upon '__new__' caching status wherer to run the original __init__
-            
-            def execute_init( self, *args, **kwargs ):
-                """
-                Overwriting __init__ directly does not work as __init__ does not return anything.
-                """                
-                # ensure '__new__' was processed.
-                # this will happen when the class is wrapped
-                if not execute_init.init_cache_callable is None:
-                    raise RuntimeError(f"Class '{type(self).__qualname__}': __init__ was decorated for caching but it seems the class '{type(self).__qualname__}' itself was not decorated. Use cache_class().")
-
-                __magic_cache_call_init__ = getattr(self, "__magic_cache_call_init__", None)
-                assert not __magic_cache_call_init__ is None, ("*** Internal error: __init__ called illegally")
-
-                if __magic_cache_call_init__:
-                    # call __init__
-                    F( self, *args, **kwargs )
-                    #if not debug_verbose is None:
-                    #    debug_verbose.write(f"cache({type(self).__qualname__}): __init__ called")
-                else:
-                    pass
-                    # do not call __init___
-                    #if not debug_verbose is None:
-                    #    debug_verbose.write(f"cache({type(self).__qualname__}): __init__ skipped")
-                self.__magic_cache_call_init__ = None
-
-            update_wrapper( wrapper=execute_init, wrapped=F )
-            
-            # for class decorator to pick up.
-            # ClassCallable() will set this to None before excecute_init
-            # is called (ie before the first object is created)
-            execute_init.init_cache_callable = self  
-            return execute_init
-            
-        # version
-        # -------
-        # Decorate now or pick up existing @version
-
-        F = _ensure_has_version( F, version=self._input_version,
-                                    dependencies=self._dependencies,
-                                    auto_class=self._version_auto_class,
-                                    allow_default=is_new )
-        version = F.version.unique_id64
-        
-        # name
-        # ----
-        
-        name = _qualified_name( F, self._name )
-
-        # any other function
-        # ------------------
-
-        exclude_types = ( self._exclude_arg_types if not self._exclude_arg_types is None else set() )\
-                      | ( self.global_exclude_arg_types if not self.global_exclude_arg_types is None else set())
-
-        def execute( *args, override_cache_mode : CacheMode|None = None, 
-                            track_cached_files  : CacheTracker|None = None,
-                            return_cache_uid    : bool = False,
-                            **kwargs ):     
-            """
-            Cached execution of the wrapped function
-            """
-            
-            if is_new:
-                # if 'F' is __new__ then we might need to turn off all caching when deserializing cached objects from disk
-                if execute.__new_during_read:
-                    return F(*args, **kwargs)
-            
-            def get_arguments():
-                """
-                Gets the dictionary of all arguments passed to the function F, and exclude/include according to cache logic
-                """
-                arguments = execute.cache_info.signature.bind(*args,**kwargs)
-                arguments.apply_defaults()
-                arguments = arguments.arguments # ordered dict
-
-                # delete 'cls' from argument list for class functions
-                if is_new:
-                    assert len(arguments) >= 1, ("*** Internal error", F.__qualname__, is_new, arguments)
-                    del arguments[list(arguments)[0]]
-
-                # add 'self' for methods                
-                if is_method and not is_new:
-                    # add __self__ to the beginning of all arguments
-                    full_arguments = OrderedDict()
-                    if is_method:
-                        if 'self' in set(arguments):
-                            raise RuntimeError(f"'self' found in bound method '{name}' argument list {fmt_dict(execute.cache_info.signature.bind(*args,**kwargs).arguments)}.")
-                        self__ = getattr(F, "__self__", None)
-                        assert not self__ is None, ("Internal error - was checked above???", name, F, type(F))
-                        try:
-                            full_arguments['self'] = self__
-                        except AttributeError as e:
-                            raise AttributeError(f"Error extracting '__self__' for {name}: {e}") from e
-                    full_arguments |= arguments
-                    arguments = full_arguments
-                    del full_arguments
-                    
-                # filter dictionary
-                if not self._exclude_args is None or not self._include_args is None:
-                    argus     = set(arguments)
-                    excl = set(self._exclude_args) if not self._exclude_args is None else set()
-                    if not self._exclude_args is None: 
-                        if self._exclude_args > argus:
-                            raise ValueError(f"{name}: 'exclude_args' contains unknown argument names: exclude_args {sorted(self._exclude_args)} while argument names are {sorted(argus)}.")
-                    if not self._include_args is None:     
-                        if self._include_args > argus:
-                            raise ValueError(f"{name}: 'include_args' contains unknown argument names: include_args {sorted(self._iinclude_args)} while argument names are {sorted(argus)}.")
-                        excl = argus - self._iinclude_args
-                    if not self._exclude_args is None:
-                        excl |= self._exclude_args
-                    for arg in excl:
-                        if arg in arguments:
-                            del arguments[arg]
-                    del excl, argus
-
-                if len(exclude_types) > 0:
-                    excl = []
-                    for k, v in arguments.items():
-                        if type(v) in exclude_types or type(v).__name__ in exclude_types:
-                            excl.append( k )
-                    for arg in excl:
-                        if arg in arguments:
-                            del arguments[arg]
-                return arguments
-            arguments = None
-            
-            def expand( F, F_params, arguments ):
-                """
-                Execute 'F' (format string or callable) with F_params sourced from arguments
-                """                
-                if F_params is None:
-                    # label function or string does not need any parameters
-                    assert not self.unique
-                    return F if isinstance( F, str ) else F()
-                    
-                # function or format string required parameters
-                # add parameters in order of label/uid parameters
-                assert not F_params is None
-                
-                fmt_arguments = {}
-                for k in F_params:
-                    if k == self._name_of_func_name_arg:
-                        if self._name_of_func_name_arg in arguments:
-                            error(f"{name}: '{self._name_of_func_name_arg}' is a reserved keyword for '{which}' which refers to the current function name. "
-                                  "Found it also in the function parameter list. Use 'name_of_func_name_arg' to change the internal parameter name used.")
-                        fmt_arguments[k] = name
-                    else:
-                        if not k in arguments:
-                            args_ = [ f"'{_}'" for _ in arguments ]
-                            raise ValueError(f"Error while generating '{which}' for '{name}': formatting function expected a parameter '{k}' which is not present "+\
-                                             f"in the list of parameters passed to '{name}': {fmt_list(args_)}.")
-                        fmt_arguments[k] = arguments[k]
-
-                # call format or function                    
-                if isinstance( F, str ):
-                    return str.format( F, **fmt_arguments )
-
-                try:
-                    return F(**fmt_arguments)
-                except Exception as e:
-                    raise type(e)(f"Error while generating '{which}' for '{name}': attempt to call '{which}' of callable type {type(uid_or_label)} failed: {e}")
-                raise ValueError("Error calling callable '{which}' for '{name}': callable must return a string. Found {type(uid_or_label))}")
-
-            # determine unique id_ for this function call
-            # -------------------------------------------
-            
-            uid_or_label = self.uid_or_label
-            filename     = None
-            fn_sub_dir   = None
-            if self.unique and self._uid_label_params is None:                    
-                # the string or function do not require any parameters, and is unique
-                assert not uid_or_label is None
-                filename  = uid_or_label if isinstance( uid_or_label, str ) else uid_or_label()
-
-                rix       = filename.rfind("/")
-                if rix != -1:
-                    if rix==len(filename)-1:
-                        raise ValueError(f"The unique filename '{filename}' computed for '{name}' terminates with '/'. That leaves nothing for a filename.")
-                    fn_sub_dir = filename[:rix+1]
-                    filename   = filename[rix+1:]
-
-                if not is_filename(filename):
-                    raise ValueError(f"The unique filename '{filename}' computed for '{name}' contains invalid characters for filename. When using `uid` make sure that "+\
-                                     "the returned ID is a valid filename (and is unique)")
-                label     = filename
-                arguments = None
-
+        if version is None:
+            if not version_info is None:
+                return F
+            if allow_default:
+                version = "0"
             else:
-                # need the list of parameters to compute a hash and/or a label
-                which     = 'uid' if not self._uid is None else 'label'                 
+                raise ValueError(f"'{F.__qualname__}': cannot determine version. Specify 'version'")
+        elif not version_info is None:
+            raise ValueError(f"'{F.__qualname__}: function already has version information; cannot set version '{version}' again")
+        return version_decorator( version=version,
+                                  dependencies=dependencies,
+                                  auto_class=auto_class)(F)
+
+    def cache_relevant_arguments(self, args : Collection, kwargs : Mapping ):
+        """
+        Expert usage: Returns all relevant function arguments for generating labels/uid's according to the exclusion/inclusion settings.
+        
+        Parameters
+        ----------
+            args : Collection
+                Positional arguments for the underlying function ``F``.
+            kwargs : Mapping
+                Keyword arguments for the underlying function ``F``.
                 
-                # get dictionary of named arguments
-                arguments = get_arguments() if arguments is None else arguments
-                                
-                if uid_or_label is None:
-                    # no label or unique ID
-                    assert not self.unique
-                    uid_or_label = name                    
-                else:
-                    uid_or_label = expand( uid_or_label, self._uid_label_params, arguments )
+        Returns
+        -------
+            arguments : dict
+                Dictionary of all arguments, including default values
+        """
+        arguments = self._signature.bind(*args,**kwargs)
+        arguments.apply_defaults()
+        arguments = arguments.arguments # ordered dict
 
-                rix       = uid_or_label.rfind("/")
-                if rix != -1:
-                    if rix==len(uid_or_label)-1:
-                        raise ValueError(f"The unique filename '{uid_or_label}' computed for '{name}' terminates with '/'. That leaves nothing for a filename.")
-                    fn_sub_dir   = uid_or_label[:rix+1]
-                    uid_or_label = uid_or_label[rix+1:]
+        # add 'self' for methods                
+        if self._is_method:
+            # add __self__ to the beginning of all arguments
+            full_arguments = OrderedDict()
+            if 'self' in set(arguments):
+                raise RuntimeError(f"'self' found in bound method '{self.name}' argument list {fmt_dict(self.signature.bind(*args,**kwargs).arguments)}.")
+            self__ = getattr(self._F, "__self__", None)
+            assert not self__ is None, ("Internal error - was checked above???", self.name, self._F, type(self._F))
+            try:
+                full_arguments['self'] = self__
+            except AttributeError as e:
+                raise AttributeError(f"Error extracting '__self__' for {self.name}: {e}") from e
+            full_arguments |= arguments
+            arguments = full_arguments
+            del full_arguments
+            
+        # filter dictionary
+        if not self._exclude_args is None or not self._include_args is None:
+            argus  = set(arguments)
+            excl   = set(self._exclude_args) if not self._exclude_args is None else set()
+            if not self._exclude_args is None: 
+                if self._exclude_args > argus:
+                    raise ValueError(f"{self.name}: 'exclude_args' contains unknown argument names: exclude_args {sorted(self._exclude_args)} while argument names are {sorted(argus)}.")
+            if not self._include_args is None:     
+                if self._include_args > argus:
+                    raise ValueError(f"{self.name}: 'include_args' contains unknown argument names: include_args {sorted(self._iinclude_args)} while argument names are {sorted(argus)}.")
+                excl = argus - self._iinclude_args
+            if not self._exclude_args is None:
+                excl |= self._exclude_args
+            for arg in excl:
+                if arg in arguments:
+                    del arguments[arg]
+            del excl, argus
 
-                if self.unique:
-                    if not is_filename(uid_or_label):
-                        raise ValueError(f"The unique filename '{uid_or_label}' computed for '{name}' contains invalid characters for filename. When using `uid` make sure that "+\
-                                         "the returned filename is indeed a valid filename (and unique)")
+        if not self._exclude_types is None:
+            excl = []
+            for k, v in arguments.items():
+                if type(v) in self._exclude_types or type(v).__name__ in self._exclude_types:
+                    excl.append( k )
+            for arg in excl:
+                if arg in arguments:
+                    del arguments[arg]
+        return arguments
+    
+    def cache_create_id( self, args : Collection, kwargs : Mapping ):
+        """
+        Expert usage: Creates a unique_id, filename, a label, the sub_dir, and the list of
+        relevant function arguments for parsing
+        given the function arguments provided when ``F(*args,**kwargs)``
+        is called.
+        
+        Parameters
+        ----------
+            args : Collection
+                Positional arguments for the underlying function ``F``.
+            kwargs : Mapping
+                Keyword arguments for the underlying function ``F``.
+        
+        Returns
+        -------
+            unique_id : str
+                The unique_id for ``F(*args,**kwargs)``.
+            filename : str
+                Filename for ``F(*args,**kwargs)``, without extension.
+            label : str
+                The readable label for the function call without hash information (hence not necessarily unique).
+            sub_dir : :class:`cdxcore.subdir.SubDir`
+                The  directory where ``filename`` is located.
+            arguments : Mapping|None
+                Result of calling :meth:`cxcore.subdir.CacheWrapper.cache_relevant_arguments`
+                if that was required, ``None`` otherwise.
+                This is returned for operational efficiency.
+        """
+        
+        uniqueFileName   = self.cache_controller.uniqueFileName
+        labelledFileName = self.cache_controller.labelledFileName
 
-                    label    = uid_or_label
-                    filename = self.uniqueFileName( uid_or_label )
-                else:
-                    label    = uid_or_label
-                    filename = self.labelledFileName( uid_or_label, **arguments )
+        # generate unique 'filename'
+        # --------------------------
+        
+        arguments = None
+        
+        if not self._uid_or_label.is_simple_str:
+            arguments    = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
+            uid_or_label = self._uid_or_label(**arguments)
+        else:
+            uid_or_label = self._uid_or_label()
+            
+        filename     = uid_or_label
+        fn_sub_dir   = None
+        rix          = uid_or_label.rfind("/")
+        if rix != -1:
+            if rix==len(uid_or_label)-1:
+                raise ValueError(f"The unique filename '{uid_or_label}' computed for '{self._name}' terminates with '/'. When using directories also make sure the filename is present.")
+            fn_sub_dir   = uid_or_label[:rix+1]
+            uid_or_label = uid_or_label[rix+1:]
+        del rix
 
-            # determine version, cache mode
-            # ------------------
+        if self._unique:
+            if not is_filename(uid_or_label):
+                raise ValueError(f"The unique filename '{uid_or_label}' computed for '{self._name}' contains invalid characters for a filename. When using `uid` make sure that "+\
+                                 "the returned filename is indeed a valid filename (and unique)")
+            label    = uid_or_label
+            filename = uniqueFileName( uid_or_label )
+        else:
+            arguments = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
+            label     = uid_or_label
+            filename  = labelledFileName( uid_or_label, **arguments )
+        del uid_or_label
 
-            cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else self.cache_mode
-            del override_cache_mode
+        # subdir
+        # ------
+            
+        sub_dir = self._subdir
+        if not self._in_sub_dir is None:
+            if self._in_sub_dir.is_simple_str:
+                sub_dir_name = self._in_sub_dir()
+            else:
+                arguments    = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
+                sub_dir_name = self._in_sub_dir( **arguments )
+            sub_dir      = sub_dir(sub_dir_name)
+            del sub_dir_name
+            
+        if not fn_sub_dir is None:
+            sub_dir = sub_dir(fn_sub_dir)
 
+        unique_id = ( fn_sub_dir + filename ) if not fn_sub_dir is None else filename
+        return unique_id, filename, label, sub_dir, arguments
+
+    def wrapper(self) -> Callable:
+        
+        def execute(    *args,
+                        override_cache_mode : CacheMode|None = None, 
+                        track_cached_files  : CacheTracker|None = None,
+                        return_cache_uid    : bool = False,
+                        cache_generate_only : bool = False,
+                        **kwargs
+                          ):     
+            """
+            Cached execution of the wrapped function ``F`` with additional functionality.
+            
+            Once the function returns :attr:`cdxcore.subdir.CacheWrapper.cache_info`
+            contains pertinent information regarding caching, for example
+            if the result returned by this function was cached and if so what file
+            was used.
+            
+            Parameters
+            ----------
+                args : Collection
+                    Keyword arguments for the cached function F.
+                    
+                kwargs : Collection
+                    Keyword arguments for the cached function F.
+                    
+                override_cache_mode : :class:`cdxcore.subdir.CacheMode`|None, default ``None
+                    Changes the caching mode for this function call.
+                    For example you can force re-computation by passing ``update``.
+    
+                track_cached_files : :class:`cdxcore.subdir.CacheTracker`|None, default ``None
+                    Allows tracking all cached files - for example for mass deletion.
+                    
+                return_cache_uid : bool, default ``False``
+                    If ``True``, then this function returns not only the result
+                    of ``F``, the tuple ``unique_id, result``. This is a thread-safe
+                    method of obtaining a ``unique_id`` for a given function call.
+                    
+                cache_generate_only : bool, default ``False``
+                    When ``True`` the function will return ``None`` if the object this function
+                    would compute exists without loading (much of it) from disk. Under
+                    then hood it calls :meth:`cdxcore.subdir.SubDir.is_version`
+                    which is a fast operation even for large files.
+                    
+            Returns
+            -------
+                Result : Any
+                    Return from the function ``F(*args,**kwargs)``, cached or not.
+                    
+                filename, Result : Any
+                    Return from the function ``F(*args,**kwargs)``, cached or not.
+            """
+            unique_id, filename, label, sub_dir, arguments = self.cache_create_id(args=args,kwargs=kwargs)
+                 
             # store process information
             # -------------------------
-
-            execute.cache_info.label    = str(label) if not label is None else None
-            execute.cache_info.filename = filename # that is the unique ID for this call
-            execute.cache_info.version  = version
+    
+            execute.cache_info.label      = label
+            execute.cache_info.filename   = filename # this is the unique ID for this call
+            execute.cache_info.unique_id  = unique_id 
+            execute.cache_info.path       = sub_dir.path
             
             if self.cache_controller.keep_last_arguments:
+                arguments      = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
                 info_arguments = OrderedDict()
                 for argname, argvalue in arguments.items():
                     info_arguments[argname] = str(argvalue)[:100]
                 execute.cache_info.arguments = info_arguments
                 del argname, argvalue
+            del arguments
                 
-            # determine sub_dir if any
-            # ------------------------
-            
-            sub_dir = self._subdir
-            if not self._in_sub_dir is None:
-                arguments = get_arguments()
-                sub_dir_name = expand( self._in_sub_dir, self._in_sub_dir_params, arguments ) 
-                sub_dir = sub_dir( sub_dir_name )
-                
-            if not fn_sub_dir is None:
-                sub_dir = sub_dir(fn_sub_dir)
-                
-            execute.cache_info.path  = sub_dir.path
-
+            # determine version, cache mode
+            # -----------------------------
+    
+            cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else self.cache_mode
+            del override_cache_mode
+    
             # execute caching
             # ---------------
-
+                    
             if cache_mode.delete:
+                verify_inp( not cache_generate_only, lambda : f"Cannot use 'cache_generate_only' with cache mode {cache_mode}.")
                 sub_dir.delete( filename )
+                
             elif cache_mode.read:
+                if cache_generate_only and sub_dir.is_version( filename, version=version ):
+                    execute.cache_info.last_cached = True
+                    if not self.debug_verbose is None:
+                        self.debug_verbose.write(f"cache({self._name}): confirmed for '{label}' cache '{sub_dir.full_file_name(filename)}' exists and has version '{version}'.")
+                    if return_cache_uid:
+                        return unique_id, None
+                    return None
+                    
                 class Tag:
                     pass
                 tag = Tag()
-                if not is_new:
-                    r = sub_dir.read( filename, tag, version=version )
-                else:
-                    try:
-                        execute.__new_during_read = True
-                        r = sub_dir.read( filename, tag, version=version )
-                    finally:
-                        execute.__new_during_read = False
+                r = sub_dir.read( filename, tag, version=version )
                         
                 if not r is tag:
                     if not track_cached_files is None:
                         track_cached_files += self._fullFileName(filename)
+     
                     execute.cache_info.last_cached = True 
-                    if not debug_verbose is None:
-                        debug_verbose.write(f"cache({name}): read '{label}' version 'version {version}' from cache '{sub_dir.full_file_name(filename)}'.")
-                    if is_new:
-                        assert r.__magic_cache_call_init__ is None, ("**** Internal error. __init__ should reset __magic_cache_call_init__", F.__qualname__, label)
-                        r.__magic_cache_call_init__ = False # since we called __new__, __init__ will be called next
-
+                    if not self.debug_verbose is None:
+                        self.debug_verbose.write(f"cache({self._name}): read '{label}' from cache '{sub_dir.full_file_name(filename)}' with version '{version}'.")
+    
                     if return_cache_uid:
-                        return filename, r
+                        return unique_id, r
                     return r
-            
-            r = F(*args, **kwargs)
-            
-            if is_new:
-                # __new__ created the object, but __init__ was not called yet to initialize it
-                # we simulate this here
-                cls = args[0]
-                assert not cls is None and inspect.isclass(cls), ("*** Internal error", cls)
-                r.__magic_cache_call_init__ = True
-                cls.__init__( r, *args[1:], **kwargs )
-                assert r.__magic_cache_call_init__ is None, ("**** Internal error. __init__ should reset __magic_cache_call_init__")
+            else:
+                verify_inp( not cache_generate_only, lambda : f"Cannot use 'cache_generate_only' with cache mode {cache_mode}.")
+
+            r = self._F(*args, **kwargs)
             
             if cache_mode.write:
                 sub_dir.write(filename,r,version=version)      
                 if not track_cached_files is None:
                     track_cached_files += sub_dir.full_file_name(filename)
             execute.cache_info.last_cached = False
-
-            if is_new:
-                assert r.__magic_cache_call_init__ is None, ("**** Internal error. __init__ should reset __magic_cache_call_init__")
-                r.__magic_cache_call_init__ = False # since we called __new__, __init__ will be called next
-                #debug_verbose.write(f"cache({name}): called __init__ after __new__ with: {args[1:]} / {kwargs}")
-            
-            if not debug_verbose is None:
+    
+            if not self.debug_verbose is None:
                 if cache_mode.write:
-                    debug_verbose.write(f"cache({name}): called '{label}' version 'version {version}' and wrote result into '{sub_dir.full_file_name(filename)}'.")
+                    self.debug_verbose.write(f"cache({self._name}): called '{label}' and wrote result into '{sub_dir.full_file_name(filename)}' with version '{version}'.")
                 else:
-                    debug_verbose.write(f"cache({name}): called '{label}' version 'version {version}' but did *not* write into '{sub_dir.full_file_name(filename)}'.")
-
+                    self.debug_verbose.write(f"cache({self._name}): called '{label}' but did *not* write into '{sub_dir.full_file_name(filename)}' (version '{version}').")
+    
             if return_cache_uid:
-                return filename, r
+                return unique_id, r
             return r
 
-        update_wrapper( wrapper=execute, wrapped=F )
-        execute.cache_info = CacheInfo(name, F, self.cache_controller.keep_last_arguments)
-            
-        if is_new:
-            execute.__new_during_read = False
+        execute.cache_info   = CacheInfo( self._name, 
+                                          idversion=self._F.version.unique_id64, 
+                                          keep_last_arguments=self.cache_controller.keep_last_arguments )
+        update_wrapper( wrapper=execute, wrapped=self._F )
+        return execute
+
         
-        if not debug_verbose is None:
-            debug_verbose.write(f"cache({name}): {'function' if not is_new else 'class constructor function'} registered for caching into '{self._subdir.path}'.")
-        self.cache_controller.versioned[name] = execute
-        return execute          
+
+
 
 
 

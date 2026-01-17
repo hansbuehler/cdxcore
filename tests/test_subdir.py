@@ -25,9 +25,10 @@ import_local()
 """
 Imports
 """
-from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker
+from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker, CacheController
 from cdxcore.version import version
 from cdxcore.uniquehash import unique_hash16
+from cdxcore.verbose import Context
 import numpy as np
 
 class Test(unittest.TestCase):
@@ -564,6 +565,32 @@ class Test2(unittest.TestCase):
         self.assertEqual(h1.cache_info.path[-13:], "cache_test/2/")
         self.assertEqual(h1.cache_info.filename, "3 b5bb289e")
         self.assertEqual(h1.cache_info.unique_id, "2/3 b5bb289e")
+        
+        
+    def test_cache_version(self):
+        """ version changes """
+
+        
+        sub = SubDir("?/.tmp_test_edge_cases", delete_everything=True) #, cache_controller=CacheController(debug_verbose=Context("all")))
+        try:
+            def f(x, uid="f"):
+                return dict(x=x)
+
+            f1 = sub.cache("0.1")(f)
+            _  = f1(1)
+            self.assertEqual(f1.cache_info.last_cached, False)
+            _  = f1(1)
+            self.assertEqual(f1.cache_info.last_cached, True)
+
+            def f(x, uid="f"):
+                return dict(x=x)
+            f1 = sub.cache("0.2")(f)
+            _  = f1(1)
+            self.assertEqual(f1.cache_info.last_cached, False)
+
+        finally:
+            sub.delete_everything()
+
 
     def test_subdir_edge_cases(self):
         """Test edge cases in SubDir functionality"""

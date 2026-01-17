@@ -911,11 +911,11 @@ class SubDir(object):
     """ :meta private: """
 
     def __init__(self, name : str|None, 
-                       parent : str|type = None, *, 
-                       ext : str = None, 
-                       fmt : Format = None, 
-                       create_directory : bool = None,
-                       cache_controller : CacheController = None,
+                       parent : str|type|None = None, *, 
+                       ext : str|None = None, 
+                       fmt : Format|None = None, 
+                       create_directory : bool|None = None,
+                       cache_controller : CacheController|None = None,
                        delete_everything : bool = False,
                        delete_everything_upon_exit : bool = False
                        ):
@@ -3953,6 +3953,9 @@ class CacheWrapper(object):
         return unique_id, filename, label, sub_dir, arguments
 
     def wrapper(self) -> Callable:
+        """ Function wrapper which returns the wrapped callable for ``F`` """
+        
+        idversion = self._F.version.unique_id64
         
         def execute(    *args,
                         override_cache_mode : CacheMode|None = None, 
@@ -3960,7 +3963,7 @@ class CacheWrapper(object):
                         return_cache_uid    : bool = False,
                         cache_generate_only : bool = False,
                         **kwargs
-                          ):     
+                    ):     
             """
             Cached execution of the wrapped function ``F`` with additional functionality.
             
@@ -4036,10 +4039,10 @@ class CacheWrapper(object):
                 sub_dir.delete( filename )
                 
             elif cache_mode.read:
-                if cache_generate_only and sub_dir.is_version( filename, version=version ):
+                if cache_generate_only and sub_dir.is_version( filename, version=idversion ):
                     execute.cache_info.last_cached = True
                     if not self.debug_verbose is None:
-                        self.debug_verbose.write(f"cache({self._name}): confirmed for '{label}' cache '{sub_dir.full_file_name(filename)}' exists and has version '{version}'.")
+                        self.debug_verbose.write(f"cache({self._name}): confirmed for '{label}' cache '{sub_dir.full_file_name(filename)}' exists and has version '{idversion}'.")
                     if return_cache_uid:
                         return unique_id, None
                     return None
@@ -4047,7 +4050,7 @@ class CacheWrapper(object):
                 class Tag:
                     pass
                 tag = Tag()
-                r = sub_dir.read( filename, tag, version=version )
+                r = sub_dir.read( filename, tag, version=idversion )
                         
                 if not r is tag:
                     if not track_cached_files is None:
@@ -4055,7 +4058,7 @@ class CacheWrapper(object):
      
                     execute.cache_info.last_cached = True 
                     if not self.debug_verbose is None:
-                        self.debug_verbose.write(f"cache({self._name}): read '{label}' from cache '{sub_dir.full_file_name(filename)}' with version '{version}'.")
+                        self.debug_verbose.write(f"cache({self._name}): read '{label}' from cache '{sub_dir.full_file_name(filename)}' with version '{idversion}'.")
     
                     if return_cache_uid:
                         return unique_id, r
@@ -4066,23 +4069,23 @@ class CacheWrapper(object):
             r = self._F(*args, **kwargs)
             
             if cache_mode.write:
-                sub_dir.write(filename,r,version=version)      
+                sub_dir.write(filename,r,version=idversion)      
                 if not track_cached_files is None:
                     track_cached_files += sub_dir.full_file_name(filename)
             execute.cache_info.last_cached = False
     
             if not self.debug_verbose is None:
                 if cache_mode.write:
-                    self.debug_verbose.write(f"cache({self._name}): called '{label}' and wrote result into '{sub_dir.full_file_name(filename)}' with version '{version}'.")
+                    self.debug_verbose.write(f"cache({self._name}): called '{label}' and wrote result into '{sub_dir.full_file_name(filename)}' with version '{idversion}'.")
                 else:
-                    self.debug_verbose.write(f"cache({self._name}): called '{label}' but did *not* write into '{sub_dir.full_file_name(filename)}' (version '{version}').")
+                    self.debug_verbose.write(f"cache({self._name}): called '{label}' but did *not* write into '{sub_dir.full_file_name(filename)}' (version '{idversion}').")
     
             if return_cache_uid:
                 return unique_id, r
             return r
 
         execute.cache_info   = CacheInfo( self._name, 
-                                          idversion=self._F.version.unique_id64, 
+                                          idversion=idversion, 
                                           keep_last_arguments=self.cache_controller.keep_last_arguments )
         update_wrapper( wrapper=execute, wrapped=self._F )
         return execute

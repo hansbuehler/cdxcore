@@ -3956,6 +3956,7 @@ class CacheWrapper(object):
         """ Function wrapper which returns the wrapped callable for ``F`` """
         
         idversion = self._F.version.unique_id64
+        assert isinstance(idversion, str)
         
         def execute(    *args,
                         override_cache_mode : CacheMode|None = None, 

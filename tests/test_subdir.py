@@ -569,7 +569,6 @@ class Test2(unittest.TestCase):
         
     def test_cache_version(self):
         """ version changes """
-
         
         sub = SubDir("?/.tmp_test_edge_cases", delete_everything=True) #, cache_controller=CacheController(debug_verbose=Context("all")))
         try:
@@ -590,7 +589,6 @@ class Test2(unittest.TestCase):
 
         finally:
             sub.delete_everything()
-
 
     def test_subdir_edge_cases(self):
         """Test edge cases in SubDir functionality"""

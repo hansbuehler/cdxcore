@@ -26,10 +26,11 @@ import_local()
 Imports
 """
 from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker, CacheController
-from cdxcore.version import version
+from cdxcore.version import version, VersionError
 from cdxcore.uniquehash import unique_hash16
 from cdxcore.verbose import Context
 import numpy as np
+import polars as pl
 
 class Test(unittest.TestCase):
 
@@ -634,6 +635,43 @@ class Test2(unittest.TestCase):
                 self.assertIn("array", d_items)
                 self.assertIn("nested", d_items)
             
+        finally:
+            sub.delete_everything()
+
+    def test_polars(self):
+        
+        sub = SubDir("?/.tmp_test_edge_cases", delete_everything=True, fmt=SubDir.POLARS_PARQUET )
+        self.assertEqual(sub.ext,".prq")
+        try:
+            np.random.seed(21232)
+            x = np.random.normal(size=(20,)).astype(np.int32)
+            y = np.random.normal(size=(20,)).astype(np.int32)
+            
+            df = pl.DataFrame( {'x': pl.Series( x, dtype=pl.Int32 ), 'y' : pl.Series( y, dtype=pl.Int32 ) } )
+        
+            sub.write("test", df)        
+            r = sub.read("test", raise_on_error=True)
+            self.assertTrue( np.all( r==df) )
+            
+            sub.write("test", df, version="0.1")        
+            r = sub.read("test", version="0.1", raise_on_error=True)
+            self.assertTrue( np.all( r==df) )
+
+            sub.write("test", df, version="0.1")        
+            r = sub.read("test", version="*", raise_on_error=True)
+            self.assertTrue(np.all( r==df) )
+
+            sub.write("test", df, version="0.1")   
+            with self.assertRaises(VersionError):
+                r = sub.read("test", version="0.2", raise_on_error=True)
+
+            with self.assertRaises(ValueError):
+                sub.write("test", [1,2,3], raise_on_error=True ) # attempt to write non-polar object
+                
+            sub.write("test", [1,2,3], fmt=SubDir.PICKLE, ext="prq") # hard overwrite format         
+            with self.assertRaises(KeyError):
+                sub.read("test", raise_on_error=True)            
+        
         finally:
             sub.delete_everything()
 

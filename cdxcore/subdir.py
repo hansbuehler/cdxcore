@@ -75,15 +75,15 @@ File Format
 
 :class:`cdxcore.subdir.SubDir` supports file i/o with a number of different file formats:
     
-* "PICKLE": standard pickling with default extension "pck".
+* ``PICKLE``: standard pickling with default extension "pck".
 
-* "JSON_PICKLE": uses the :mod:`jsonpickle` package; default extension "jpck".
+* ``JSON_PICKLE``: uses the :mod:`jsonpickle` package; default extension "jpck".
   The advantage of this format over "PICKLE" is that it is somewhat human-readable.
   However, ``jsonpickle`` uses compressed formats for complex objects such as :mod:`numpy`
   arrays, hence readablility is somewhat limited. Using "JSON_PICKLE"
   comes at cost of slower i/o speed.
 
-* "JSON_PLAIN": calls :func:`cdxcore.util.plain` is an output-only format to generate human readable files
+* ``JSON_PLAIN``: calls :func:`cdxcore.util.plain` is an output-only format to generate human readable files
   which (usually) cannot be loaded back from disk.
   In this mode ``SubDir`` converts objects into plain Python objects before using :mod:`json`
   to write them to disk.
@@ -91,31 +91,35 @@ File Format
   for being restored properly.
   However, such files are much easier to read.
 
-* "BLOSC" uses `blosc <https://github.com/blosc/python-blosc>`__
+* ``BLOSC`` uses `blosc <https://github.com/blosc/python-blosc>`__
   to read/write compressed binary data. The blosc compression algorithm is very fast,
   hence using this mode will not usually lead to notably slower performance than using
   "PICKLE" but will generate smaller files, depending on your data structure.  
   The default extension for "BLOSC" is "zbsc".
 
-* "GZIP": uses :mod:`gzip` to 
+* ``GZIP``: uses :mod:`gzip` to 
   to read/write compressed binary data. The default extension is "pgz".
+  
+* ``POLARS_PARQUET`` writes :class:`polars.DataFrames` using parquet files.
+  In this mode, only parquet files can be read and written. Versioning is supported.
 
-**Summary of properties:**
+**Summary of properties i/o modes:**
 
-+--------------+------------------+----------------+-------+-------------+-----------+
-| Format       | Restores objects | Human readable | Speed | Compression | Extension |
-+==============+==================+================+=======+=============+===========+
-| PICKLE       | yes              | no             | high  | no          | .pck      |
-+--------------+------------------+----------------+-------+-------------+-----------+
-| JSON_PLAIN   | no               | yes            | low   | no          | .json     |
-+--------------+------------------+----------------+-------+-------------+-----------+
-| JSON_PICKLE  | yes              | limited        | low   | no          | .jpck     |
-+--------------+------------------+----------------+-------+-------------+-----------+
-| BLOSC        | yes              | no             | high  | yes         | .zbsc     |
-+--------------+------------------+----------------+-------+-------------+-----------+
-| GZIP         | yes              | no             | high  | yes         | .pgz      |
-+--------------+------------------+----------------+-------+-------------+-----------+
-
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| Format         | Restores objects | Human readable | Speed | Compression | Extension | Types      | 
++================+==================+================+=======+=============+===========+============+
+| PICKLE         | yes              | no             | high  | no          | .pck      | all        |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| JSON_PLAIN     | no               | yes            | low   | no          | .json     | all        |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| JSON_PICKLE    | yes              | limited        | low   | no          | .jpck     | all        |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| BLOSC          | yes              | no             | high  | yes         | .zbsc     | all        |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| GZIP           | yes              | no             | high  | yes         | .pgz      | all        |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| POLARS_PARQUET | yes              | no             | high  | yes         | .pgz      | polars     |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
 
 You may specify the file format when instantiating :class:`cdxcore.subdir.SubDir`::
 
@@ -413,28 +417,34 @@ _BLOSC_MAX_USE   = 1147400000
 
 class Format(Enum):
     """
-    File formats for :class:`cdxcore.subdir.SubDir`.
+    General purpose file formats for :class:`cdxcore.subdir.SubDir`.
     
-    +--------------+------------------+----------------+-------+-------------+-----------+
-    | Format       | Restores objects | Human readable | Speed | Compression | Extension |
-    +==============+==================+================+=======+=============+===========+
-    | PICKLE       | yes              | no             | high  | no          | .pck      |
-    +--------------+------------------+----------------+-------+-------------+-----------+
-    | JSON_PLAIN   | no               | yes            | low   | no          | .json     |
-    +--------------+------------------+----------------+-------+-------------+-----------+
-    | JSON_PICKLE  | yes              | limited        | low   | no          | .jpck     |
-    +--------------+------------------+----------------+-------+-------------+-----------+
-    | BLOSC        | yes              | no             | high  | yes         | .zbsc     |
-    +--------------+------------------+----------------+-------+-------------+-----------+
-    | GZIP         | yes              | no             | high  | yes         | .pgz      |
-    +--------------+------------------+----------------+-------+-------------+-----------+
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | Format         | Restores objects | Human readable | Speed | Compression | Extension | Types      | 
+    +================+==================+================+=======+=============+===========+============+
+    | PICKLE         | yes              | no             | high  | no          | .pck      | all        |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | JSON_PLAIN     | no               | yes            | low   | no          | .json     | all        |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | JSON_PICKLE    | yes              | limited        | low   | no          | .jpck     | all        |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | BLOSC          | yes              | no             | high  | yes         | .zbsc     | all        |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | GZIP           | yes              | no             | high  | yes         | .pgz      | all        |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | POLARS_PARQUET | yes              | no             | high  | yes         | .pgz      | polars     |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    
+    :class:`cdxcore.subdir.SubDir` supports ``POLARS_PARQUET`` for reading and writing :class:`polars.DataFrame` files
+    to parquet. Version information is stored in meta data. 
+    When used, the object passed to :meth:`cdxcore.subdir.write` must be a polars data frame.
     """
     PICKLE = 0       #: Standard binary :mod:`pickle` format.
     JSON_PICKLE = 1  #: :mod:`jsonpickle` format.
     JSON_PLAIN = 2   #: ``json`` format.
     BLOSC = 3        #: :mod:`blosc` binary compressed format.
     GZIP = 4         #: :mod:`gzip` binary compressed format.
-    POLARS_PARQUET = 10     #: :mod:`gzip` binary compressed format.
+    POLARS_PARQUET = 10     #: class:`polars.DataFrame` i/o with parquet
     
 PICKLE = Format.PICKLE
 JSON_PICKLE = Format.JSON_PICKLE
@@ -471,7 +481,6 @@ class CacheMode(object):
     +-----------------------------------------+-------+-------+-------+---------+--------+----------+
     | delete existing object if incompatible  | x     |       |       |  x      | x      |          |
     +-----------------------------------------+-------+-------+-------+---------+--------+----------+      
-
 
     **Standard Caching Semantics**
 
@@ -786,6 +795,25 @@ class SubDir(object):
         subdir = SubDir("!/.test", fmt=SubDir.JSON_PICKLE)
 
     See :class:`cdxcore.subdir.Format` for supported formats.
+    
+    **Polars**
+    
+    A ``SubDir`` can read and write :class:`polars.DataFrame` if the format is set to :attr:`cdxcore.subdir.Format.POLARS_PARQUET`::
+        
+        import polars as pl
+        import numpy as np
+        from cdxcore.subdir import SubDir
+        
+        x = np.linspace(0,1,5)
+        y = np.sin(x)
+        df = pl.DataFrame({"x":pl.Series(x,pl.Float32), "y":pl.Series(y,pl.Float32)})
+        
+        sub = SubDir("!/polars", fmt=SubDir.POLARS_PARQUET)
+        sub.write("test", df)
+        r = sub.read("test", raise_on_error=True)
+        assert np.all( r==df) )
+
+    Version handling is supported with parquet files.
 
     Parameters
     ----------
@@ -831,6 +859,7 @@ class SubDir(object):
         * 'jpck' for JSON_PICKLE.
         * 'zbsc' for BLOSC.
         * 'pgz' for GZIP.
+        * 'prq' for POLARS_PARQUET.
         
     fmt : :class:`cdxcore.subdir.Format` | None, default ``Format.PICKLE``
 
@@ -3540,7 +3569,7 @@ class SubDir(object):
 # Caching, convenience
 # ========================================================================
 
-def VersionedCacheRoot( directory          : str, *,
+def VersionedCacheRoot( directory          : str|SubDir, *,
                         ext                : str|None = None, 
                         fmt                : Format|None = None,
                         create_directory   : bool = False,

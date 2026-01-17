@@ -405,7 +405,7 @@ class Context(object):
         self.crman       = CRMan()
         self.channel     = channel
 
-    def write( self, message : str, *args, end : str = "\n", head : bool = True, **kwargs ):
+    def write( self, message : str|Callable, *args, end : str = "\n", head : bool = True, **kwargs ):
         r"""
         Report message at current level.
         
@@ -821,8 +821,6 @@ class Context(object):
 
     def __exit__(self, *kargs, **kwargs):
         return False#raise exceptions
-
-    
     
 quiet         = Context(Context.QUIET)
 all_          = Context(Context.ALL)

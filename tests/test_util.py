@@ -25,9 +25,9 @@ def import_local():
     sys.path.insert( 0, cwd[:-6] )
 import_local()
 
-from cdxcore.util import is_function, is_atomic, is_float, is_filename, qualified_name
+from cdxcore.util import get_calling_function_name, is_function, is_atomic, is_float, is_filename, qualified_name, get_calling_function_name
 from cdxcore.util import fmt, fmt_seconds, fmt_list, fmt_dict, fmt_big_number, fmt_digits, fmt_big_byte_number, fmt_datetime, fmt_date, fmt_time, fmt_timedelta, fmt_filename, DEF_FILE_NAME_MAP
-from cdxcore.util import CRMan, AcvtiveFormat, expected_str_fmt_args
+from cdxcore.util import CRMan, AcvtiveFormat, expected_str_fmt_args, TrackTime, DebugTime
 
 class qA(object):
 
@@ -267,8 +267,252 @@ class Test(unittest.TestCase):
         self.assertTrue( is_filename("hans") )
         self.assertFalse( is_filename("h/ans") )
         self.assertFalse( is_filename("h?ans") )
+
+    def test_track_time(self):
+        import time
+
+        old_timer = TrackTime.TIMER
+        try:
+            TrackTime.TIMER = DebugTime()
+
+            timer = TrackTime("f")
+            self.assertEqual(timer.lap_time(), 0)
+
+            TrackTime.TIMER += 1
+            self.assertEqual(timer.lap_time(), 1)
+            self.assertEqual(timer.seconds, 1, timer.seconds)
+
+            TrackTime.TIMER += 1
+            self.assertEqual(timer.seconds, 2, timer.seconds)
+
+            TrackTime.TIMER += 1
+            timer.lap_time("Simple1")
+            self.assertEqual(timer["Simple1"].seconds, 2, timer["Simple1"].seconds)
+
+            TrackTime.TIMER += 1
+            self.assertEqual(timer["Simple1"].seconds, 2, timer["Simple1"].seconds)
+            self.assertEqual(timer.seconds, 4, timer.seconds)
+
+            timer.lap_time("Simple2")
+            self.assertEqual(timer["Simple2"].seconds, 1, timer["Simple2"].seconds)
+            timer.lap_time("Simple2")
+            self.assertEqual(timer["Simple2"].seconds, 1, timer["Simple2"].seconds)
+
+            self.assertEqual(timer.topic, "f")
+            self.assertFalse(timer.is_stopped)
+
+            with timer:
+                pass
+            self.assertTrue(timer.is_stopped)
+
+            timer.start()
+            self.assertFalse(timer.is_stopped)
+            self.assertEqual(timer.seconds, 4, timer.seconds)
+
+            with timer("Sub1"):
+                TrackTime.TIMER += 1
+            self.assertFalse(timer.is_stopped)
+            self.assertEqual(timer["Sub1"].seconds, 1, timer["Sub1"].seconds)
+            self.assertEqual(timer.seconds, 5, timer.seconds)
+
+            with timer("Sub1") as tme:
+                self.assertEqual(tme.topic, "Sub1")
+                TrackTime.TIMER += 1
+                tme.lap_time("Sub11")
+                self.assertEqual(tme["Sub11"].seconds, 1, tme["Sub11"].seconds)
+            self.assertTrue(tme.is_stopped)
+
+            self.assertEqual(timer.topic, "f", timer.topic)
+            self.assertFalse(timer.is_stopped, timer.is_stopped)
+            self.assertEqual(timer["Sub1"].seconds, 2, timer["Sub1"].seconds)
+            self.assertEqual(timer.seconds, 6, timer.seconds)
+
+            timer.stop()
+
+            timer.start()
+            timer.lap_time("t1")
+            self.assertEqual(timer["t1"].seconds, 0)
+            self.assertEqual(timer["t1"].count, 1, timer["t1"].count)
+
+            TrackTime.TIMER += 1
+            timer.lap_time("t1")
+            self.assertEqual(timer["t1"].seconds, 1)
+            self.assertEqual(timer["t1"].count, 2, timer["t1"].count)
+
+            TrackTime.TIMER += 2
+            timer.lap_time("t1")
+            self.assertEqual(timer["t1"].seconds, 3)
+            self.assertEqual(timer["t1"].count, 3)
+            self.assertEqual(timer["t1"].average_lap_seconds, 1)
+
+            tt = TrackTime("f")
+            TrackTime.TIMER += 1
+            tt.lap_time()
+            TrackTime.TIMER += 1
+            tt.lap_time()
+            TrackTime.TIMER += 1
+            tt.lap_time()
+            self.assertEqual(tt.average_lap_seconds, 1.0)
+            self.assertEqual(tt.seconds, 3.0)
+
+            tt = TrackTime("f")
+            for _ in range(5):
+                TrackTime.TIMER += 1
+                tt.lap_time("t1")
+                TrackTime.TIMER += 2
+                tt.lap_time("t2")
+
+            self.assertEqual(tt["t1"].average_lap_seconds, 1.0)
+            self.assertEqual(tt["t2"].average_lap_seconds, 2.0)
+            self.assertEqual(tt.seconds, 15, tt.seconds)
+            self.assertEqual(tt.count, 10, tt.count)
+
+            # Smoke test with real time source (keep short to avoid slow/flaky tests)
+            TrackTime.TIMER = time.time
+            rt = TrackTime("rt")
+            time.sleep(0.01)
+            dt = rt.lap_time()
+            self.assertIsInstance(dt, float)
+            self.assertGreaterEqual(dt, 0.0)
+        finally:
+            TrackTime.TIMER = old_timer
+
+    def test_aggregation(self):
         
+        old_timer = TrackTime.TIMER
+        try:
+            TrackTime.TIMER = DebugTime()
+            tt1 = TrackTime("f")
+            tt2 = TrackTime("g")
+            TrackTime.TIMER += 1
+            tt1.lap_time("lap")
+            TrackTime.TIMER += 1
+            tt1.lap_time("lap")
+            tt2.lap_time("lap") 
+            self.assertEqual( tt1['lap'].seconds, 2 )
+            self.assertEqual( tt2['lap'].seconds, 2 )
+            self.assertEqual( tt1['lap'].count, 2 )
+            self.assertEqual( tt2['lap'].count, 1 )
+            
+            with tt1("sub") as sub:
+                TrackTime.TIMER += 1
+            with tt2("sub") as sub:
+                TrackTime.TIMER += 1
+                sub.lap_time("sub_lap")
+                TrackTime.TIMER += 1
+                
+            self.assertEqual( tt1['sub'].seconds, 1 )
+            self.assertEqual( tt2['sub'].seconds, 2 )
+            self.assertEqual( tt1['sub'].count, 1 )
+            self.assertEqual( tt2['sub'].count, 2 )
+            self.assertEqual( tt2['sub']['sub_lap'].seconds, 1 )
+            self.assertEqual( tt2['sub']['sub_lap'].count, 1 )
+            
+            # add up
+            
+            tt  = TrackTime(tt1)
+            tt  += tt2
+            self.assertEqual( tt['lap'].seconds, tt1['lap'].seconds+tt2['lap'].seconds )
+            self.assertEqual( tt['lap'].count, tt1['lap'].count+tt2['lap'].count )
+            self.assertEqual( tt['sub'].seconds, tt1['sub'].seconds+tt2['sub'].seconds )
+            self.assertEqual( tt['sub'].count, tt1['sub'].count+tt2['sub'].count )
+            self.assertEqual( tt['sub']['sub_lap'].seconds, tt2['sub']['sub_lap'].seconds )
+            self.assertEqual( tt['sub']['sub_lap'].count, tt2['sub']['sub_lap'].count )
+        finally:
+            TrackTime.TIMER = old_timer
         
+
+    def test_track_time_copy_constructor(self):
+
+        old_timer = TrackTime.TIMER
+        try:
+            TrackTime.TIMER = DebugTime()
+
+            src = TrackTime("src", start=False, elapsed_seconds=3.0)
+            src.record("a", 2.0)
+
+            cpy = TrackTime(src, start=None)
+            self.assertEqual(cpy.topic, "src")
+            self.assertTrue(cpy.is_stopped)
+            self.assertEqual(cpy.lap_seconds, src.lap_seconds)
+            self.assertEqual(cpy.count, src.count)
+            self.assertEqual(cpy["a"].lap_seconds, 2.0)
+            self.assertIsNot(cpy["a"], src["a"])
+
+            cpy.add_time(1.0)
+            cpy["a"].add_time(1.0)
+            self.assertEqual(src.lap_seconds, 3.0)
+            self.assertEqual(src["a"].lap_seconds, 2.0)
+
+            cpy2 = TrackTime(src, start=True)
+            self.assertFalse(cpy2.is_stopped)
+            TrackTime.TIMER += 2.0
+            cpy2.stop()
+            self.assertTrue(cpy2.is_stopped)
+            self.assertEqual(cpy2.lap_seconds, 5.0)
+            self.assertEqual(cpy2.count, 2)
+
+            cpy3 = TrackTime(src, start=None, elapsed_seconds=5.0)
+            self.assertTrue(cpy3.is_stopped)
+            self.assertEqual(cpy3.lap_seconds, 8.0)
+            self.assertEqual(cpy3.count, src.count + 1)
+        finally:
+            TrackTime.TIMER = old_timer
+
+    def test_track_time_iadd(self):
+
+        old_timer = TrackTime.TIMER
+        try:
+            TrackTime.TIMER = DebugTime()
+
+            a = TrackTime("a", start=False, elapsed_seconds=0.5)
+            a.add_time(0.5)
+            a.record("x", 1.0)
+            a.record("x", 1.0)
+            self.assertEqual( a.lap_seconds, 1. )
+            self.assertEqual( a.count, 2 )
+            self.assertEqual( a['x'].lap_seconds, 2. )
+            self.assertEqual( a['x'].count, 2 )
+
+            b = TrackTime("b", start=False, elapsed_seconds=3.0)
+            self.assertEqual( b.lap_seconds, 3. )
+            b.record("x", 2.0)
+            b.record("x", 1.0)
+            b.record("x", 1.0)
+            self.assertEqual( b['x'].lap_seconds, 4. )
+            self.assertEqual( b['x'].count, 3 )
+            b.record("y", 5.0)
+            self.assertEqual( b['y'].lap_seconds, 5. )
+
+            self.assertEqual( a.lap_seconds, 1. )
+            self.assertEqual( b.lap_seconds, 3. )
+            prev_lap = a.lap_seconds
+            prev_cnt = a.count
+            a += b
+            self.assertEqual( prev_lap, 1. )
+
+            self.assertEqual(a.lap_seconds, prev_lap+b.lap_seconds)
+            self.assertEqual(a.count, prev_cnt + b.count)
+            self.assertEqual(a.lap_seconds, 4.)
+            self.assertEqual(a.count, 3)
+            self.assertAlmostEqual(a.average_lap_seconds, 4./3 )
+            self.assertEqual(a["x"].lap_seconds, 6.0)
+            self.assertEqual(a["x"].count, 5)
+            self.assertAlmostEqual(a["x"].average_lap_seconds, 6./5)
+            self.assertEqual(a["y"].lap_seconds, 5.0)
+            self.assertEqual(a["y"].count, 1)
+            self.assertEqual(a["y"].average_lap_seconds, 5.)
+
+            self.assertEqual(b.lap_seconds, 3.0)
+            self.assertEqual(b["x"].lap_seconds, 4.0)
+            self.assertEqual(b["y"].lap_seconds, 5.0)
+
+            a += 2.5
+            self.assertEqual(a.lap_seconds, 6.5)
+            self.assertEqual(a.count, 4)
+            self.assertAlmostEqual(a.average_lap_seconds, 6.5/4)
+        finally:
+            TrackTime.TIMER = old_timer
     def test_basics(self):
 
         # is_function
@@ -504,6 +748,13 @@ class Test(unittest.TestCase):
             af = AcvtiveFormat(lambda a,x,y,z: f"{a}: {x} {y} {z}", reserved_keywords=dict(a=10))
             self.assertEqual( af(z=3,y=2,x=1,a=0), "10: 1 2 3" )
 
+        # get_calling_function_name
+        def g():
+            self.assertEqual( get_calling_function_name("default"), "f" )
+        def f():
+            g()
+        f()
+
     def test_crman(self):
         
         crman = CRMan()
@@ -605,9 +856,10 @@ class Test(unittest.TestCase):
         args_old = expected_str_fmt_args(fmt_string_old)
         self.assertTrue(hasattr(args_old, 'keywords'))
 
-if __name__ == '__main__':
-    unittest.main()
 
 def def_test_util_helper_func(x, y):
-    """Helper function for testing"""
+    """Helper function for testing."""
     return x + y
+
+if __name__ == '__main__':
+    unittest.main()

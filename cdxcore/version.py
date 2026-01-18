@@ -149,9 +149,9 @@ uniqueLabel48 = UniqueLabel(max_length=48,id_length=8)
 
 class VersionDefinitionError(RuntimeError):
     """
-    Error rasied if an error occured during version definition.
+    Error raised if an error occurred during version definition.
     """
-    def __init__(self, context, message):
+    def __init__(self, context: str, message: str) -> None:
         RuntimeError.__init__(self, context, message)
 
 class VersionError(RuntimeError):
@@ -159,7 +159,7 @@ class VersionError(RuntimeError):
     Standardized error type to be raised by applications if a version found did not match an expected
     version. 
     """
-    def __init__(self, *args, version_found : str, version_expected : str ):
+    def __init__(self, *args: object, version_found : str, version_expected : str ) -> None:
         self.version_found = version_found        #: The version found.
         self.version_expected = version_expected  #: The version expected. 
         RuntimeError.__init__(self, *args)
@@ -205,7 +205,7 @@ class Version(object):
         and member functions on their (versioned) containing classes.    
     """
 
-    def __init__(self, original : Callable, version : str, dependencies : list[type], auto_class : bool ):
+    def __init__(self, original : Callable, version : str, dependencies : list[type], auto_class : bool ) -> None:
         """
         :meta private:
         """

@@ -197,7 +197,7 @@ class PrettyObject(MutableMapping):
         ** kwargs:
             Key/value pairs to be added to ``self``.
     """
-    def __init__(self, copy : Mapping = None, **kwargs):
+    def __init__(self, copy : Mapping = None, **kwargs) -> None:
         """
         :meta private:
         """
@@ -428,7 +428,7 @@ class PrettyObject(MutableMapping):
             """ 
             Wrapper object to allow index access for at_pos
             """
-            def __init__(self):
+            def __init__(self) -> None:
                 self.__keys = None
                 
             def pop(_, position : int = 0):
@@ -463,7 +463,7 @@ class PrettyObject(MutableMapping):
             def items(_) -> Sequence:
                 """ Returns the sequence of key, value pairs of the original dictionary """
                 class ItemAccess(Sequence):
-                    def __init__(_x):
+                    def __init__(_x) -> None:
                         _x.keys = list(self.keys())
                     def __getitem__(_x, position):
                         key = _x.keys[position]

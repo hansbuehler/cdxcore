@@ -389,7 +389,7 @@ class DynaAx(_DynaDeferred):
                        rect      : tuple,
                        title     : str, 
                        projection: str,
-                       kwargs    : dict):
+                       kwargs    : dict) -> None:
         """ Creates internal object which defers the creation of various graphics to a later point """
         if row is None:
             assert col is None, "Consistency error 1"
@@ -597,7 +597,7 @@ class DynaAx(_DynaDeferred):
 class _DynaGridSpec(_DynaDeferred):
     """ _DynaDeferred GridSpec """
      
-    def __init__(self, nrows : int, ncols : int, cnt : int, kwargs : dict):
+    def __init__(self, nrows : int, ncols : int, cnt : int, kwargs : dict) -> None:
         self.grid   = None
         self.nrows  = nrows
         self.ncols  = ncols
@@ -641,7 +641,7 @@ class DynaFig(_DynaDeferred):
                        columns  : int = 5,
                        tight    : bool = True,
                        draw_mode: int = MODE.DEFAULT,
-                       **fig_kwargs ):
+                       **fig_kwargs ) -> None:
         """
         __init__
         """
@@ -1346,7 +1346,7 @@ class FigStore( object ):
     directly. While true, for most applications a somewhat rude cancel+replace is simpler. ``FigStore`` was introduced to facilitiate that.    
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """ Create FigStore() objecy """
         self._elements = []
 
@@ -1432,16 +1432,16 @@ def min_o_min( *args, default : float|None = None ):
     
     Parameters
     ----------
-        args : list[int|float|np.ndarray|None|list]
+        args : list[int | float | np.ndarray | None | list]
             Numbers, :class:`numpy.ndarray` arrays or lists of the former.
             Elements which are ``None`` are skipped.
             
-        default : float|None, default ``None``
+        default : float | None, default ``None``
             Default value if ``args`` was empty.
             
     Returns
     -------
-        min : float|None
+        min : float | None
             The minimum of all minima, or ``default`` if no elements were found.
     """
     
@@ -1470,16 +1470,16 @@ def max_o_max( *args, default : float|None = None ):
 
     Parameters
     ----------
-        args : list[int|float|np.ndarray|None|list]
+        args : list[int | float | np.ndarray | None | list]
             Numbers, :class:`numpy.ndarray` arrays or lists of the former.
             Elements which are ``None`` are skipped.
             
-        default : float|None, default ``None``
+        default : float | None, default ``None``
             Default value if ``args`` was empty.
             
     Returns
     -------
-        max : float|None
+        max : float | None
             The maximum of all maxima, or ``default`` if no elements were found.
     """
     r = None
@@ -1528,7 +1528,7 @@ def m_o_m( *args, pos_floor : float|None = None, buf : float = 0.05, min_dx : fl
     
     Returns
     -------
-        min, max : float|None, float|None
+        min, max : float | None, float | None
             The adjusted minimum and maximum values as discussed above.
             The function returns ``None, None`` if ``args`` does not contain any numbers.
             Such result can be passed directly to :meth:`matplotlib.axes.Axes.set_xlim` or
@@ -1573,7 +1573,7 @@ def focus_line(left : float,
     This function computes a number of points on a line between ``left`` and ``right`` such that points around ``focus``
     are more dense. The ``concentration`` parameter allowws to blend between linear and focused points.
 
-    The function is an appropriately scaled and shifted version of $x \mapsto x (1-c) + c\, x|x|^{p-1}$ where $c$ is concentration.
+    The function is an appropriately scaled and shifted version of $x \mapsto x (1-c) + c\, x\, \mathrm{abs}(x)^{p-1}$ where $c$ is concentration.
 
     Parameters
     ----------
@@ -1586,7 +1586,7 @@ def focus_line(left : float,
         concentration : float, default ``0.9``
             How much concentration: maximum is ``1`` while ``0`` give a linear distibution of points.
 
-        focus : float|None, default ``None``
+        focus : float | None, default ``None``
             Focus point. If not provided, the mid-point is used.
 
         focus_on_grid : bool, default ``None``

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Utilities for file i/o, directory management and
 streamlined versioned caching.
@@ -373,7 +374,8 @@ from collections import OrderedDict
 from collections.abc import Collection, Mapping, Callable, Iterable
 from enum import Enum
 from functools import update_wrapper
-        
+from typing import Any, Iterator
+
 import polars as pl
 import json as json
 import gzip as gzip
@@ -444,7 +446,7 @@ class Format(Enum):
     JSON_PLAIN = 2   #: ``json`` format.
     BLOSC = 3        #: :mod:`blosc` binary compressed format.
     GZIP = 4         #: :mod:`gzip` binary compressed format.
-    POLARS_PARQUET = 10     #: class:`polars.DataFrame` i/o with parquet
+    POLARS_PARQUET = 10  # :class:`polars.DataFrame` i/o with parquet
     
 PICKLE = Format.PICKLE
 JSON_PICKLE = Format.JSON_PICKLE
@@ -554,7 +556,7 @@ class CacheMode(object):
             return CacheMode( config("cache_mode", "on", CacheMode.MODES, CacheMode.HELP) )
     """
     
-    def __init__(self, mode : str = None ):
+    def __init__(self, mode : str|CacheMode|None = None ) -> None:
         """
         :meta private:
         """
@@ -647,7 +649,7 @@ class CacheController( object ):
     
     Parameters
     ----------
-    exclude_arg_types : list[type|str], optional
+    exclude_arg_types : list[type | str], optional
         List of types or names of types to exclude from producing unique ids from function arguments.
         Strings are compated to ``type(arg).__name__``.
 
@@ -685,7 +687,7 @@ class CacheController( object ):
                     hash_length        : int = 8,
                     debug_verbose      : Context = None,
                     keep_last_arguments: bool = False
-                    ):
+                    ) -> None:
         """
         :meta private:
         """
@@ -702,7 +704,7 @@ class CacheController( object ):
         self.uniqueFileName         = UniqueLabel(max_length=max_filename_length,id_length=hash_length,filename_by=None)
         self.keep_last_arguments    = keep_last_arguments
 
-    def __unique_hash__( self, unique_hash, debug_trace ):
+    def __unique_hash__( self, unique_hash, debug_trace ) -> str:
         """ hash function """
         return unique_hash(self.cache_mode,self.exclude_arg_types,self.keep_last_arguments,
                            self.labelledFileName, self.uniqueFileName,debug_trace=debug_trace)
@@ -895,9 +897,7 @@ class SubDir(object):
         Default is, for some good reason, is ``False``.            
     """
 
-    class __RETURN_SUB_DIRECTORY(object):
-        pass
-    """ :meta private: """
+    RET_SUB_DIR = object()  #: :meta private: Sentinel for returning a sub directory handle.
 
     Format = Format # :meta private
     """ The same as :class:`cdxcore.subdir.Format` for convenience """
@@ -920,9 +920,6 @@ class SubDir(object):
     POLARS_PARQUET = Format.POLARS_PARQUET
     """ :meta private: """
     
-    RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
-    """ :meta private: """
-    
     DEFAULT_FORMAT = Format.PICKLE
     """ Default :class:`cdxcore.subdir.Format`: ``Format.PICKLE`` """
     
@@ -939,15 +936,15 @@ class SubDir(object):
     VER_RETURN   = 2
     """ :meta private: """
 
-    def __init__(self, name : str|None, 
-                       parent : str|type|None = None, *, 
+    def __init__(self, name : str|SubDir|None, 
+                       parent : str|SubDir|None = None, *, 
                        ext : str|None = None, 
                        fmt : Format|None = None, 
                        create_directory : bool|None = None,
                        cache_controller : CacheController|None = None,
                        delete_everything : bool = False,
                        delete_everything_upon_exit : bool = False
-                       ):
+                       ) -> None:
         """
         Instantiates a sub directory which contains files with a common extension.
 
@@ -1091,9 +1088,9 @@ class SubDir(object):
         self._path = None
 
     @staticmethod
-    def expand_std_root( name ):
+    def expand_std_root( name ) -> str:
         """
-        Expands ``name`` by a standardized root directory if provided:
+        Expands ``name`` by a standardized root directory.
             
         The first character of ``name`` can be either of:
             
@@ -1106,6 +1103,8 @@ class SubDir(object):
         
         This function does not support ``"?"`` because ``"?"`` used in the constructor
         represents a new directory every time it is used.
+        
+        This function returns a string.
         """
         if len(name) < 2 or name[0] not in ['.','!','~'] or name[1] not in ["\\","/"]:
             return name
@@ -1116,7 +1115,7 @@ class SubDir(object):
         else:
             return SubDir.user_dir() + name[2:]
 
-    def create_directory( self ):
+    def create_directory( self ) -> SubDir:
         """
         Creates the current directory if it doesn't exist yet.
         Returns ``self``.
@@ -1256,12 +1255,12 @@ class SubDir(object):
         return ext, fmt
     
     @property
-    def cache_controller(self):
+    def cache_controller(self) -> CacheController:
         """ Returns an assigned :class:`cdxcore.subdir.CacheController`, or ``None`` """
         return self._cctrl if not self._cctrl is None else default_cacheController
     
     @property
-    def cache_mode(self):
+    def cache_mode(self) -> CacheMode:
         """ Returns the :class:`cdxcore.subdir.CacheMode` associated with the underlying cache controller """
         return self.cache_controller.cache_mode
 
@@ -1386,7 +1385,6 @@ class SubDir(object):
         -------
             Path : str
                 This function returns a string contains trailing ``'/'``.
-       
         """
         d = tempfile.gettempdir()
         assert len(d) == 0 or not (d[-1] == '/' or d[-1] == '\\'), ("*** Internal error 13123212-1", d)
@@ -1466,7 +1464,7 @@ class SubDir(object):
 
     # -- read --
 
-    def _read_reader( self, reader, file : str, default, raise_on_error : bool, *, ext : str = None ):
+    def _read_reader( self, reader, file : str, default : Any|None, raise_on_error : bool, *, ext : str = None ) -> Any|None:
         """
         Utility function for read() and readLine()
 
@@ -1559,15 +1557,15 @@ class SubDir(object):
         return default
 
     def _read( self, file : str,
-                    default = None,
+                    default : Any|None = None,
                     raise_on_error : bool = False,
                     *,
-                    version : str = None,
-                    ext : str = None,
-                    fmt : Format = None,
+                    version : str |None= None,
+                    ext : str|None = None,
+                    fmt : Format|None = None,
                     delete_wrong_version : bool = True,
                     handle_version : int = 0
-                    ):
+                    ) -> Any|None:
         """ See read() """
         ext, fmt = self.auto_ext_fmt(ext=ext, fmt=fmt)
         version  = str(version) if not version is None else None
@@ -1735,14 +1733,14 @@ class SubDir(object):
         return self._read_reader( reader=reader, file=file, default=default, raise_on_error=raise_on_error, ext=ext )
 
     def read( self, file : str,
-                    default = None,
+                    default : Any|None = None,
                     raise_on_error : bool = False,
                     *,
                     version : str|None = None,
                     delete_wrong_version : bool = True,
                     ext : str|None = None,
                     fmt : Format|None = None
-                    ):
+                    ) -> Any|None:
         """
         Read data from a file if the file exists, or return ``default``.
 
@@ -1836,7 +1834,7 @@ class SubDir(object):
                            delete_wrong_version=delete_wrong_version,
                            handle_version=SubDir.VER_NORMAL )
 
-    def is_version( self, file : str, version : str = None, raise_on_error : bool = False, *, ext : str = None, fmt : Format = None, delete_wrong_version : bool = True ):
+    def is_version( self, file : str, version : str|None = None, raise_on_error : bool = False, *, ext : str|None = None, fmt : Format|None = None, delete_wrong_version : bool = True ) -> bool:
         """
         Tests the version of a file.
 
@@ -1877,7 +1875,7 @@ class SubDir(object):
         """
         return self._read( file=file,default=False,raise_on_error=raise_on_error,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_CHECK )
 
-    def get_version( self, file : str, raise_on_error : bool = False, *, ext : str|None = None, fmt : Format|None = None ):
+    def get_version( self, file : str, raise_on_error : bool = False, *, ext : str|None = None, fmt : Format|None = None ) -> str:
         """
         Returns a version stored in a file.
         
@@ -1916,7 +1914,7 @@ class SubDir(object):
         """
         return self._read( file=file,default=None,raise_on_error=raise_on_error,version="",ext=ext,fmt=fmt,delete_wrong_version=False,handle_version=SubDir.VER_RETURN )
 
-    def read_string( self, file : str, default = None, raise_on_error : bool = False, *, ext : str = None ) -> str:
+    def read_string( self, file : str, default : Any|None = None, raise_on_error : bool = False, *, ext : str|None = None ) -> str:
         """
         Reads text from a file. Removes trailing EOLs.
         
@@ -1936,7 +1934,7 @@ class SubDir(object):
 
     # -- write --
 
-    def _write( self, writer, file : str, obj, raise_on_error : bool, *, ext : str = None ) -> bool:
+    def _write( self, writer, file : str, obj, raise_on_error : bool, *, ext : str|None = None ) -> bool:
         """ Utility function for write() and writeLine() """
         if self._path is None:
             raise EOFError("Cannot write to '%s': current directory is not specified" % file)
@@ -1994,7 +1992,7 @@ class SubDir(object):
         return True
 
     def write( self, file : str,
-                     obj,
+                     obj : Any,
                      raise_on_error : bool = True,
                      *,
                      version : str|None = None,
@@ -2207,7 +2205,7 @@ class SubDir(object):
                     keys.append( entry.name )
         return keys
 
-    def sub_dirs(self) -> list:
+    def sub_dirs(self) -> list[str]:
         """
         Retrieve a list of all sub directories.
         
@@ -2475,7 +2473,7 @@ class SubDir(object):
         -------
         Datetime : :class:`datetime.datetime`
             A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
-            Returns ``None`` if an error occured.
+            Returns ``None`` if an error occurred.
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getctime(x)) )
 
@@ -2501,7 +2499,7 @@ class SubDir(object):
         -------
         Datetime : :class:`datetime.datetime`
             A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
-            Returns ``None`` if an error occured.
+            Returns ``None`` if an error occurred.
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getmtime(x)) )
 
@@ -2527,7 +2525,7 @@ class SubDir(object):
         -------
         Datetime : :class:`datetime.datetime`
             A single ``datetime`` if ``file`` is a string, otherwise a list of ``datetime``'s.
-            Returns ``None`` if an error occured.
+            Returns ``None`` if an error occurred.
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getatime(x)) )
 
@@ -2550,7 +2548,7 @@ class SubDir(object):
 
         Returns
         -------
-            File size if ``file``, or ``None`` if an error occured.
+            File size if ``file``, or ``None`` if an error occurred.
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : os.path.getsize(x) )
 
@@ -2678,44 +2676,18 @@ class SubDir(object):
         """
         return fmt_filename( file, by=by )
    
-    if False:
-        def unqiueLabelToKey( self, unique_label:str, id_length:int=8, separator:str='-', max_length:int=64 ) -> str:
-            """
-            Converts a unique label which might contain invalid characters into a unique file name, such that the full file name does not exceed 'max_length' bytes.
-            The returned file has the format 
-                name + separator + ID
-            where ID has length id_length.
-            If unique_label is already guaranteed to be a valid filename, use unqiueLongFileNameToKey() instead.
-            """
-            len_ext      = len(self.ext)
-            assert len_ext < max_length, ("'max_length' must exceed the length of the extension", max_length, self.ext)
-            uqf          = UniqueLabel( max_length=max_length-len_ext, id_length=id_length, separator=separator, filename_by="default" )
-            return uqf( unique_label )
-       
-        def unqiueLongFileNameToKey( self, unique_filename:str, id_length:int=8, separator:str='-', max_length:int=64 ) -> str:
-            """
-            Converts a unique filename which might be too long to a unique filename such that the total length plus 'ext' does not exceed 'max_length' bytes.
-            If the filename is already short enough, no change is made.
-    
-            If 'unique_filename' is not guaranteed to be a valid filename, use unqiueLabelToKey() instead.
-            """
-            len_ext      = len(self.ext)
-            assert len_ext < max_length, ("'max_length' must exceed the length of the extension", max_length, self.ext)
-            uqf          = UniqueLabel( max_length=max_length-len_ext, id_length=id_length, separator=separator )
-            return uqf( unique_filename )
-   
     # object interface
     # ----------------
 
     def __call__(self, element : str|None = None,
-                       default = RETURN_SUB_DIRECTORY,
+                       default : Any = RET_SUB_DIR,
                        raise_on_error : bool = False,
                        *,
                        version : str|None = None,
                        ext : str|None = None,
                        fmt : Format|None = None,
                        delete_wrong_version : bool = True,
-                       create_directory : bool|None = None ):
+                       create_directory : bool|None = None ) -> Any:
         """
         Read either data from a file, or return a new sub directory.
         
@@ -2745,17 +2717,17 @@ class SubDir(object):
 
         Parameters
         ----------
-            element : str|None
+            element : str | None
                 File or directory name, or a list thereof.
 
-                ``element`` can be ``None`` if ``default`` is :attr:`cdxcore.subdir.SubDir.RETURN_SUB_DIRECTORY`` (its default value)
+                ``element`` can be ``None`` if ``default`` is left at its dummy value ``SubDir.RET_SUB_DIR`` (the default)
                 in which case ``__call__`` refers to the current directory.
                 
-            default : optional
+            default : Any, default ``SubDir.RET_SUB_DIR``
                 If specified, this function reads ``element`` with
                 ``read( element, default, *args, **kwargs )``.
 
-                If ``default`` is not specified, then this function returns a new sub-directory by calling
+                If ``default`` is not specified and left at the dummy value ``SubDir.RET_SUB_DIR``, then this function returns a new sub-directory by calling
                 ``SubDir(element,parent=self,ext=ext,fmt=fmt)``.
 
             create_directory : bool, default ``None``
@@ -2821,7 +2793,7 @@ class SubDir(object):
         Object : type | SubDir
             Either the value in the file, a new sub directory, or lists thereof.
         """
-        if default == SubDir.RETURN_SUB_DIRECTORY:
+        if default is SubDir.RET_SUB_DIR:
             if not element is None and not isinstance(element, str):
                 if not isinstance(element, Collection): 
                     raise ValueError(txtfmt("'element' must be a string or an iterable object. Found type '%s;", type(element)))
@@ -2836,18 +2808,18 @@ class SubDir(object):
                           ext=ext,
                           fmt=fmt )
 
-    def __getitem__( self, file ):
+    def __getitem__( self, file ) -> Any:
         """
         Reads ``file`` using :meth:`cdxcore.subdir.SubDir.read`.
         If '`file'` does not exist, throw a :class:`KeyError`.
         """
         return self.read( file=file, default=None, raise_on_error=True )
 
-    def __setitem__( self, file, value):
+    def __setitem__( self, file : str, value : Any):
         """ Writes ``value`` to ``file`` using :meth:`cdxcore.subdir.SubDir.write`. """
         self.write(file,value)
 
-    def __delitem__(self,file):
+    def __delitem__(self,file : str):
         """ Silently delete ``file`` using :meth:`cdxcore.subdir.SubDir.delete`. """
         self.delete(file, False )
 
@@ -2855,11 +2827,11 @@ class SubDir(object):
         """ Return the number of files in this directory with matching extension. """
         return len(self.files())
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         """ Returns an iterator which allows traversing through all files below in this directory with matching extension. """
         return self.files().__iter__()
 
-    def __contains__(self, file):
+    def __contains__(self, file : str) -> bool:
         """ Tests whether ``file`` :meth:`cdxcore.subdir.SubDir.exists`. """
         return self.exists(file)
     
@@ -2885,7 +2857,7 @@ class SubDir(object):
                 An iterable generator
         """       
         class ItemIterable(Iterable):
-            def __init__(_):
+            def __init__(_) -> None:
                 _._files  = self.files(ext=ext)
                 _._subdir = self
             def __len__(_):
@@ -2899,7 +2871,7 @@ class SubDir(object):
     # convenient path ops
     # -------------------
     
-    def __add__(self, directory : str) -> str:
+    def __add__(self, directory : str|SubDir ) -> SubDir:
         """
         Returns a the subdirectory ``directory`` of ``self``.
         """
@@ -2908,7 +2880,7 @@ class SubDir(object):
     # unique hash
     # -----------
     
-    def __unique_hash__( self, unique_hash, debug_trace ):
+    def __unique_hash__( self, unique_hash, debug_trace ) -> str:
         """ Default unique has iterates contents - so files contained in this directory """
         return unique_hash(path=self._path,
                            ext=self._ext, 
@@ -2921,11 +2893,11 @@ class SubDir(object):
     # pickling
     # --------
     
-    def __getstate__(self):
+    def __getstate__(self) -> Mapping:
         """ Return state to pickle """
         return dict( path=self._path, ext=self._ext, fmt=self._fmt, crt=self._crt, cctrl=self._cctrl, tclean=self._tclean )    
 
-    def __setstate__(self, state):
+    def __setstate__(self, state : Mapping):
         """ Restore pickle """
         self._path = state['path']
         self._ext = state['ext']
@@ -2961,7 +2933,7 @@ class SubDir(object):
                       include_args         : list[str]|None = None,
                       exclude_arg_types    : list[type|str]|None = None,
                       version_auto_class   : bool = True,
-                      name_of_func_name_arg: str = "func_name"):
+                      name_of_func_name_arg: str = "func_name") -> Callable:
         """
         Advanced versioned caching for callables.
         
@@ -3446,7 +3418,7 @@ class SubDir(object):
             List of arguments to exclude from generating an unique ID. Examples of such non-functional arguments
             are workflow controls (debugging) and i/o elements.
             
-        exclude_arg_types : list[type|str] | None, default ``None``
+        exclude_arg_types : list[type | str] | None, default ``None``
             List of parameter types or names of type to exclude from generating an unique ID. Examples of such non-functional arguments
             are workflow controls (debugging) and i/o elements. Strings are compated to ``type(arg).__name__``.
 
@@ -3653,12 +3625,13 @@ class CacheTracker(object):
     """
     Utility class to track caching and be able to delete all dependent objects.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         """ track cache files """
         self._files = []
-    def __iadd__(self, new_file):
+    def __iadd__(self, new_file : str) -> CacheTracker:
         """ Add a new file to the tracker """
         self._files.append( new_file )
+        return self
     def delete_cache_files(self):
         """ Delete all tracked files """
         for file in self._files:
@@ -3670,14 +3643,14 @@ class CacheTracker(object):
     def __repr__(self) -> str:#NOQA
         return f"Tracked: {self._files}"
 
-class CacheInfo(object):
+class CacheInfo(PrettyObject):
     """
     Information on cfunctions decorated with :dec:`cdxcore.subdir.SubDir.cache`.
     
     Functions decorated with :dec:`cdxcore.subdir.SubDir.cache` 
     will have a member ``cache_info`` of this type
     """
-    def __init__(self, name: str, idversion: str, keep_last_arguments : bool ):
+    def __init__(self, name: str, idversion: str, keep_last_arguments : bool ) -> None:
         """
         :meta private:
         """
@@ -3706,7 +3679,7 @@ class CacheWrapper(object):
                         include_args         : set[str] = None,
                         exclude_arg_types    : set[type] = None,
                         version_auto_class   : bool = True,
-                        name_of_func_name_arg: str = "func_name"):
+                        name_of_func_name_arg: str = "func_name") -> None:
         
         # check F
         # -------
@@ -3896,7 +3869,7 @@ class CacheWrapper(object):
                     del arguments[arg]
         return arguments
     
-    def cache_create_id( self, args : Collection, kwargs : Mapping ):
+    def cache_create_id( self, args : Collection, kwargs : Mapping ) -> tuple:
         """
         Expert usage: Creates a unique_id, filename, a label, the sub_dir, and the list of
         relevant function arguments for parsing
@@ -3920,7 +3893,7 @@ class CacheWrapper(object):
                 The readable label for the function call without hash information (hence not necessarily unique).
             sub_dir : :class:`cdxcore.subdir.SubDir`
                 The  directory where ``filename`` is located.
-            arguments : Mapping|None
+            arguments : Mapping | None
                 Result of calling :meth:`cxcore.subdir.CacheWrapper.cache_relevant_arguments`
                 if that was required, ``None`` otherwise.
                 This is returned for operational efficiency.
@@ -4010,11 +3983,11 @@ class CacheWrapper(object):
                 kwargs : Collection
                     Keyword arguments for the cached function F.
                     
-                override_cache_mode : :class:`cdxcore.subdir.CacheMode`|None, default ``None
+                override_cache_mode : :class:`cdxcore.subdir.CacheMode` | None, default ``None
                     Changes the caching mode for this function call.
                     For example you can force re-computation by passing ``update``.
     
-                track_cached_files : :class:`cdxcore.subdir.CacheTracker`|None, default ``None
+                track_cached_files : :class:`cdxcore.subdir.CacheTracker` | None, default ``None
                     Allows tracking all cached files - for example for mass deletion.
                     
                 return_cache_uid : bool, default ``False``

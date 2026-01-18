@@ -250,7 +250,7 @@ class UniqueHash( object ):
                        f_include_defaults     : bool = True,
                        f_include_closure      : bool = True,
                        f_include_globals      : bool = True,
-                       ):
+                       ) -> None:
         """
         Initializes the hash calculator which can iteratively generate hashes of a given length for arbitrary input.
         :meta public:
@@ -772,7 +772,7 @@ class DebugTraceCollect(DebugTrace):
             
             If set to ``None`` then the function collects the actual elements.
     """
-    def __init__(self, tostr : int = None ):
+    def __init__(self, tostr : int | None = None ) -> None:
         """
         Initialize data collection
         """
@@ -781,17 +781,17 @@ class DebugTraceCollect(DebugTrace):
         
         #: Trace of the hashing operation.
         #: Upon completion of :meth:`cdxcore.uniquehash.UniqueHash.__call__` this list contains
-        #: elemenets of the following type:
+        #: elements of the following type:
         #:
         #: * if `tostr` is a positive integer:
         #:    * `typex`: type of the element
         #:    * `reprx`: `repr` of the element, up to `tostr` length.
-        #:    * `msg`: message occured during hashing if any
+        #:    * `msg`: message occurred during hashing if any
         #:    * `child`: if the element was a container or object
         #:
         #: * if `tostr` is ``None``:    
         #:    * `x`: the element
-        #:    * `msg`: message occured during hashing if any
+        #:    * `msg`: message occurred during hashing if any
         #:    * `child`: if the element was a container or object
         self.trace = []     
     def _mupdate( self, x, msg, child ):
@@ -853,7 +853,7 @@ class DebugTraceVerbose(DebugTrace):
             Context object or ``None`` for a new context object
             with full visibility (it prints everything).
     """
-    def __init__(self, strsize : int = 50, verbose : Context = None ):
+    def __init__(self, strsize : int = 50, verbose : Context = None ) -> None:
         """
         Initialize tracer.
         """

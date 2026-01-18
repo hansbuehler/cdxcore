@@ -466,7 +466,7 @@ class Config(OrderedDict):
 
     """
 
-    def __init__(self, *args, config_name : str = None, **kwargs):
+    def __init__(self, *args, config_name : str = None, **kwargs) -> None:
         """
         Create a :class:`cdxcore.config.Config`.
         """
@@ -1082,7 +1082,7 @@ class Config(OrderedDict):
     def __getattr__(self, key : str):
         """
         Returns either the value for 'key', if it exists, or creates on-the-fly a child config with the name 'key' and returns it.
-        If an exsting child value is returned, its usage is *not* recorded which for example means that done() will assume it hasn't been read.
+        If an existing child value is returned, its usage is *not* recorded which for example means that done() will assume it hasn't been read.
         
         Because __getattr__ will generte child configs on the fly it means the following is a legitmate use:            
             config = Config()
@@ -1882,8 +1882,8 @@ class NotDoneError( RuntimeError ):
     The set of those arguments is accessible via
     :attr:`cdxcore.config.NotDoneError.not_done`.
     """
-    def __init__(self, not_done : set[str], config_name : str, message : str):
-        #: The oarameter keys which were not read when :meth:`cdxcore.config.Config.done` was called.
+    def __init__(self, not_done : set[str], config_name : str, message : str) -> None:
+        #: The parameter keys which were not read when :meth:`cdxcore.config.Config.done` was called.
         self.not_done = not_done
         #: Hierarchical name of the config.
         self.config_name = config_name
@@ -1897,9 +1897,9 @@ class InconsistencyError( RuntimeError ):
     The ``Config`` semantics require that parameters are accessed used with consistent
     `default` and `help` values between :meth:`cdxcore.config.Config.__call__` calls.
 
-    For *raw* access to any paramters, use ``[]``.
+    For *raw* access to any parameters, use ``[]``.
     """
-    def __init__(self, key : str, config_name : str, message : str):
+    def __init__(self, key : str, config_name : str, message : str) -> None:
         #: The offending parameter key.
         self.key = key
         #: Hierarchical name of the config.
@@ -1921,7 +1921,7 @@ class CastError( RuntimeError ):
         exception : :class:`Exception`
             Orginal exception raised by the cast.
     """
-    def __init__(self, key : str, config_name : str, exception : Exception):
+    def __init__(self, key : str, config_name : str, exception : Exception) -> None:
         """
         :meta private:
         """        
@@ -1974,7 +1974,7 @@ class _Simple(_Cast):# NOQA
 
     STR_NONE_CAST = "any"
 
-    def __init__(self, *, cast : type, config_name : str, key_name : str, none_is_any : bool ):
+    def __init__(self, *, cast : type, config_name : str, key_name : str, none_is_any : bool ) -> None:
         """ Simple atomic caster """
         if not cast is None:
             if isinstance(cast, str):
@@ -2008,7 +2008,7 @@ class _Simple(_Cast):# NOQA
 class _Condition(_Cast):
     """ Represents a simple operator condition such as 'Float >= 0.' """
 
-    def __init__(self, cast, op, other):
+    def __init__(self, cast, op, other) -> None:
         """ Initialize the condition for a base type 'cast' and an 'op' with an 'other'  """
         self.cast    = cast
         self.op      = op
@@ -2102,7 +2102,7 @@ class _CastCond(_Cast): # NOQA
     See the two members Float and Int
     """
 
-    def __init__(self, cast):# NOQA
+    def __init__(self, cast) -> None:# NOQA
         self.cast = cast
     def __ge__(self, other) -> bool:# NOQA
         return _Condition( self.cast, 'ge', self.cast(other) )
@@ -2162,7 +2162,7 @@ class _Enum(_Cast):
     Note that all list members must be of the same type.
     """
 
-    def __init__(self, enum : list, *, config_name : str, key_name : str ):
+    def __init__(self, enum : list, *, config_name : str, key_name : str ) -> None:
         """ Initializes an enumerator casting type. """
         self.enum = list(enum)
         if len(self.enum) == 0:
@@ -2224,7 +2224,7 @@ class _Alt(_Cast):
         config("spread", 1, ( Int<=-1, Int>=1. ), "A variable which has to be outside (-1,+1)")
     """
 
-    def __init__(self, casts : list, *, config_name : str, key_name : str ):
+    def __init__(self, casts : list, *, config_name : str, key_name : str ) -> None:
         """ Initialize a compound cast """
         if len(casts) == 0:
             raise ValueError(_cast_err_header(config_name=config_name,key_name=key_name) +\

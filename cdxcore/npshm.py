@@ -45,13 +45,13 @@ with :func:`cdxcore.npio.to_file` directly into shared memory.
 Garbage Collection
 ^^^^^^^^^^^^^^^^^^
 
-The functions here are simplistic wrappers aroud :class:`multiprocessing.shared_memory.SharedMemory` on
+The functions here are simplistic wrappers around :class:`multiprocessing.shared_memory.SharedMemory` on
 Linux and Windows. The returned object will call :meth:`multiprocessing.shared_memory.SharedMemory.close` 
 upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
    
 **Linux**
 
-Under Linux above setings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
+Under Linux above settings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
 is manually deleted. Call :func:`cdxcore.npshm.delete_shared_array` to delete a shared file manually.
 
 The amount of shared memory available on Linux is limited by default.
@@ -76,6 +76,7 @@ Documentation
 
 from .config import Config, Int, Float # NOQA
 from .npio import read_into, read_dtype_and_shape, _create_header, _decode_header
+from .verbose import Context
 import numpy as np
 import weakref
 from multiprocessing import shared_memory
@@ -85,14 +86,15 @@ def create_shared_array( name  : str,
                          shape : tuple, 
                          dtype : type|str, *, 
                          raise_on_error : bool = True, 
+                         full  : float|np.ndarray|None = None,
                          force : bool = False, 
-                         full = None ) -> np.ndarray:
+                         verbose : Context|None = None ) -> np.ndarray:
     """
     Create a new named shared array.
     
     This function can ``force`` creation of a new array on Linux only.
     
-    This function is a simplistic wrapper aroud creating a :class:`numpy.ndarray` with
+    This function is a simplistic wrapper around creating a :class:`numpy.ndarray` with
     a newly created :class:`multiprocessing.shared_memory.SharedMemory` buffer.
     The returned object will call :meth:`multiprocessing.shared_memory.SharedMemory.close` 
     upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
@@ -101,7 +103,7 @@ def create_shared_array( name  : str,
        
     **Linux**
 
-    Under Linux above setings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
+    Under Linux above settings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
     is manually deleted. Call :func:`cdxcore.npshm.delete_shared_array` to delete a shared file manually.
     
     The amount of shared memory available on Linux is limited by default.
@@ -122,20 +124,23 @@ def create_shared_array( name  : str,
         shape : tuple
             Shape of the array.
             
-        dtype : dtype
+        dtype : dtype | str
             Numpy dtype of the array.
             
         raise_on_error : bool, default ``True``
             If an array called ``name`` already exists, this function raises an :class:`FileExistsError` exception 
             if ``raise_on_error`` is ``True``; otherwise it will return ``None``.
             
-        full  : default ``None``
+        full : float | :class:`numpy.ndarray` | None, default ``None``
             Value to fill array with, or ``None`` to not fill the array.
             
         force : bool, default ``False``
             Whether to attempt to delete any existing arrays under Linux only.
             Note that while the file might be get deleted the actual memory is
             only freed after all references are destroyed.
+            
+        verbose : :class:`cdxcore.verbose.Context` | None, default ``None``
+            If not ``None`` print out activity information, typically for debugging.
         
     Returns
     -------
@@ -166,7 +171,7 @@ def create_shared_array( name  : str,
             shm  = shared_memory.SharedMemory(name=name, create=False )
             shm.close()
             shm.unlink()
-            return create_shared_array( name=name, shape=shape, dtype=dtype, raise_on_error=raise_on_error, full=full, force=False )
+            return create_shared_array( name=name, shape=shape, dtype=dtype, raise_on_error=raise_on_error, full=full, force=False, verbose=verbose )
         if raise_on_error:
             raise e
         return None
@@ -175,11 +180,11 @@ def create_shared_array( name  : str,
     shm.buf[:len(header)] = header
     array                  = np.ndarray(shape, dtype=dtype, buffer=shm.buf[len(header):], order="C")
     def _finalize():
-        print("create_shared_array: _finalize", name)
+        if not verbose is None: verbose.report(1,f"create_shared_array: _finalize '{name}'")
         shm.close()
         #shm.unlink() c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
     weakref.finalize(array, _finalize )
-    print("create_shared_array:", name)
+    if not verbose is None: verbose.write(f"create_shared_array '{name}'")
 
     if not full is None:
         array[...] = full            
@@ -190,18 +195,19 @@ def attach_shared_array(name : str, *,
                         validate_shape : tuple|None = None, 
                         validate_dtype : type|None  = None, 
                         raise_on_error : bool  = True,
-                        read_only      : bool  = False ) -> np.ndarray:
+                        read_only      : bool  = False,
+                        verbose        : Context|None = None ) -> np.ndarray:
     """
     Attach a :class:`numpy.ndarray` to an existing named shared array.
     
-    This function is a simplistic wrapper aroud creating a :class:`numpy.ndarray` with
+    This function is a simplistic wrapper around creating a :class:`numpy.ndarray` with
     an existing :class:`multiprocessing.shared_memory.SharedMemory` buffer.
     The returned object will call :meth:`multiprocessing.shared_memory.SharedMemory.close` 
     upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
        
     **Linux**
 
-    Under Linux above setings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
+    Under Linux above settings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
     is manually deleted. Call :func:`cdxcore.npshm.delete_shared_array` to delete a shared file manually.
     
     The amount of shared memory available on Linux is limited by default.
@@ -219,19 +225,22 @@ def attach_shared_array(name : str, *,
             Name of the array. This must be a valid file name.
             In Linux, shared memory is managed via ``/dev/shm/``.
 
-        validate_shape : tuple|None, default ``None``
+        validate_shape : tuple | None, default ``None``
             Validate that array has this shape, if not ``None``. If the array has a different shape, raise a :class:`ValueError`.
 
-        validate_dtype : dtype|None, default ``None``
+        validate_dtype : dtype | None, default ``None``
             Validate that array has this dtype, if not ``None``. If the array has a different dtype, raise a :class:`ValueError`.
 
         raise_on_error : bool, default ``True``
             If an array called ``name`` does not exists, this function raises an :class:`FileNotFoundError` exception 
             if ``raise_on_error`` is ``True``; otherwise it will return ``None``.
 
-        read_only : boo, default ``False``
+        read_only : bool, default ``False``
             Whether to set numpy's `writeable flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setflags.html>`__
             to ``False``.
+
+        verbose : :class:`cdxcore.verbose.Context` | None, default ``None``
+            If not ``None`` print out activity information, typically for debugging.
 
     Returns
     -------
@@ -269,7 +278,7 @@ def attach_shared_array(name : str, *,
 
     array = np.ndarray( shape, dtype=dtype, buffer=buf, order="C")
     def _finalize():
-        print("attach_shared_array: _finalize", name)
+        if not verbose is None: verbose.report(1,f"attach_shared_array: _finalize '{name}'")
         shm.close()
         #shm.unlink() c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
     weakref.finalize(array, _finalize )
@@ -279,18 +288,19 @@ def attach_shared_array(name : str, *,
     if read_only:
         array.flags.writeable  = False
 
-    print("attach_shared_array", name)
+    if not verbose is None: verbose.write(f"attach_shared_array '{name}'")
     assert is_shared_array(array), ("Internal error - fix is_sharedarray")
     return array
 
 def read_shared_array(file : int|str, 
                       name : str, *,
-                      validate_shape  : tuple = None, 
-                      validate_dtype  : type = None,
+                      validate_shape  : tuple|None = None, 
+                      validate_dtype  : type|None = None,
                       accept_existing : bool = True, 
                       buffering       : int  = -1,
                       read_only       : bool = False,
-                      return_status   : bool = False) -> np.ndarray:
+                      return_status   : bool = False,
+                      verbose         : Context|None = None ) -> np.ndarray:
     """
     Read a shared array from disk into a new named shared :class:`numpy.ndarray` in binary format
     using :func:`cdxcore.npio.read_into`.
@@ -307,24 +317,24 @@ def read_shared_array(file : int|str,
             Name of the array. This must be a valid file name.
             In Linux, shared memory is managed via ``/dev/shm/``.
 
-        validate_shape : tuple|None, default ``None``
+        validate_shape : tuple | None, default ``None``
             Validate that array has this shape, if not ``None``. If the array has a different shape, raise a :class:`ValueError`.
 
-        validate_dtype : dtype|None, default ``None``
+        validate_dtype : dtype | None, default ``None``
             Validate that array has this dtype, if not ``None``. If the array has a different dtype, raise a :class:`ValueError`.
 
         raise_on_error : bool, default ``True``
             If a shared array called ``name`` does not exists, this function raises an :class:`FileNotFoundError` exception 
             if ``raise_on_error`` is ``True``; otherwise it will return ``None``.
 
-        read_only : boo, default ``False``
+        read_only : bool, default ``False``
             Whether to set numpy's `writeable flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setflags.html>`__
             to ``False``.
 
         accept_existing : bool, default ``True``
             Whether to first try to attach to an existing shared array ``name``.
             If either ``validate_shape`` or ``validate_dtype`` is ``None``, then the function will read
-            the array characteristics from the file on disk even if an exsting array exists
+            the array characteristics from the file on disk even if an existing array exists
             to ensure its characteristics match those on disk.
 
         buffering : int, default ``-1``
@@ -333,13 +343,16 @@ def read_shared_array(file : int|str,
         return_status : bool default ``False``
             Whether to return ``status`` as well. See below.
 
+        verbose : :class:`cdxcore.verbose.Context` | None, default ``None``
+            If not ``None`` print out activity information, typically for debugging.
+
     Returns
     -------
         Array : :class:`numpy.ndarray` like
-            If ``return_status`` is ``False``, return just the array or ``None`` if an error occured and ``raise_on_error`` is False.
+            If ``return_status`` is ``False``, return just the array or ``None`` if an error occurred and ``raise_on_error`` is False.
     
         ( Array, attached ) : :class:`numpy.ndarray` like, bool
-            If ``return_status`` is ``True``, and if no error occured, then the
+            If ``return_status`` is ``True``, and if no error occurred, then the
             function returns a tuple containing the array and a boolean indicating whether the array
             was attached to an existing shared array (``True``), or whether a new shared array was created (``False``).
             Useful for status messages.
@@ -361,7 +374,7 @@ def read_shared_array(file : int|str,
             validate_shape = validate_shape if not validate_shape is None else shape
             validate_dtype = validate_dtype if not validate_dtype is None else dtype
 
-        r = attach_shared_array( name, validate_shape=validate_shape, validate_dtype=validate_dtype, raise_on_error=False, read_only=read_only )
+        r = attach_shared_array( name, validate_shape=validate_shape, validate_dtype=validate_dtype, raise_on_error=False, read_only=read_only, verbose=verbose )
         if not r is None:
             if not return_status:
                 return r
@@ -377,16 +390,16 @@ def read_shared_array(file : int|str,
     read_into( file, r, read_only = read_only)
     assert r.flags.writeable == (not read_only), ("Internal flag error", r.flags.writeable, read_only)
     assert is_shared_array(r), ("Internal error - fix is_sharedarray")
+    if not verbose is None: verbose.write(f"read_shared_array '{name}'")
     
     if not return_status:
         return r
     return r, False
 
-def delete_shared_array( name : str, raise_on_error : bool = True ) -> bool:
+def delete_shared_array( name : str, raise_on_error : bool = True, *, verbose : Context|None = None ) -> bool:
     """
     Deletes the shared array associated with ``name``
     by calling :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
-    
     
     **Linux**
     
@@ -408,6 +421,9 @@ def delete_shared_array( name : str, raise_on_error : bool = True ) -> bool:
             If the file could not be deleted successfully, raise the respective Exception.
             If the file did not exist, this function will return successfully.
 
+        verbose : :class:`cdxcore.verbose.Context` | None, default ``None``
+            If not ``None`` print out activity information, typically for debugging.
+
     Returns
     -------
         Success : bool
@@ -419,6 +435,7 @@ def delete_shared_array( name : str, raise_on_error : bool = True ) -> bool:
         shm  = shared_memory.SharedMemory(name=name, create=False )
         shm.close()
         shm.unlink()
+        if not verbose is None: verbose.write(f"delete_shared_array '{name}'")
     except FileNotFoundError:
         return True
     except Exception as e:

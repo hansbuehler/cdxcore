@@ -23,7 +23,7 @@ class AutoLimits( object ):
             How many steps to lookback for any calculation. None to use all steps
     """
 
-    def __init__(self, low_quantile, high_quantile, min_length : int = 10, lookback : int = None ):
+    def __init__(self, low_quantile, high_quantile, min_length : int = 10, lookback : int = None ) -> None:
         """
         Initialize AutoLimits.
         """

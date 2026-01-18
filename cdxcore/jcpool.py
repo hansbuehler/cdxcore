@@ -37,7 +37,7 @@ class ParallelContextChannel( Context ):
 
     This channel sends messages it receives to a :class:`multiprocessing.Queue`.
     """
-    def __init__(self, *, cid, maintid, queue, f_verbose):
+    def __init__(self, *, cid, maintid, queue, f_verbose) -> None:
         self._queue        = queue
         self._cid          = cid
         self._maintid      = maintid
@@ -60,7 +60,7 @@ class _ParallelContextOperator( object ):
     def __init__(self, pool_verbose     : Context,      # context to print Pool progress to (in thread)
                        f_verbose        : Context,      # original function context (in thread)
                        verbose_interval : float = None  # throttling for reporting 
-                ):
+            ) -> None:
         cid = id(f_verbose)
         tid = get_thread_id()
         with pool_verbose.write_t(f"Launching messaging queue '{cid}' using thread '{tid}'... ", end='') as tme:
@@ -132,7 +132,7 @@ class _ParallelContextOperator( object ):
 
 class _DIF(object):
     """ _DictIterator 'F' """
-    def __init__(self, k : str, f : Callable, merge_tuple : bool ):
+    def __init__(self, k : str, f : Callable, merge_tuple : bool ) -> None:
         self._f = f
         self._k = k
         self._merge_tuple = merge_tuple
@@ -144,7 +144,7 @@ class _DIF(object):
 
 class _DictIterator(object):
     """ Dictionary iterator """
-    def __init__(self, jobs : Mapping, merge_tuple : bool):
+    def __init__(self, jobs : Mapping, merge_tuple : bool) -> None:
         self._jobs = jobs
         self._merge_tuple = merge_tuple
     def __iter__(self):
@@ -155,7 +155,7 @@ class _DictIterator(object):
         return len(self._jobs)
            
 class _NoPool(object):
-    def __init__(self):
+    def __init__(self) -> None:
         self._jobs = None
     def __call__(self, jobs):
         for func, args, kargs in jobs:
@@ -414,9 +414,9 @@ class JCPool( object ):
                        threading        : bool = False,
                        tmp_root_dir     : str|SubDir= "!/.cdxmp",  *,
                        verbose          : Context = Context.quiet,
-                       parallel_kwargs  : dict = {} ):
+                       parallel_kwargs  : dict = {} ) -> None:
         """
-        Initialize a multi-processing pool. Thin wrapper aroud joblib.parallel for cdxcore.verbose.Context() output
+        Initialize a multi-processing pool. Thin wrapper around joblib.parallel for cdxcore.verbose.Context() output
         """
         tmp_dir_ext            = unique_hash8( uuid.getnode(), os.getpid(), get_thread_id(), datetime.datetime.now() )
         num_workers            = int(num_workers)

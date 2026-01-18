@@ -293,7 +293,7 @@ class Deferred(object):
                            # arguments passed to the action  
                            args           : Collection|None  = None,
                            kwargs         : Mapping|None  = None,   
-                           ):
+                           ) -> None:
         """
         Initialize a deferred action.
         """

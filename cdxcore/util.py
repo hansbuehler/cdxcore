@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Basic utilities for Python such as type management, formatting, some trivial timers.
 
@@ -24,6 +26,8 @@ import pandas as pd
 from .err import fmt, _fmt, verify, error, warn_if, warn ,verify_inp #NOQA
 import inspect as inspect
 from string import Formatter
+from typing import Iterator, Any
+from prettytable import PrettyTable
 
 # =============================================================================
 # basic indentification short cuts
@@ -86,7 +90,7 @@ def is_function(f) -> bool:
     """
     return isinstance(f,types_functions())
 
-def is_atomic( o ):
+def is_atomic( o: object ) -> bool:
     """
     Whether an element is atomic.
     
@@ -100,7 +104,7 @@ def is_atomic( o ):
         return True
     return False
 
-def is_float( o ):
+def is_float( o: object ) -> bool:
     """ Checks whether a type is a ``float`` which includes numpy floating types """
     if type(o) is float:
         return True
@@ -108,11 +112,36 @@ def is_float( o ):
         return True
     return False
 
+def get_calling_function_name(default : str) -> str:
+    """
+    When called from a function, returns the name of the calling function. Otherwise returns ``default``.
+    
+    Example::
+
+        from cdxcore.util import get_calling_function_name
+    
+        def g():
+            print(get_calling_function_name("no caller")) # -> prints "f
+
+        def f():
+            g()
+    """
+    frame = inspect.currentframe() # that's us
+    if frame is None:
+        return default
+    frame = frame.f_back
+    if frame is None:
+        return default
+    frame = frame.f_back
+    if frame is None:
+        return default
+    return frame.f_code.co_name
+
 # =============================================================================
 # python basics
 # =============================================================================
 
-def _get_recursive_size(obj, seen=None):
+def _get_recursive_size(obj: object, seen: set[int] | None = None) -> int:
     """
     Recursive helper for sizeof
     :meta private: 
@@ -148,7 +177,7 @@ def _get_recursive_size(obj, seen=None):
             pass
     return size
 
-def getsizeof(obj):
+def getsizeof(obj : Any) -> int:
     """
     Approximates the size of an object.
     
@@ -158,7 +187,7 @@ def getsizeof(obj):
     """
     return _get_recursive_size(obj,None)    
 
-def qualified_name( x, module : bool|str = False ):
+def qualified_name( x : Any|None, module : bool|str = False ) -> str:
     """
     Return qualified name including module name of some Python element.
     
@@ -185,10 +214,10 @@ def qualified_name( x, module : bool|str = False ):
            
     Parameters
     ----------
-        x : any
+        x : Any
             Some Python element.
             
-        module : bool|str, default ``False``
+        module : bool | str, default ``False``
             Whether to also return the containing module if available.
             Use a string as separator to append the module name
             to the returned name::
@@ -510,7 +539,7 @@ def fmt_datetime(dt        : datetime.datetime|datetime.date|datetime.time, *,
         
         YYYY-MM-DD HH:MM:SS,MICROSECONDS
         
-    Optinally a time zone is added via::
+    Optionally a time zone is added via::
         
         YYYY-MM-DD HH:MM:SS+HH
         YYYY-MM-DD HH:MM:SS+HH:MM
@@ -524,7 +553,7 @@ def fmt_datetime(dt        : datetime.datetime|datetime.date|datetime.time, *,
         Input.
 
     sep : str, optional
-        Seperator for hours, minutes, seconds. The default ``':'`` is most appropriate for viusalization
+        Separator for hours, minutes, seconds. The default ``':'`` is most appropriate for visualization
         but is not suitable for filenames.
 
     ignore_ms : bool, optional
@@ -598,12 +627,12 @@ def fmt_time(dt        : datetime.time, *,
     **Time Zones**
     
     Note that while :class:`datetime.time` objects may carry a ``tzinfo`` time zone object,
-    the corresponding :func:`datetime.time.otcoffset` function returns ``None`` if we donot
+    the corresponding :func:`datetime.time.utcoffset` function returns ``None`` if we do not
     provide a ``dt`` parameter, see
     `tzinfo documentation <https://docs.python.org/3/library/datetime.html#tzinfo-objects>`__.
-    That means :func:`datetime.time.otcoffset` is only useful if we have :class:`datetime.datetime`
+    That means :func:`datetime.time.utcoffset` is only useful if we have :class:`datetime.datetime`
     object at hand. 
-    That makes sense as a time zone can chnage date as well.
+    That makes sense as a time zone can change date as well.
     
     We therefore here do not allow ``dt`` to contain
     a time zone.
@@ -616,7 +645,7 @@ def fmt_time(dt        : datetime.time, *,
         Input.
     sep : str, optional
     
-        Seperator for hours, minutes, seconds. The default ``':'`` is most appropriate for viusalization
+        Separator for hours, minutes, seconds. The default ``':'`` is most appropriate for visualization
         but is not suitable for filenames.
         
     ignore_ms : bool
@@ -870,18 +899,18 @@ class AcvtiveFormat( object ):
 
     Parameters
     ----------
-        fmt : str|Callabale
+        fmt : str | Callabale
             Either a Python :func:`str.format` string containing ``{}`` for formatting, or a callable which returns a string.
             
         label : str, default ``Format string``
             A descriptive string for error messages referring the format string, typically in the format
             ``f{which} '{fmt}' cannot have positional arguments...``
             
-        name : str|None, default ``None``
+        name : str | None, default ``None``
             A name for the formatting string. If not provided, the name will be auto-generated: If ``fmt`` is a string, this string will be used;
            if ``fmt`` is a callable then :func:`cdxcore.util.qualified_name` is used.
             
-        reserved_keywords : dict|None, default ``None``
+        reserved_keywords : dict | None, default ``None``
             Mechanism for defining default keywords which are provided by the environment, not the user.
             For example::
                 
@@ -898,7 +927,7 @@ class AcvtiveFormat( object ):
             Set to ``True` to validate that the passed arguments match excactly the expected arguments.
     """            
     
-    def __init__(self, fmt : str|Callable, label : str = "Format string", name : str|None = None, reserved_keywords : Mapping|None = None, strict : bool = False ):
+    def __init__(self, fmt : str|Callable, label : str = "Format string", name : str|None = None, reserved_keywords : Mapping|None = None, strict : bool = False ) -> None:
         """ __init__ """        
         verify_inp( not fmt is None, "'fmt' cannot be None")
 
@@ -1079,87 +1108,469 @@ def is_jupyter() -> bool:
 # Timer
 # =============================================================================
 
-class TrackTiming(object):
+class TrackTime(object):
     """
-    Simplistic class to track the time it takes to run sequential tasks.
+    Track execution time and sub-topic timings.
 
-    Usage::
+    The timer keeps a running total of elapsed seconds and can record *laps*.
+    Each lap updates the timer's internal reference time (so subsequent laps measure time since
+    the previous :meth:`cdxcore.util.TrackTime.lap_time` call).
 
-        from cdxcore.util import TrackTiming
-        timer = TrackTiming()   # clock starts
+    You can also record lap time under a named sub topic. Sub topics are stored as a dictionary
+    of child ``TrackTime`` instances and can be accessed via ``timer["topic"]``.
 
-        # do job 1
-        timer += "Job 1 done"
+    Deterministic testing is supported by overriding the class attribute :attr:`cdxcore.util.TrackTime.TIMER`
+    with a callable that returns the "current" time in seconds. In normal usage, leave it at its
+    default (:func:`time.time`).
 
-        # do job 2
-        timer += "Job 2 done"
+    Examples
+    --------
+    Basic usage with laps::
 
-        print( timer.summary() )
+        from cdxcore.util import TrackTime
+        import time
+
+        t = TrackTime("work")
+        time.sleep(0.1)
+        t.lap_time()
+        time.sleep(0.1)
+        t.lap_time()
+        print(t.seconds) # -> around 0.2
+
+    Track two alternating sub topics::
+
+        t = TrackTime("work")
+        for _ in range(10):
+            # ... do task 1 ...
+            t.lap_time("t1")
+            # ... do task 2 ...
+            t.lap_time("t2")
+        print(t["t1"].average_lap_seconds)
+        print(t["t2"].average_lap_seconds)
+
+    Time a block using a sub topic as a context manager::
+
+        with t("io"):
+            # ... do IO ...
+            pass
+
+    Notes
+    -----
+    - :attr:`cdxcore.util.TrackTime.seconds` is the total elapsed seconds for this timer up to current time, if the time is running. Call :meth:`cdxcore.util.TrackTime.stop` to stop it.
+    - :attr:`cdxcore.util.TrackTime.count` is the number of recorded laps/updates for this timer.
+
+    Parameters:
+    -----------
+    topic : str | TrackTime | None, default ``None``
+        Name of the timer topic. If ``None`` this function will attempt to determine the name of the calling function and use it as topic name.
+        If a ``TrackTime`` object is passed, a deep copy will be made.
+
+    start: bool | None, default ``True``
+        Whether to start the timer immediately. If ``False``, the timer will remain stopped until :meth:`cdxcore.util.TrackTime.start` is called.
+        Use ``None`` to keep the same start state as the passed ``TrackTime`` object. If ``None`` and no ``TrackTime`` object is passed, the timer will start immediately.
+
+    elapsed_seconds: float | None, default ``None``
+        If not ``None``, this is the initial number of seconds to start with. This can be used to create a timer which starts with some pre-recorded time.    
+        If not ``None``, this sets the internal lap count to 1, otherwise it is set to 0.
     """
 
-    def __init__(self):
-        """ Initialize a new tracked timer """
-        self.reset_all()
+    TIMER: Callable[[], float] = time.time
+    """Callable used to compute current time in seconds.
 
-    def reset_all(self):
-        """ Reset timer, and clear all tracked items """
-        self._tracked = OrderedDict()
-        self._current = time.time()
+    Defaults to :func:`time.time`. For deterministic tests, assign a custom callable to
+    :attr:`cdxcore.util.TrackTime.TIMER` such as :class:`cdxcore.util.DebugTime`.
+    """
 
-    def reset_timer(self):
-        """ Reset the timer to current time """
-        self._current = time.time()
+    def __init__(
+        self,
+        topic: str|TrackTime|None = None,
+        start: bool|None = None,
+        *,
+        elapsed_seconds: float | None = None,
+    ) -> None:
+        if isinstance(topic, TrackTime):
+            # Create a deep copy of the topic
+            self._subs:dict[str, TrackTime] = { s: TrackTime(t,start=None) for s,t in topic._subs.items() }
+            self._topic: str = topic._topic
+            self._ref: float | None = topic._ref
+            self._offset: float = topic._offset + ( elapsed_seconds if not elapsed_seconds is None else 0.)
+            self._count: int = topic._count + ( 1 if not elapsed_seconds is None else 0 )
+            if not start is None:
+               self._ref = self.time() if start else None  # reference time; None if stopped
+            return
 
-    def track(self, text, *args, **kwargs ):
-        """ Track 'text', formatted with 'args' and 'kwargs' """
-        text = _fmt(text,args,kwargs)
-        self += text
+        topic = topic if topic is not None else get_calling_function_name("TrackTime")
+        self._subs: dict[str, TrackTime] = {}  # hierarchy of sub-topics
+        self._topic: str = str(topic)
+        self._ref: float | None = self.time() if (start is None or start) else None  # reference time; None if stopped
+        self._offset: float = 0.0 if elapsed_seconds is None else float(elapsed_seconds)
+        self._count: int = 0 if elapsed_seconds is None else 1
 
-    def __iadd__(self, text : str):
-        """ Track 'text' """
-        text  = str(text)
-        now   = time.time()
-        dt    = now - self._current
-        if text in self._tracked:
-            self._tracked[text] += dt
-        else:
-            self._tracked[text] = dt
-        self._current = now
-        return self
+    def time(self) -> float:
+        """Return current time in seconds.
 
-    def __str__(self):
-        """ Returns summary """
-        return self.summary()
+        This calls :attr:`cdxcore.util.TrackTime.TIMER`, which defaults to :func:`time.time`.
+        """
+        return float(self.TIMER())
+
+    def __str__(self) -> str:
+        """ Print representation of self """
+        return f"{self._topic} {self.fmt_seconds()}"
+    
+    @property
+    def topic(self) -> str:
+        """ Returns the current topic """
+        return self._topic
+    
+    @property
+    def has_sub_topics(self)-> bool:
+        """ Whether this timer has sub topics. """
+        return len(self._subs) > 0
+    
+    @property
+    def is_stopped(self) -> bool:
+        """ Whether the timer is stopped """
+        return self._ref is None
 
     @property
-    def tracked(self) -> list:
-        """ Returns dictionary of tracked texts """
-        return self._tracked
+    def count(self) -> int:
+        """ How many laps were recorded (how many times seconds were added to this timer) """
+        return self._count
+    
+    @property
+    def reference_time(self) -> float|None:
+        """ Returns the reference time since when progress is measured, or ``None`` if the current timer is stopped """
+        return self._ref
 
-    def summary(self, fmat : str = "%(text)s: %(fmt_seconds)s", jn_fmt : str = ", " ) -> str:
-        r"""
-        Generate summary string by applying some formatting
+    def add_time(self, seconds: float) -> None:
+        """ Manual lap count: Add ``seconds`` to this timer's accumulated time and increment :attr:`count`. """
+        self._offset += float(seconds)
+        self._count += 1
+
+    def start(self) -> None:
+        """Start the timer if it is currently stopped."""
+        if self._ref is None:
+            self._ref = self.time() 
+
+    def stop(self, record_lap : bool = True) -> float:
+        """ Stops the timer, records a lap if ``record_lap`` is ``True``, and returns seconds elapsed so far """
+        if not self._ref is None and record_lap:
+            self.add_time( self.time() - self._ref )
+        self._ref = None
+        return self._offset
+
+    def lap_time(self, sub_topic: str | None = None) -> float | None:
+        """
+        Record the elapsed time since the last lap and reset the lap reference time to *now*.
+
+        This computes the seconds elapsed since :attr:`cdxcore.util.TrackTime.reference_time`, adds them to this timer,
+        resets the reference time to "now", and returns the elapsed seconds.
+
+        If ``sub_topic`` is provided, the same elapsed seconds are also recorded into the sub topic timer
+        ``self[sub_topic]``.
+
+        Example::
+
+            from cdxcore.util import TrackTime
+            import time
+            
+            tt = TrackTime("f")
+            for i in range(3):
+                time.sleep(1)
+                tt.lap_time()
+            print(tt.average_lap_seconds) # -> around 1
+
+       This function can also be used to track lap time for sub topics::
+       
+            from cdxcore.util import TrackTime
+            import time
+
+            tt = TrackTime("f")
+            for i in range(5):
+                time.sleep(1)
+                tt.lap_time("t1")
+
+                time.sleep(0.2)
+                tt.lap_time("t2")
+
+            print(tt["t1"].average_lap_seconds) # -> around 1
+            print(tt["t2"].average_lap_seconds) # -> around 0.2
+            print(tt.seconds) # -> around 6
+            print(tt.count) # == 10
+       
+        Parameters
+        ----------
+        sub_topic : str | None, default ``None``
+            Sub topic to store the elapsed seconds under, or ``None`` to only update this timer.
+
+        Returns
+        -------
+        seconds : float | None
+            The elapsed seconds since the last lap, or ``None`` if the timer is stopped and no
+            recording is requested.
+        """
+        if self.is_stopped:
+            if sub_topic is None:
+                return None
+            raise ValueError(f"Cannot record '{sub_topic}': current topic '{self._topic}' is stopped")
+            
+        tm           = self.time() 
+        seconds      = tm -self._ref
+        self._ref    = tm
+        self.add_time( seconds )
+
+        if not sub_topic is None:
+            self.record( sub_topic, seconds )
+
+        return seconds
+
+    def record( self, sub_topic : str, seconds : float ) -> TrackTime:
+        """
+        Manually record ``seconds`` a sub topic, and increase the lap count for the sub topic. Does not increment ``self``.
+        Returns the associated sub timer. If a new timer is created, it will be in stopped mode.
+
+        Use :meth:`cdxcore.util.TrackTime.lap_time` instead to record the seconds elapsed since :attr:`cdxcore.util.TrackTime.reference_time`
+        for a sub topic.
+        """
+        tt = self._subs.get(sub_topic, None)
+        if tt is None:
+            tt = TrackTime( sub_topic, start=False, elapsed_seconds=seconds  )
+            self._subs[sub_topic] = tt
+        else:
+            tt.add_time( seconds )
+        return tt
+    
+    @property
+    def seconds(self) -> float:
+        """Total elapsed seconds since construction, including current time since last lap reference time if the timer is running. """
+        return self._offset if self._ref is None else ( self._offset + self.time()  -self._ref )
+
+    @property
+    def lap_seconds(self) -> float:
+        """
+        Total seconds recorded for all laps, *excluding* the currently running time.
+
+        For example::
+
+            from cdxcore.util import TrackTime
+            import time
+
+            tt = TrackTime()
+            time.sleep(1)
+            tt.lap_time()
+            time.sleep(1)
+            tt.lap_time()
+            time.sleep(1)
+            print( tt.lap_seconds ) # -> around 2 NOT 3
+        """
+        return self._offset
+
+    @property
+    def average_lap_seconds(self) -> float|None:
+        """
+        Average lap seconds added to this timer *excluding* the current running lap if the timer is running.
+
+        That means::
+
+            from cdxcore.util import TrackTime
+            import time
+
+            tt = TrackTime()
+            time.sleep(1)
+            tt.lap_time()
+            time.sleep(2)
+            print( tt.average_lap_seconds ) # -> 1 not 1.5
+        """
+        return None if self.count == 0 else ( float(self.lap_seconds) / float(self.count) )
+    
+    def fmt_seconds(self) -> str:
+        """
+        A human readable string for :attr:`cdxcore.util.TrackTime.seconds`, e.g. "1s" or "3:21"
+        computed using :func:`cdxcore.util.fmt_seconds`.
+        """
+        return fmt_seconds(self.seconds)
+
+    def fmt_lap_seconds(self) -> str:
+        """
+        A human readable string for :attr:`cdxcore.util.TrackTime.lap_seconds`, e.g. "1s" or "3:21"
+        computed using :func:`cdxcore.util.fmt_seconds`.
+        """
+        return fmt_seconds(self.lap_seconds)
+
+    def fmt_average_lap_seconds(self) -> str:
+        """
+        A human readable string for :attr:`cdxcore.util.TrackTime.average_lap_seconds`, e.g. "1s" or "3:21"
+        computed using :func:`cdxcore.util.fmt_seconds`.
+        """
+        return fmt_seconds(self.average_lap_seconds)
+
+    def __call__(self, sub_topic, start : bool = True) -> TrackTime:
+        """
+        Get or create a timed sub topic.
+
+        The returned object is a :class:`cdxcore.util.TrackTime` and can be used as a context manager.
+
+        Example::
+
+            from cdxcore.util import TrackTime
+            tt = TrackTime()
+
+            with tt("io"):
+                # ... do IO ...
+                pass
+                
+            with tt("processing") as pt:
+                # ... do processing ...
+                with pt("subprocessing") as spt:
+                    # ... do sub processing ...
+                    pass    
+                pass
 
         Parameters
         ----------
-        fmat : str, optional
-            Format string using ``%()``. Arguments are ``text``, ``seconds`` (as int) and ``fmt_seconds`` (a string).
-            
-            Default is ``"%(text)s: %(fmt_seconds)s"``.
+        sub_topic : str
+            Name of the sub topic to get or create. If the sub topic does not exist, it is created and returned.
 
-        jn_fmt : str, optional
-            String to be used between two texts. Default ``", " ``.
-            
+        start : bool, default ``True``
+            Whether to start the sub topic timer immediately. If ``False``, the sub topic timer 
+            will remain stopped until :meth:`cdxcore.util.TrackTime.start` is called on it.
+
         Returns
         -------
-        Summary : str
-            The combined summary string
+            sub_timer : :class:`cdxcore.util.TrackTime`
+                The timer for the sub topic. If the sub topic does not exist, it is created and returned. If it already exists, it is returned as is.   
+
+        Raises
+        ------
+            In use: :class:`KeyError`
+                If a sub topic is currently running (i.e. is not :meth:`cdxcore.util.TrackTime.is_stopped`), a :class:`KeyError` is raised.                
         """
-        s = ""
-        for text, seconds in self._tracked.items():
-            tr_txt = fmat % dict( text=text, seconds=seconds, fmt_seconds=fmt_seconds(seconds))
-            s      = tr_txt if s=="" else s+jn_fmt+tr_txt
-        return s
+        
+        tt = self._subs.get(sub_topic, None)
+        if tt is None:
+            tt = TrackTime( sub_topic, start=start )
+            self._subs[sub_topic] = tt
+        else:
+            if not tt.is_stopped:
+                raise KeyError(sub_topic, f"Sub-topic '{sub_topic}' of '{self._topic}' is in use")
+            if start:
+                tt.start()
+        return tt
+
+    def __enter__(self) -> TrackTime:
+        """
+        Start a context manager to track timing for this topic.
+        This function starts the timer.
+        """
+        self.start()
+        return self
+        
+    def __exit__(self, *args, **kwargs) -> bool:
+        self.stop()
+        return False
+
+    # mimic a dictionary
+    # ------------------
+    
+    def values(self) -> Iterator:
+        """ :meth:`dict.values` for the dictionary of sub topics """
+        return self._subs.values()
+    def keys(self) -> Iterator:
+        """ :meth:`dict.keys` for the dictionary of sub topics """
+        return self._subs.keys()
+    def items(self) -> Iterator:
+        """ :meth:`dict.items` for the dictionary of sub topics """
+        return self._subs.items()
+    def __getitem__(self, sub_topic : str) -> TrackTime:
+        return self._subs[sub_topic]
+
+    def get(self, sub_topic: str, default: float | TrackTime | None = None, *, clone_default : bool = True ) -> TrackTime | None:
+        """
+        Return sub topic timer if present; otherwise create it from ``default``.
+
+        Parameters
+        ----------
+        sub_topic : str
+            Sub topic name.
+
+        default : float | TrackTime | None, default ``None``
+            - If a :class:`cdxcore.util.TrackTime` instance, it will be inserted and returned.
+            - If a ``float``, a stopped sub timer with that initial elapsed seconds is created.
+            - If ``None``, this returns ``None``.
+
+        clone_default: bool, default ``True``
+            If ``True`` and ``default`` is a :class:`cdxcore.util.TrackTime`, a clone of it is created for the sub topic.
+            Otherwise, the same instance is used.
+    
+        Returns
+        -------
+            sub_timer : :class:`cdxcore.util.TrackTime` | None
+                The sub topic timer if it exists, or if it was created from ``default``; otherwise ``None``.   
+        """
+        tt = self._subs.get(sub_topic, None)
+        if tt is not None:
+            return tt
+        if isinstance(default, TrackTime):
+            if clone_default:
+                default = TrackTime(default, start=None)
+            self._subs[sub_topic] = default
+            return default
+        if default is None:
+            return None
+        tt = TrackTime(sub_topic, start=False, elapsed_seconds=float(default))
+        self._subs[sub_topic] = tt
+        return tt
+    
+    def add(self, timer : TrackTime | float) -> TrackTime:
+        """
+        Add the seconds of another timer including its sub topics to this timer.
+        This does not change the other timer.
+
+        Returns ``self`` for chaining.
+        """
+        
+        if not isinstance(timer, TrackTime):
+            self.add_time(float(timer))
+            return self
+
+        def recurse( to, frm ):
+            to._offset += frm._offset
+            to._count  += frm._count
+            for sub_topic, sub_frm in frm.items():
+                sub_to = to.get(sub_topic, None)
+                if sub_to is None:
+                    to._subs[sub_topic] = TrackTime(sub_frm, start=None)
+                else:
+                    recurse(sub_to, sub_frm)
+
+        recurse(self,timer)
+        return self
+    
+    def __iadd__(self, timer : TrackTime | float) -> None:
+        """ In-place addition of another timer or seconds to this timer. """
+        return self.add(timer)
+
+    def __add__(self, timer : TrackTime | float) -> TrackTime:
+        """ Addition of another timer or seconds to this timer. """
+        me = TrackTime(self, start=None)
+        me += timer
+        return me
+
+class DebugTime(object):
+    """ Simple object that counts the number of times ``__call__`` was called. Used for writing tests for :class:`cdxcore.util.TrackTime` """
+    def __init__(self, init : float = 0.):
+        self.cnt = init
+    def __call__(self) -> float:
+        return self.cnt
+    def __iadd__(self, add : float):
+        self.cnt += add
+        return self
+    def sleep(self, add : float):
+        """ Increment 'time' by ``add`` seconds. """
+        self.cnt += add
+    def time(self) -> float:
+        """ Return current 'time' """
+        return self.cnt
 
 class Timer(object):
     """
@@ -1173,7 +1584,7 @@ class Timer(object):
             print(f"This took {t}.")
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.time = time.time()
         self.intv = None
         
@@ -1291,7 +1702,7 @@ class CRMan(object):
         message 1... and more
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """
         See :class:`cdxcore.crman.CRMan`               
         :meta private:

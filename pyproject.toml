@@ -11,7 +11,7 @@ description = "Basic Python Tools; upgraded cdxbasics"
 authors = [{ name = "Hans Buehler", email = "github@buehler.london" }]
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ['numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil', 'polars',
+dependencies = ['numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil', 'polars','prettytable',
 	 'jsonpickle', 'numba', 'joblib', 'blosc', 'mkdocstrings[python]>=0.18']
 classifiers = [
     "Programming Language :: Python :: 3",

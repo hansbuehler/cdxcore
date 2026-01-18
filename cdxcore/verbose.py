@@ -368,7 +368,7 @@ class Context(object):
                          fmt_level : str = "%02ld: ",
                          level     : int = None,
                          channel   : Callable = None
-                         ):
+                         ) -> None:
         """
         Create a Context object.
         """
@@ -451,7 +451,7 @@ class Context(object):
         
         Parameters
         ----------
-        message : str|Callable
+        message : str | Callable
         
             Text containing format characters. 
             
@@ -558,7 +558,7 @@ class Context(object):
         level : int
             Level to add to current level.
             
-        message : str|Callable
+        message : str | Callable
         
             Text containing format characters. 
             
@@ -611,7 +611,7 @@ class Context(object):
         level : int
             Level to add to current level.
             
-        message : str|Callable
+        message : str | Callable
         
             Text containing format characters. 
             
@@ -685,7 +685,7 @@ class Context(object):
         add_level : int
             Level to add to the current level. Set to 0 for the same level.
 
-        message : str|Callable, optional.
+        message : str | Callable, optional.
         
             Text containing format characters, or ``None`` to not print a message.
             
@@ -731,14 +731,14 @@ class Context(object):
         return sub
 
     @property
-    def as_verbose(self):
+    def as_verbose(self) -> "Context":
         """ Return a Context at the same current reporting level as ``self`` with full visibility """
         copy = Context(self)
         copy.visibility = None
         return copy
 
     @property
-    def as_quiet(self):
+    def as_quiet(self) -> "Context":
         """ Return a Context at the same current reporting level as ``self`` with zero visibility """
         copy = Context(self)
         copy.visibility = 0
@@ -756,7 +756,7 @@ class Context(object):
         return self.visibility is None or self.visibility >= self.level + add_level
 
     def str_indent(self, add_level : int = 0) -> str:
-        """ Returns the string identation for the current level plus ``add_level`` """
+        """ Returns the string indentation for the current level plus ``add_level`` """
         add_level  = int(add_level)
         verify( add_level >= 0, "'add_level' cannot be negative. Found {add_level}", add_level=add_level, exception=ValueError)
         s1 = ' ' * (self.indent * (self.level + add_level))

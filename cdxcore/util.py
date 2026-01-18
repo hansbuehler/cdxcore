@@ -777,8 +777,8 @@ Windows or Linux to valid characters.
 
 def fmt_filename( filename : str , by : str | Mapping = "default" ) -> str:
     r"""
-    Replaces invalid filename characters such as `\\', ':', or '/' by a differnet character.
-    The returned string is technically a valid file name under both windows and linux.
+    Replaces invalid filename characters such as ``\\``, ``:``, or ``/`` by a different character.
+    The returned string is technically a valid file name under both Windows and Linux.
     
     However, that does not prevent the filename to be a reserved name, for example "." or "..".
     
@@ -824,7 +824,7 @@ def is_filename( filename : str , by : str | Collection = "default" ) -> bool:
     
     Returns
     -------
-    Validity : vool 
+    Validity : bool
         ``True`` if ``filename`` does not contain any invalid characters contained in ``by``.
     """
     
@@ -899,7 +899,7 @@ class AcvtiveFormat( object ):
 
     Parameters
     ----------
-        fmt : str | Callabale
+    fmt : str | Callable
             Either a Python :func:`str.format` string containing ``{}`` for formatting, or a callable which returns a string.
             
         label : str, default ``Format string``
@@ -908,7 +908,7 @@ class AcvtiveFormat( object ):
             
         name : str | None, default ``None``
             A name for the formatting string. If not provided, the name will be auto-generated: If ``fmt`` is a string, this string will be used;
-           if ``fmt`` is a callable then :func:`cdxcore.util.qualified_name` is used.
+            if ``fmt`` is a callable then :func:`cdxcore.util.qualified_name` is used.
             
         reserved_keywords : dict | None, default ``None``
             Mechanism for defining default keywords which are provided by the environment, not the user.
@@ -924,7 +924,7 @@ class AcvtiveFormat( object ):
             have to be understood by the formatting function. This is usally the best solution as the calling entity
             just passes everything and the formatter selects what it needs.
             
-            Set to ``True` to validate that the passed arguments match excactly the expected arguments.
+            Set to ``True`` to validate that the passed arguments match exactly the expected arguments.
     """            
     
     def __init__(self, fmt : str|Callable, label : str = "Format string", name : str|None = None, reserved_keywords : Mapping|None = None, strict : bool = False ) -> None:
@@ -975,17 +975,18 @@ class AcvtiveFormat( object ):
         Execute the format string.
         
         Parameters
-        ---------
-            arguments : Mapping
-                All arguments to be passed to the format string or function.
-                
-                If this object was constructed with ``strict=True`` then the list of arguments
-                must match :attr:`cdxcore.util.AcvtiveFormat.required_arguments`` except for :attr:`cdxcore.util.AcvtiveFormat.reserved_keywords``
-                
+        ----------
+        arguments : Mapping
+            All arguments to be passed to the format string or function.
+
+            If this object was constructed with ``strict=True`` then the list of arguments
+            must match :attr:`cdxcore.util.AcvtiveFormat.required_arguments` except for
+            :attr:`cdxcore.util.AcvtiveFormat.reserved_keywords`.
+
         Returns
         -------
-            text : str
-                Formatted string.
+        text : str
+            Formatted string.
         """
         self = __self__call__ # ugly way of enuring that 'self' can be part of the arguments
         if self._strict:
@@ -1123,8 +1124,8 @@ class TrackTime(object):
     with a callable that returns the "current" time in seconds. In normal usage, leave it at its
     default (:func:`time.time`).
 
-    Examples
-    --------
+    **Examples**
+    
     Basic usage with laps::
 
         from cdxcore.util import TrackTime
@@ -1159,8 +1160,9 @@ class TrackTime(object):
     - :attr:`cdxcore.util.TrackTime.seconds` is the total elapsed seconds for this timer up to current time, if the time is running. Call :meth:`cdxcore.util.TrackTime.stop` to stop it.
     - :attr:`cdxcore.util.TrackTime.count` is the number of recorded laps/updates for this timer.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
+
     topic : str | TrackTime | None, default ``None``
         Name of the timer topic. If ``None`` this function will attempt to determine the name of the calling function and use it as topic name.
         If a ``TrackTime`` object is passed, a deep copy will be made.

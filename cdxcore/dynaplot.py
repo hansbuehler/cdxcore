@@ -213,6 +213,7 @@ The example also shows that we can specify titles for subplots and figures easil
                 y = np.random.random(size=(100,1))
                 l[0].set_ydata( y )
             fig.render()
+
 .. image:: /_static/multi.gif
     
 Grid Spec
@@ -744,29 +745,29 @@ class DynaFig(_DynaDeferred):
         
         Thus this function cannot be called after :meth:`cdxcore.dynaplot.DynaFig.render` was called as then the geometry of the plots
         is set. Use :meth:`cdxcore.dynaplot.DynaFig.add_axes` to draw plots at any time.
-        1
+
         Parameters
         ----------
-            title : str | None, default ``None``
-                Optional title for the plot.
+        title : str | None, default ``None``
+            Optional title for the plot.
 
-            new_row : bool | None, default ``None``
-                Whether to force a new row and place this polt in the first column. Default is ``False``.
+        new_row : bool | None, default ``None``
+            Whether to force a new row and place this plot in the first column. Default is ``False``.
 
-            spec_pos : grid spec | None, default ``None``
-                Grid spec position from :meth:`cdxcore.dynaplot.DynaFig.add_gridspec`, or ``None``.
+        spec_pos : grid spec | None, default ``None``
+            Grid spec position from :meth:`cdxcore.dynaplot.DynaFig.add_gridspec`, or ``None``.
 
-            projection : str | None, default ``None``
-                What ``projection`` to use. The default ``None`` matches the default choice for
-                :meth:`matplotlib.figure.Figure.add_subplot`.
+        projection : str | None, default ``None``
+            What ``projection`` to use. The default ``None`` matches the default choice for
+            :meth:`matplotlib.figure.Figure.add_subplot`.
 
-            kwargs : dict
-                other arguments to be passed to matplotlib's :meth:`matplotlib.figure.Figure.add_subplot`.
+        kwargs : dict
+            Other arguments to be passed to matplotlib's :meth:`matplotlib.figure.Figure.add_subplot`.
                 
         Returns
         -------
-            Axis : :class:`cdxcore.dynaplot.DynaAx`
-                A wrapper around an matplotlib axis.
+        Axis : :class:`cdxcore.dynaplot.DynaAx`
+            A wrapper around an matplotlib axis.
         """
         verify( not self._closed, "Cannot call add_subplot() after close() was called")
         verify( self._fig is None, "Cannot call add_subplot() after render() was called. Use add_axes() instead")
@@ -821,27 +822,27 @@ class DynaFig(_DynaDeferred):
         """
         Generate a number of sub-plots in one function call.
         
-        Use strings to generate subplots with such titles, ``\n`` for a new row, and integers
+        Use strings to generate subplots with such titles, ``\\n`` for a new row, and integers
         to mass-generate a number of plots.
-        
-        This example generates a 2x2 block of plots::
-            
+
+        Example::
+
             from cdxcore.dynaplot import figure
-            
+
             with figure("Test", col_size=4, row_size=4) as fig:
-                axA1, axA2, axB1, axB2 = fig.add_subplot("A1", "A2", "\n", "B1", "B2")
-            
+                axA1, axA2, axB1, axB2 = fig.add_subplots("A1", "A2", "\\n", "B1", "B2")
+
         Parameters
         ----------
         titles : list
-            A list if strings, integers, ``\n`` and/or ``None``'s: a string generates a sub-plot with that title;
-            an int generates as many subplots, and ``\n`` starts a new row. ``None`` skips the entry.
+            A list if strings, integers, ``\\n`` and/or ``None``'s: a string generates a sub-plot with that title;
+            an int generates as many subplots, and ``\\n`` starts a new row. ``None`` skips the entry.
             This is useful when creating conditional lists of sub-plots, e.g.::
                 
                 from cdxcore.dynaplot import figure
                 
                 with figure("Test", col_size=4, row_size=4) as fig:
-                    axA1, axA2, axB1, axB2 = fig.add_subplot("A1", "A2" if show2 else None, "\n", "B1", "B2" if show2 else None)
+                    axA1, axA2, axB1, axB2 = fig.add_subplots("A1", "A2" if show2 else None, "\\n", "B1", "B2" if show2 else None)
                     if show2: assert not axA2 is None and not axB2 is None
                     if not show2: assert axA2 is None and axB2 is None
                             
@@ -1194,14 +1195,12 @@ def figure( title    : str|None = None, *,
     
     If ``fig_size`` is specified then ``row_size`` and ``col_size`` are ignored.
     
-    Once the figure is constructed,
-    
-    1) Use :meth:`cdxcore.dynaplot.DynaFig.add_subplot` to add plots (without the cumbersome need       to know the number of plots in advance);
-    
+    Once the figure is constructed:
+
+    1) Use :meth:`cdxcore.dynaplot.DynaFig.add_subplot` to add plots (without the cumbersome need to know the number of plots in advance).
     2) Call :meth:`cdxcore.dynaplot.DynaFig.render` to place those plots.
-    
-    3) Call :meth:`cdxcore.dynaplot.DynaFig.close` to close the figure and avoid duplicate copies in Jupyter; a convient wrapper is to use
-      ``with`` to ensure ``close()`` gets called. This pattern is used below.
+    3) Call :meth:`cdxcore.dynaplot.DynaFig.close` to close the figure and avoid duplicate copies in Jupyter.
+        A convenient wrapper is to use ``with`` to ensure ``close()`` gets called.
     
     **Examples:**
 

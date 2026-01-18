@@ -68,9 +68,18 @@ autodoc_default_options = {
 autodoc_typehints = 'signature'  # types shown in the doc body, like NumPy
 typehints_document_rtype = False
 
-# numpydoc tweaks (keeps class doc at top, avoids member spam)
-numpydoc_show_class_members = True
-numpydoc_class_members_toctree = True
+# numpydoc tweaks
+#
+# IMPORTANT:
+# numpydoc can inject ``.. autosummary::`` blocks for class members into the rendered
+# docstring. Sphinx's autosummary stub generation does not generate pages for those
+# docstring-injected directives, which results in a flood of warnings like
+# "autosummary: stub file not found 'pkg.Class.method'".
+#
+# We therefore do not ask numpydoc to generate autosummary/toctree pages for members.
+# Class members are still shown inline via autodoc_default_options['members'].
+numpydoc_show_class_members = False
+numpydoc_class_members_toctree = False
 # Optional validation during build:
 # numpydoc_validation_checks = {"all"}  # or a subset like {"GL06","PR01",...}
 

@@ -603,7 +603,7 @@ class Context(object):
         """
         Formats message with the formattting arguments at curent context level plus ``level``.
         
-        This function returns ```` if current level plus ``level`` is not visible.
+        This function returns ``None`` if current level plus ``level`` is not visible.
         In that case no string formatting takes place.
 
         Parameters
@@ -612,30 +612,24 @@ class Context(object):
             Level to add to current level.
             
         message : str | Callable
-        
-            Text containing format characters. 
-            
-            The following alternatives are suppoted:
-            
-            * Python 3 ```{parameter:d}```, in which case ``message.fmt(kwargs)`` for :meth:`str.format` is used
-              to obtain the output message.
-            
-            * Python 2 ```%(parameter)d``` in which case ``message % kwargs`` is used to obtain the output message.
-            
-            * Classic C-stype ```%d, %s, %f``` in which case ``message % args`` is used to obtain the output message.
-            
-            * If ``message`` is a ``Callable`` such as a ``lambda`` function, then ``message( *args, **kwargs )``
-              is called to obtain the output message.
-              
-              Note that a common use case is using an f-string wrapped in a ``lambda`` function. In this case
-              you do not need ``args`` or ``kwargs``::
-                  
-                  x = 1
-                  verbose.write(lambda : f"Delayed f-string formatting {x}")
+                        Text containing format characters.
+
+                        Supported formats:
+
+                        * Python 3 ``{parameter:d}`` (uses ``message.format(*args, **kwargs)``; see :meth:`str.format`).
+                        * Python 2 ``%(parameter)d`` (uses ``message % kwargs``).
+                        * Classic C-style ``%d``, ``%s``, ``%f`` (uses ``message % args``).
+                        * If ``message`` is a callable (e.g. a ``lambda``), then ``message(*args, **kwargs)`` is called.
+
+                        A common use case is an f-string wrapped in a ``lambda`` to delay formatting. In this case you do not
+                        need ``args`` or ``kwargs``::
+
+                                x = 1
+                                verbose.write(lambda: f"Delayed f-string formatting {x}")
 
         head : bool, optional;
             Whether this message needs a header (i.e. the ``01`` and spacing).
-            Typically ``False`` if the previous call to ``write()`` used `end=''`. See examples above.
+            Typically ``False`` if the previous call to ``write()`` used ``end=''``. See examples above.
 
         *args, **kwargs:
             See above 
@@ -643,7 +637,7 @@ class Context(object):
         Returns
         -------
         String : str
-            Formatted string, or ``None` `if the current level plus ``level`` is not visible.
+            Formatted string, or ``None`` if the current level plus ``level`` is not visible.
         """
         if not self.shall_report(level):
             return None

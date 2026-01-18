@@ -813,7 +813,7 @@ class SubDir(object):
         sub = SubDir("!/polars", fmt=SubDir.POLARS_PARQUET)
         sub.write("test", df)
         r = sub.read("test", raise_on_error=True)
-        assert np.all( r==df) )
+        assert np.all(r == df)
 
     Version handling is supported with parquet files.
 
@@ -829,8 +829,8 @@ class SubDir(object):
         * ``'!'`` for system default temp directory. Note that outside any administator imposed policies, sub directories 
           of ``!`` are permanent.
         * ``'?'`` for a temporary temp directory; see :meth:`cdxcore.subdir.SubDir.temp_temp_dir` regarding semantics.
-        Most importantly, every ``SubDir`` will be constructed with a different (truly) temporary sub directory.
-        If used,  ``delete_everything_upon_exit`` is always ``True``.
+                    Most importantly, every ``SubDir`` will be constructed with a different (truly) temporary sub directory.
+                    If used, ``delete_everything_upon_exit`` is always ``True``.
  
         The directory name may also contain a formatting string for defining ``ext`` on the fly:
         for example use ``"!/test;*.bin"`` to specify a directory ``"test"`` in the user's

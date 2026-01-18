@@ -1167,11 +1167,11 @@ class TrackTime(object):
         Name of the timer topic. If ``None`` this function will attempt to determine the name of the calling function and use it as topic name.
         If a ``TrackTime`` object is passed, a deep copy will be made.
 
-    start: bool | None, default ``True``
+    start : bool | None, default ``True``
         Whether to start the timer immediately. If ``False``, the timer will remain stopped until :meth:`cdxcore.util.TrackTime.start` is called.
         Use ``None`` to keep the same start state as the passed ``TrackTime`` object. If ``None`` and no ``TrackTime`` object is passed, the timer will start immediately.
 
-    elapsed_seconds: float | None, default ``None``
+    elapsed_seconds : float | None, default ``None``
         If not ``None``, this is the initial number of seconds to start with. This can be used to create a timer which starts with some pre-recorded time.    
         If not ``None``, this sets the internal lap count to 1, otherwise it is set to 0.
     """
@@ -1263,11 +1263,11 @@ class TrackTime(object):
 
     def lap_time(self, sub_topic: str | None = None) -> float | None:
         """
-        Record the elapsed time since the last lap and reset the lap reference time to *now*.
-
+        Record the elapsed time since the last lap and reset the lap reference time to "now".
+        
         This computes the seconds elapsed since :attr:`cdxcore.util.TrackTime.reference_time`, adds them to this timer,
         resets the reference time to "now", and returns the elapsed seconds.
-
+        
         If ``sub_topic`` is provided, the same elapsed seconds are also recorded into the sub topic timer
         ``self[sub_topic]``.
 

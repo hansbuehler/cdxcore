@@ -3521,7 +3521,7 @@ class SubDir(object):
                   uid = f.cache_info.filename
         """
         def wrap( F : Callable ):
-            wrapper = CacheWrapper(F=F,
+            wrapper = _CacheWrapper(F=F,
                                 subdir = self,
                                 version = version,
                                 dependencies = dependencies,
@@ -3665,7 +3665,7 @@ class CacheInfo(PrettyObject):
         if keep_last_arguments:             
             self.last_arguments = None                #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` for the relevant :class:`cdxcore.subdir.CacheController`.
 
-class CacheWrapper(object):
+class _CacheWrapper(object):
     
     def __init__(self,  F                    : Callable,  
                         subdir               : SubDir|str, *,
@@ -3894,7 +3894,7 @@ class CacheWrapper(object):
             sub_dir : :class:`cdxcore.subdir.SubDir`
                 The  directory where ``filename`` is located.
             arguments : Mapping | None
-                Result of calling :meth:`cxcore.subdir.CacheWrapper.cache_relevant_arguments`
+                Result of calling :meth:`cxcore.subdir._CacheWrapper.cache_relevant_arguments`
                 if that was required, ``None`` otherwise.
                 This is returned for operational efficiency.
         """
@@ -3970,7 +3970,7 @@ class CacheWrapper(object):
             """
             Cached execution of the wrapped function ``F`` with additional functionality.
             
-            Once the function returns :attr:`cdxcore.subdir.CacheWrapper.cache_info`
+            Once the function returns :attr:`cdxcore.subdir._CacheWrapper.cache_info`
             contains pertinent information regarding caching, for example
             if the result returned by this function was cached and if so what file
             was used.

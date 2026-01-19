@@ -408,11 +408,11 @@ class Test2(unittest.TestCase):
         _ = f(B(1))
         self.assertTrue( f.cache_info.last_cached )
         _ = f(B(1), cache_generate_only=True)
-        self.assertEqual(_, None)
+        self.assertEqual(_, False ) # was not generated
         self.assertTrue( f.cache_info.last_cached )
         _ = f(B(3), cache_generate_only=True)
         self.assertFalse( f.cache_info.last_cached )
-        self.assertNotEqual(_, None)
+        self.assertEqual(_, True ) # was not generated
 
         with self.assertRaises(ValueError):
             _ = f(B(2), cache_generate_only=True, override_cache_mode="clear")

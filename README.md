@@ -9,6 +9,7 @@ pip install -U cdxcore
 ```
 
 Documentation can be found here: <https://quantitative-research.de/docs/cdxcore>.
+***cdxcore*** is best used with Python 3.12 and above, but is tested vs Python 3.10 onwards.
 
 ## Highlights
 

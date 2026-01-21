@@ -381,10 +381,15 @@ def warn_if( cond : bool, text : str|Callable, *args, warning = RuntimeWarning, 
     """
     if cond:
         text = _fmt(text=text,args=args,kwargs=kwargs,f=warn_if)
-        warnings.warn( message=text,
-                       category=warning,
-                       stacklevel=stack_level,
-                       skip_file_prefixes=_warn_skips )
+        if __has_at_least_py312__:
+            warnings.warn( message=text,
+                        category=warning,
+                        stacklevel=stack_level,
+                        skip_file_prefixes=_warn_skips )
+        else:
+            warnings.warn( message=text,
+                        category=warning,
+                        stacklevel=stack_level )
         
 
     

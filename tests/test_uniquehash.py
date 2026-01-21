@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from enum import Enum
 
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.

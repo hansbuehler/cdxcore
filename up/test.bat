@@ -1,6 +1,10 @@
 @echo off
 echo *** Prepare ***
-cd C:\Users\hans\OneDrive\Python3\packages\cdxcore
+@if not exist up (
+    echo ERROR: required directory "up" does not exist. Call this from the package root directory 1>&2
+    exit /b 1
+)
+
 if not exist .vcdxcore call python -m venv .vcdxcore
 call .vcdxcore\Scripts\activate
 

@@ -7,6 +7,7 @@ Created on Tue Apr 14 21:24:52 2020
 import unittest as unittest
 
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.

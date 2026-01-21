@@ -10,6 +10,7 @@ import sys as sys
 sys.setrecursionlimit(1000)
 
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.

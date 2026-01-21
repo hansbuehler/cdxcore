@@ -3684,7 +3684,7 @@ class _CacheWrapper(object):
         # check F
         # -------
         verify_inp( not F is None, "'F' cannot be None")
-        verify_inp( not inspect.isclass(F), lambda : f"Cannot wrap classes: {qualified_name(F'"@')}")
+        verify_inp( not inspect.isclass(F), lambda : f"Cannot wrap classes: {qualified_name(F'@')}")
         
         def assess(F):
             qual_name   = qualified_name(F,"@") if name is None else str(name)

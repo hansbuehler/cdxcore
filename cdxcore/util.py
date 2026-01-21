@@ -940,7 +940,7 @@ class AcvtiveFormat( object ):
         else:
             if not inspect.isfunction(fmt) and not inspect.ismethod(fmt):
                 if not callable(fmt):
-                    raise ValueError(f"{label}: '{qualified_name(fmt,"@")}' is not callable")
+                    raise ValueError(f"{label}: '{qualified_name(fmt,'@')}' is not callable")
                 fmt = fmt.__call__
                 assert inspect.isfunction(fmt) or inspect.ismethod(fmt), ("Internal error - function or method expected", fmt, type(fmt))
             r = list( inspect.signature(fmt).parameters )

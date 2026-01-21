@@ -4,14 +4,8 @@ Created on Tue Apr 14 21:24:52 2020
 @author: hansb
 """
 
-import unittest as unittest
-import dataclasses as dataclasses
-import os as os
-import pickle as pickle
-import tempfile as tempfile
-import shutil as shutil
-
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
@@ -26,6 +20,13 @@ def import_local():
     assert cwd[-6] in ['/', '\\'],("Expected current working directory 'tests' to be lead by a '\\' or '/'", cwd[-6:], "from", cwd)
     sys.path.insert( 0, cwd[:-6] )
 import_local()
+
+import unittest as unittest
+import dataclasses as dataclasses
+import os as os
+import pickle as pickle
+import tempfile as tempfile
+import shutil as shutil
 
 from cdxcore.config import Config, Int, Float
 from cdxcore.pretty import PrettyObject as pdct

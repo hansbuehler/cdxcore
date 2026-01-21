@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from enum import Enum
 
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
@@ -32,6 +33,7 @@ Imports
 """
 from cdxcore.uniquehash import UniqueHash, NamedUniqueHash, UniqueLabel, unique_hash32 as unique_hash, unique_hash8, unique_hash16, unique_hash32, unique_hash48, unique_hash64, DEF_FILE_NAME_MAP, DebugTraceCollect, DebugTraceVerbose
 from cdxcore.pretty import PrettyObject
+from cdxcore.npio import from_file, to_file
 
 PrettyOrderedDict = PrettyObject 
 
@@ -387,6 +389,14 @@ class Test(unittest.TestCase):
         del df.attrs["test"]
         hash2 = unique_hash( df )
         self.assertEqual( hash2, hash1) # == (1)
+
+        """
+        np.random.seed( 12312 )
+        a = np.exp( np.random.normal( size=(20,10) ).astype( np.float64 ) )
+        to_file("nparray.bin", a)
+        """
+        b = from_file("tests/nparray.bin")
+        print(b.shape, b.dtype)
 
         np.random.seed( 12312 )
         a = np.exp( np.random.normal( size=(20,10) ).astype( np.float64 ) )

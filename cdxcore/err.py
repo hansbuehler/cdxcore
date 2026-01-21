@@ -65,6 +65,9 @@ Documentation
 import warnings as warnings
 import os as os
 from collections.abc import Callable
+import sys as sys
+
+__has_at_least_py312__ = sys.version_info >= (3, 12)
 
 def _fmt( text : str, args = None, kwargs = None, f : Callable =  None ) -> str:
     """ Utility function. See [cdxcore.err.fmt][]() . 'f' not currently used.':meta private: """
@@ -314,10 +317,15 @@ def warn( text : str|Callable, *args, warning = RuntimeWarning, stack_level : in
     * args, ** kwargs:
         See above
     """
-    warnings.warn( message=text,
-                   category=warning,
-                   stacklevel=stack_level,
-                   skip_file_prefixes=_warn_skips )
+    if __has_at_least_py312__:
+        warnings.warn( message=text,
+                    category=warning,
+                    stacklevel=stack_level,
+                    skip_file_prefixes=_warn_skips )
+    else:
+        warnings.warn( message=text,
+                    category=warning,
+                    stacklevel=stack_level )
 
 def warn_if( cond : bool, text : str|Callable, *args, warning = RuntimeWarning, stack_level : int = 1, **kwargs ):    
     """
@@ -373,10 +381,15 @@ def warn_if( cond : bool, text : str|Callable, *args, warning = RuntimeWarning, 
     """
     if cond:
         text = _fmt(text=text,args=args,kwargs=kwargs,f=warn_if)
-        warnings.warn( message=text,
-                       category=warning,
-                       stacklevel=stack_level,
-                       skip_file_prefixes=_warn_skips )
+        if __has_at_least_py312__:
+            warnings.warn( message=text,
+                        category=warning,
+                        stacklevel=stack_level,
+                        skip_file_prefixes=_warn_skips )
+        else:
+            warnings.warn( message=text,
+                        category=warning,
+                        stacklevel=stack_level )
         
 
     

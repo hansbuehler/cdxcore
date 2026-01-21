@@ -8,6 +8,7 @@ import unittest as unittest
 import numpy as np
 
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.

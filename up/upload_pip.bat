@@ -2,7 +2,10 @@
 echo ** PIP: to avoid having to provide a PyPI API key, modify $HOME/.pypirc **
 REM ** PIP follows https://packaging.python.org/tutorials/packaging-projects/ **
 
-cd C:\Users\hans\OneDrive\Python3\packages\cdxcore
+@if not exist up (
+    echo ERROR: required directory "up" does not exist. Call this from the package root directory 1>&2
+    exit /b 1
+)
 CALL .\up\test.bat
 
 @echo off

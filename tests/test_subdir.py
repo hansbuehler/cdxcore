@@ -7,6 +7,7 @@ Created on Tue Apr 14 21:24:52 2020
 import unittest as unittest
 
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
@@ -29,6 +30,8 @@ from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError,
 from cdxcore.version import version, VersionError
 from cdxcore.uniquehash import unique_hash16
 from cdxcore.verbose import Context
+from cdxcore.pretty import PrettyObject   
+from collections import OrderedDict
 import numpy as np
 import polars as pl
 
@@ -495,7 +498,9 @@ class Test2(unittest.TestCase):
         def f( func_name, x, y ):
             pass
         f("test",1,y=2)
-        self.assertEqual( repr(f.cache_info.arguments), "OrderedDict({'func_name': 'test', 'x': '1', 'y': '2'})" )
+        self.assertTrue( isinstance(f.cache_info, PrettyObject))
+        self.assertTrue( list(f.cache_info.arguments.keys()) == ['func_name', 'x', 'y'] )
+        self.assertTrue( list(f.cache_info.arguments.values()) == ['test', '1', '2'] )
         
         # this should just work
         @sub.cache("0.1", label=lambda func_name, x : f"{func_name} {x}")

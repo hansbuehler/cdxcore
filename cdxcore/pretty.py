@@ -756,6 +756,24 @@ class PrettyObject(MutableMapping):
                 return ItemAccess()
                 
         return Access()
+    
+class PrettyValueObject( PrettyObject ):
+    """
+    A :class:`cdxcore.pretty.PrettyObject` whose default iteration is over its values, not keys as is the case of dictionaries and :class:`cdxcore.pretty.PrettyObject`.
+
+    Therefore those work::
+
+        from cdxcore.pretty import PrettyValueObject
+        r = PrettyValueObject(a=1,b=2,c=3)
+
+        a,b,c = r
+        assert (a,b,c) == (1,2,3)
+
+        for i, v in enumerate(r):
+            assert v == i+1
+    """
+    def __iter__(self):
+        return iter( self.values() )
 
 class PrettyHierarchy( PrettyObject ):
     """

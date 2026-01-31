@@ -31,7 +31,7 @@ def import_local():
     sys.path.insert( 0, cwd[:-6] )
 import_local()
 
-from cdxcore.pretty import PrettyObject, Sequence, PrettyHierarchy
+from cdxcore.pretty import PrettyObject, Sequence, PrettyHierarchy, PrettyValueObject
 
 class A1(PrettyObject):
     def __init__(self, x=3):
@@ -390,121 +390,16 @@ class Test(unittest.TestCase):
         with self.assertRaises(TypeError):
             np.sum( r.centre )
 
-        
-#
-    """
-    def test_PrettyDict(self):
+    def test__PrettyValueObject(self):
 
-        g1 = PrettyDict(a=1)
-        g1.b = 2
-        g1['c'] = 3
-        self.assertEqual(g1.a, 1)
-        self.assertEqual(g1.b, 2)
-        self.assertEqual(g1.c, 3)
+        r = PrettyValueObject(a=1,b=2)
 
-        with self.assertRaises(KeyError):
-            _ = g1.d
+        a,b = r
+        self.assertEqual((a,b), (1,2))
 
-        g1.e = 4
-        g1.f = 5
-        del g1['e']
-        del g1['f']
-        with self.assertRaises(KeyError):
-            _ = g1.e
-        with self.assertRaises(KeyError):
-            _ = g1.f
+        for i, ix in enumerate(r):
+            self.assertEqual(ix, i+1)
 
-        self.assertEqual(g1.get('c',4),3)
-        self.assertEqual(g1.get('d',4),4)
-        self.assertEqual(g1('c'),3)
-        self.assertEqual(g1('c',4),3)
-        self.assertEqual(g1('d',4),4)
-
-        g1 = PrettyDict(g1)
-        self.assertEqual(g1.a, 1)
-        self.assertEqual(g1.b, 2)
-        self.assertEqual(g1.c, 3)
-
-        g1.update({ 'd':4 })
-        self.assertEqual(g1.d, 4)
-        g1.update(PrettyDict(e=5))
-        self.assertEqual(g1.e, 5)
-
-        g1.update({ 'd':4 },d=3)
-        self.assertEqual(g1.d, 3)
-        
-        # functions
-        def F(self,x):
-            self.x = x
-
-        g = PrettyDict()
-        g.F = F
-        g.F(2)
-        self.assertEqual(g.x,2)
-
-        g2 = PrettyDict()
-        g2.F = g.F
-        g2.F(3)
-        self.assertEqual(g2.x,3) # new value only for this object is 3
-        self.assertEqual(g.x,2)  # old value remains 2
-
-        with self.assertRaises(TypeError):
-            def G():
-                return 1
-            g.G = G
-            g.G()
-
-        # __ does not work
-        g = PrettyDict()
-        g.__x = 1
-        g._y = 2
-        self.assertEqual(g.__x,1)    # works as usual
-        self.assertEqual(g['_y'],2)  # protected works as for all python objects
-        with self.assertRaises(KeyError):
-            _ = g['__x']   # does not work: cannot use private members as dictionary elements
-        self.assertEqual( getattr(g, "__z", None), None )
-        with self.assertRaises(AttributeError):
-            getattr(g, "__z",)
-
-        # at_pos
-        g1 = PrettyDict()
-        g1.a=1
-        g1.b=2
-        g1.d=4
-        g1.c=3
-        self.assertEqual(g1.a, 1)
-        self.assertEqual(g1.b, 2)
-        self.assertEqual(g1.c, 3)
-        self.assertEqual(g1.d, 4)
-        self.assertEqual( g1.at_pos[3], 3)
-        self.assertEqual( g1.at_pos[0:2], [1,2])
-        self.assertEqual( g1.at_pos.keys[3], 'c')
-        self.assertEqual( g1.at_pos.keys[0:2], ['a', 'b'])
-        self.assertEqual( g1.at_pos.items[3], ('c',3))
-        self.assertEqual( g1.at_pos.items[0:2], [('a',1), ('b',2)])
-        
-        @dataclasses.dataclass
-        class Data:
-            data : PrettyField = PrettyField.Field()
-        data = Data()
-        with self.assertRaises(KeyError):
-            _ = data.data.x
-        data = Data(PrettyDict(x=1))
-        self.assertEqual(data.data.x,1)
-
-        @dataclasses.dataclass
-        class Data:
-            data : PrettyField = PrettyField.Field(x=2)
-        data = Data()
-        self.assertEqual(data.data.x,2)
-        data = Data( data=PrettyDict({'x':3}))
-        self.assertEqual(data.data.x,3)
-        data = Data( data={'x':3})
-        self.assertEqual(data.data['x'],3)
-        
-        # data I/O
-    """
-            
 if __name__ == '__main__':
     unittest.main()
 

@@ -387,7 +387,7 @@ class Test(unittest.TestCase):
         
         r = PrettyHierarchy()        
         import numpy as np
-        with self.assertRaises(KeyError):
+        with self.assertRaises(TypeError):
             np.sum( r.centre )
 
         

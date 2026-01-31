@@ -1388,14 +1388,15 @@ class TrackTime(object):
     def fmt_seconds(self) -> str:
         """
         A human readable string for :attr:`cdxcore.util.TrackTime.seconds`, e.g. "1s" or "3:21"
-        computed using :func:`cdxcore.util.fmt_seconds`.
+        computed using :func:`cdxcore.util.fmt_seconds`. This includes time until now if the
+        timer was not stopped.
         """
         return fmt_seconds(self.seconds)
 
     def fmt_lap_seconds(self) -> str:
         """
         A human readable string for :attr:`cdxcore.util.TrackTime.lap_seconds`, e.g. "1s" or "3:21"
-        computed using :func:`cdxcore.util.fmt_seconds`.
+        computed using :func:`cdxcore.util.fmt_seconds`. This only counts full laps, not any currently running lap/interval.
         """
         return fmt_seconds(self.lap_seconds)
 

@@ -31,7 +31,7 @@ def import_local():
     sys.path.insert( 0, cwd[:-6] )
 import_local()
 
-from cdxcore.pretty import PrettyObject, Sequence
+from cdxcore.pretty import PrettyObject, Sequence, PrettyHierarchy
 
 class A1(PrettyObject):
     def __init__(self, x=3):
@@ -55,6 +55,8 @@ class Test(unittest.TestCase):
 
         with self.assertRaises(AttributeError):
             _ = g1.d
+        with self.assertRaises(KeyError):
+            _ = g1['d']
 
         g1['e'] = 4
         del g1.e
@@ -66,6 +68,7 @@ class Test(unittest.TestCase):
             _ = g1.f
         with self.assertRaises(AttributeError):
             del g1.f
+
 
         self.assertEqual(g1.get('c',4),3)
         self.assertEqual(g1.get('d',4),4)
@@ -275,7 +278,120 @@ class Test(unittest.TestCase):
         finally:
             shutil.rmtree(tmp_dir)
 
-    
+    def test_vector(self): 
+         
+        r = PrettyObject()
+        
+        # index
+        r['a','b'] = -1
+        self.assertEqual((r.a,r.b), (-1,-1))
+        r['a','b'] = (1,2)
+        self.assertEqual((r.a,r.b), (1,2))
+        r['a','b'] = 1,2
+        self.assertEqual((r.a,r.b), (1,2))
+        a, b = r['a','b']
+        self.assertEqual((a,b), (1,2))
+        with self.assertRaises(KeyError):
+            a, b, c = r['a','b','c']
+
+        # get
+        a, b, c = r.get(['a','b','c'],[1,2,33])
+        self.assertEqual( (a,b,c), (1,2,33))
+        a, b, c = r.get(['a','b','c'],default=[1,2,33])
+        self.assertEqual( (a,b,c), (1,2,33))
+        a, b, c = r.get(['a','b','c'],default=44)
+        self.assertEqual( (a,b,c), (1,2,44))
+        with self.assertRaises(KeyError):
+            a, b, c = r.get(['a','b','c'],[1,2,r.no_default])
+
+        a, b, c = r.get(a=11,b=22,c=33)
+        self.assertEqual( (a,b,c), (1,2,33))
+        
+        with self.assertRaises(KeyError):
+            a, b, c = r.get(a=11,b=22,c=r.no_default)
+            
+        # getdefault
+        a, b, c = r.setdefault(a=11,b=22,c=33)
+        self.assertEqual( (a,b,c), (1,2,33))
+        self.assertEqual( r.c, 33 )
+        del r.c
+
+        a, b, c = r.setdefault(['a','b','c'], default=33 )
+        self.assertEqual( (a,b,c), (1,2,33))
+        self.assertEqual( r.c, 33 )
+        del r.c
+
+        a, b, c = r.setdefault(['a','b','c'], [11,22,33] )
+        self.assertEqual( (a,b,c), (1,2,33))
+        self.assertEqual( r.c, 33 )
+        del r.c
+
+        # pop
+        r = PrettyObject(a=1,b=2)
+        self.assertEqual(set(r), {'a','b'})
+        a, b = r.pop(['a', 'b'])
+        self.assertEqual((a,b),(1,2))
+        self.assertTrue(len(r) == 0)
+        r = PrettyObject(a=1,b=2,x=-1)
+        a, b = r.pop(['a', 'b'])
+        self.assertEqual((a,b),(1,2))
+        self.assertEqual(set(r), {'x'})
+        r = PrettyObject(a=1,b=2,x=-1)
+        with self.assertRaises(KeyError):
+            a, b = r.pop(['a', 'b','c'])
+        self.assertEqual(set(r),{'a','b','x'}) # exception did not leave 'r' in a bad state
+
+        r = PrettyObject(a=1,b=2,x=-1)
+        a, b, c = r.pop(a=11,b=22,c=33)
+        self.assertEqual((a,b,c),(1,2,33))
+        self.assertEqual(set(r),{'x'})
+
+        r = PrettyObject(a=1,b=2,x=-1)
+        with self.assertRaises(KeyError):
+            a, b, c = r.get(a=11,b=22,c=r.no_default)
+        self.assertEqual(set(r),{'a','b','x'}) # exception did not leave 'r' in a bad state
+         
+    def test_phierarchy(self):
+        
+        r = PrettyHierarchy(a=1)
+        self.assertEqual(set(r),{'a'})
+        self.assertEqual(r.a,1)
+        
+        r.b = 2
+        self.assertEqual(set(r),{'a','b'})
+        self.assertEqual(r.b,2)
+        
+        with self.assertRaises(KeyError):
+            _ = r['x']
+        
+        r.x.c = 3
+        self.assertEqual(set(r),{'a','b','x'})
+        self.assertIsInstance(r.x, PrettyHierarchy)
+        self.assertEqual(r.x.c,3)
+        
+        r.y['d'] = 4
+        self.assertEqual(set(r),{'a','b','x','y'})
+        self.assertIsInstance(r.y, PrettyHierarchy)
+        self.assertEqual(r.y.d,4)
+
+        # oddities
+        self.assertIsInstance( r.z, PrettyHierarchy)
+        
+        r = PrettyHierarchy()        
+        r.A = 1
+        def f(x):
+            pass
+        f( r.a )   # -> prints an empty PrettyHierarchy
+        _ = r.b        # generates an empty PrettyHierarchy
+        self.assertEqual(set(r), {'A','a','b'}) # all above created entries.
+        
+        r = PrettyHierarchy()        
+        import numpy as np
+        with self.assertRaises(KeyError):
+            np.sum( r.centre )
+
+        
+#
     """
     def test_PrettyDict(self):
 

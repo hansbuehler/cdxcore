@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 """
-A simple :class:`cdxcore.pretty.PrettyObject` class which mimics directory access to its members.
+The main feature of this module is the simple :class:`cdxcore.pretty.PrettyObject`
+class which mimics directory access to its members.
 
 Overview
 --------
@@ -39,6 +42,34 @@ Features
         
 * Applying ``str`` and ``repr`` to objects of type :class:`cdxcore.pretty.PrettyObject` will return dictionary-type
   results, so for example ``print(pdct)`` of the above will return ``{'z': 1, 'num_samples': 1000, 'num_batches': 100, 'method': 'signature'}``.
+
+Vectorized access
+^^^^^^^^^^^^^^^^^
+
+Several member functions of :class:`cdxcore.pretty.PrettyObject` support member access for example::
+    
+    from cdxbasics.prettydict import PrettyObject
+    r = PrettyObject()
+
+    # assign    
+    r['a','b'] = 1,2
+
+    # read, with defaults
+    a,b,c = r.get(['a','b','c'],[11,22,33]) # -> 1,2,33
+    
+    # dictionary notation
+    a,b,c = r.get(a=11,b=22,c=33) # -> 1,2,33
+
+    # works with pop, too:
+    a,b,c = r.pop(a=11,b=22,c=33) # -> 1,2,33
+
+    r = PrettyObject(a=1,b=2)
+    # reading with defaults
+    a, b, c = r.setdefault(a=11,b=22,c=33) # -> 1,2,33
+    print(r.c) # -> 33
+
+Access by Position
+^^^^^^^^^^^^^^^^^^
     
 The :attr:`cdxcore.pretty.PrettyObject.at_pos` attribute allows accessing elements of the ordered dictionary
 by positon:
@@ -83,6 +114,38 @@ To use non-frozen default values, use the
     d = Data()   # default constructor used.
     d.f()        # -> returns 2
 
+Hierachies
+^^^^^^^^^^
+
+This module also provides :class:`cdxcore.pretty.PrettyHierarchy` derived from :class:`cdxcore.pretty.PrettyObject`
+which allows, in addition, automatic generation of hierarchies e.g.::
+    
+    from cdxbasics.prettydict import PrettyHierarchy
+    r = PrettyHierarchy(a=1,b=2)
+    r.x.c = 3
+    
+This is a short cut for::
+    
+    from cdxbasics.prettydict import PrettyHierarchy
+    r = PrettyHierarchy(a=1,b=2)
+    r.x = PrettyHierarchy()
+    r.x.c = 3
+
+However, runtime semantics can be confusing as :class:`cdxcore.pretty.PrettyHierarchy` creates objects
+on the fly if an attrbute is not known. Hence typos can generate confusing error messages: 
+assume we have some code that creates a :class:`cdxcore.pretty.PrettyHierarchy`::
+    
+    data = PrettyHierarchy()
+    data = ...
+    data.center = compute_centre()
+    
+Somewhere else we then access ``data.centre`` instread of ``data.center``:
+    
+    np.sum( data.centre )
+    
+This raises ``TypeError: 'PrettyHierarchy' object is not callable`` instead of an :class:`AttributeError`.
+   
+    
 Import
 ------
 .. code-block:: python
@@ -97,10 +160,8 @@ import dataclasses as dataclasses
 from dataclasses import Field
 import types as types
 from collections.abc import Mapping, MutableMapping, Sequence
-
-class __No_Default_dummy():
-    pass
-no_default = __No_Default_dummy()
+from typing import Any
+from .err import verify_inp
 
 class PrettyObject(MutableMapping):
     """
@@ -143,6 +204,51 @@ class PrettyObject(MutableMapping):
         print(pdct.at_pos[1])             # -> prints "2"
         print(pdct.at_pos.keys[1])        # -> prints "y"
         print(list(pdct.at_pos.items[2])) # -> prints "[('x', 1), ('y', 2)]"
+
+    **Vectorized access**
+    
+    Several functions support accessing member elements using vectors, for example:
+
+    Setting elements::
+
+        from cdxcore.pretty import PrettyObject
+        r = PrettyObject()
+        r['a','b'] = 1,2
+        print(r.a,r.b)  # -> 1,2
+        r['a','b'] = (1,2)
+        print(r.a,r.b)  # -> 1,2
+        
+    Reading elements::
+
+        r = PrettyObject(a=1,b=2)
+        a, b = r['a','b']
+        print(a,b)      # -> 1,2
+        
+    Reading elements with defaults, classic method:
+
+        r = PrettyObject(a=1,b=2)
+        a, b, c = r.get(['a','b','c'],[1,2,33])
+        print(a,b,c)      # -> 1,2,33
+        
+    Reading elements with defaults, keyword methd
+    
+        r = PrettyObject(a=1,b=2)
+        a, b, c = r.get(a=11,b=22,c=33)
+        print(a,b,c)      # -> 1,2,33
+        
+    Popping elements with defaults, keyword methd
+    
+        r = PrettyObject(a=1,b=2)
+        a, b, c = r.pop(a=11,b=22,c=33)
+        print(a,b,c)      # -> 1,2,33
+        assert len(r)==0
+        
+    Same for :meth:`cdxcore.pretty.PrettyObject.setdefault`:
+
+        r = PrettyObject(a=1,b=2)
+        a, b, c = r.setdefault(a=1,b=2,c=33)
+        print(a,b,c)      # -> 1,2,33
+        print(r.c)        # -> 33
 
     **Assigning Member Functions**
     
@@ -197,7 +303,13 @@ class PrettyObject(MutableMapping):
         ** kwargs:
             Key/value pairs to be added to ``self``.
     """
-    def __init__(self, copy : Mapping = None, **kwargs) -> None:
+    class _No_Default_dummy():
+        pass
+    
+    no_default = _No_Default_dummy()
+    # Formal value to indicate no default is provided.
+        
+    def __init__(self, copy : Mapping|PrettyObject|None = None, **kwargs) -> None:
         """
         :meta private:
         """
@@ -206,29 +318,55 @@ class PrettyObject(MutableMapping):
         for k, v in kwargs.items():
             setattr(self, k, v)
             
-    def __getitem__(self, key):
+    def _get1item(self, key : str) -> Any:
         try:
             return getattr( self, key )
         except AttributeError as e:
-            raise KeyError(key,*e.args)
+            raise KeyError(key,*e.args)        
             
-    def __setitem__(self,key,value):
-        """
-        Route ``self[key] = value`` to the base class ``__setattr__`` method.
-        This way you can assign static functions using ``[]`` which assinging
-        functions using ``.`` will assign member functions.
-        """
+    def __getitem__(self, key : str|Sequence) -> Any:
+        """ Vector version of [] """
+        if not isinstance(key, str) and isinstance(key, Sequence):
+            return tuple( self._get1item(k) for k in key )
+        return self._get1item(key)
+
+    def _set1(self, key: str,value:Any ):        
         try:
             super().__setattr__(key, value)
             return self[key]
         except AttributeError as e:
             raise KeyError(key,*e.args)
+            
+    def __setitem__(self, key : str|Sequence, value : Any|Sequence[Any]):
+        """
+        Route ``self[key] = value`` to the base class ``__setattr__`` method.
+        This way you can assign static functions using ``[]`` which assinging
+        functions using ``.`` will assign member functions.
         
-    def __delitem__(self,key):
-        try:
-            delattr(self, key)
-        except AttributeError as e:
-            raise KeyError(key,*e.args)
+        This function works with vector assignments.
+        """        
+        if not isinstance(key, str) and isinstance(key, Sequence):
+            if not isinstance(value, str) and isinstance(value, Sequence):
+                for k,v in zip(key,value):
+                    self._set1(k,v)
+            else:
+                for k in key:
+                    self._set1(k,value)
+        else:
+            self._set1(key, value)
+        
+    def __delitem__(self,key : str|Sequence):
+        def del1(key):
+            try:
+                delattr(self, key)
+            except AttributeError as e:
+                raise KeyError(key,*e.args)
+        if not isinstance(key, str) and isinstance(key, Sequence):
+            for k in key:
+                del1(k)
+        else:
+            del1(key)
+            
     def __iter__(self):
         return self.__dict__.__iter__()
     def __reversed__(self):
@@ -240,13 +378,13 @@ class PrettyObject(MutableMapping):
     def __len__(self):
         return self.__dict__.__len__()
 
-    # allow assigning functions with ``self``
-    def __setattr__(self, key, value):
+    def __setattr__(self, key : str, value : Any):
         """
-        ``__setattr__`` converts function assignments to member functions
+        ``__setattr__`` does what is expected, and in addition converts function assignments to member functions
         """
         if key[:2] == "__":
             super().__setattr__(key, value)
+            return
         if isinstance(value,types.FunctionType):
             # bind function to this object
             value = types.MethodType(value,self)
@@ -263,29 +401,164 @@ class PrettyObject(MutableMapping):
         """ Delete all elements. """
         self.__dict__.clear()
 
-    def get(self, key, default = no_default ):
-        """ Equivalent to :meth:`dict.get`. """
+    def _get1(self, key:str, default : Any = no_default) -> Any:
         try:
-            return getattr(self, key) if default == no_default else getattr(self, key, default)
+            return getattr(self, key) if default == PrettyObject.no_default else getattr(self, key, default)
         except AttributeError as e:
             raise KeyError(key,*e.args)
+
+    def get(self, __key__ : str|Sequence|Any|None = None, default : Any = no_default, **keys ) -> Any|tuple[any]:
+        """
+        Get element ``key`` with optional default ``default``. Equivalent to :meth:`dict.get`. 
+        Alternatively, this function takes a list of keys and their default values in dictionary notation
+        in which case the read values are returned in order. You cannot mix using ``key`` and ``keys``.
         
-    def pop(self, key, default = no_default ):
-        """ Equivalent to :meth:`dict.pop`. """
-        try:
-            v = getattr(self, key) if default == no_default else getattr(self, key, default)
-            delattr(self,key)
-            return v
-        except AttributeError as e:
-            raise KeyError(key,*e.args)
-    def setdefault( self, key, default=None ):
-        """ Equivalent to :meth:`dict.setdefault`. """
-        #return self.__dict__.setdefault(key,default)
+        **Standard usage**
+                
+        This function supports ``key`` being a sequence in which case this function returns
+        a tuple of the same length with the respective results. The ``default`` value
+        will be interpreted accordingly.
+        
+        Hence, the following works::
+            
+            from cdxcore.pretty import PrettyObject
+            
+            r = PrettyObject(a=1, b=2)
+            a,b,c = r.get( ['a', 'b','c'],[11,22,33] )
+            print(a,b,c) # -> 1,2,33        
+            
+        **Keyword usage**
+        
+        Provide keys with default values, i.e.::
+
+            from cdxcore.pretty import PrettyObject
+            
+            r = PrettyObject(a=1, b=2)
+            a,b,c = r.get( a=11, b=22, c=33 )
+            print(a,b,c) # -> 1,2,33                
+        """
+            
+        if not __key__ is None:
+            verify_inp( len(keys) == 0, "Cannot specify both a 'key' and free keyword arguments")
+            if not isinstance(__key__, str) and isinstance(__key__, Sequence):
+                if not isinstance(default, str) and isinstance(default, Sequence):
+                    return tuple( self._get1(k,d) for k,d in zip(__key__, default) )
+                return tuple( self._get1(k,default) for k in __key__ )     
+            else:
+                return self._get1(__key__, default)
+        else:
+            verify_inp( default == PrettyObject.no_default, "Cannot specify both a 'key' and free keyword arguments")
+            return tuple( self._get1(k,d) for k,d in keys.items() )
+
+    def pop(self, __key__ : str|Sequence|None = None, default : Any = no_default, **keys ):
+        """
+        Get and remove element ``key`` with optional default ``default``. Equivalent to :meth:`dict.pop`.
+        Alternatively, this function takes a list of keys and their default values in dictionary notation
+        in which case the read values are returned in order. You cannot mix using ``key`` and ``keys``.
+
+        **Standard usage**
+        
+        This function supports ``key`` being a sequence in which case this function returns
+        a tuple of the same length with the respective results. The ``default`` value
+        will be interpreted accordingly.
+        
+        Hence, the following works::
+            
+            from cdxcore.pretty import PrettyObject
+            
+            r = PrettyObject(a=1, b=2)
+            a,b,c = r.pop( ['a', 'b','c'],[11,22,33] )
+            print(a,b,c) # -> 1,2,33
+
+        **Keyword usage**
+
+        Provide keys with default values, i.e.::
+
+            from cdxcore.pretty import PrettyObject
+            
+            r = PrettyObject(a=1, b=2)
+            a,b,c = r.pop( a=11, b=22, c=33 )
+            print(a,b,c) # -> 1,2,33
+        """
+        if not __key__ is None:
+            verify_inp( len(keys) == 0, "Cannot specify both a 'key' and free keyword arguments")
+            if not isinstance(__key__, str) and isinstance(__key__, Sequence):
+                # read first - so an exception does not leave us with a bad object
+                if not isinstance(default, str) and isinstance(default, Sequence):
+                    r = tuple( self._get1(k,d) for k,d in zip(__key__, default) )
+                else:
+                    r = tuple( self._get1(k,default) for k in __key__ )
+                # delete
+                for k in __key__:
+                    if k in self:
+                        delattr(self,k)
+                return r
+            else:
+                r = self._get1(__key__, default)
+                if __key__ in self:
+                    delattr(self,__key__)
+                return r   
+        else:
+            verify_inp( default == PrettyObject.no_default, "Cannot specify both a 'key' and free keyword arguments")
+            r = tuple( self._get1(k,d) for k,d in keys.items() )
+            for k in keys:
+                if k in self:
+                    delattr(self,k)
+            return r
+
+    def _setdefault1(self, key:str, default : Any) -> Any:
         if not hasattr(self, key):
             self.__setattr__(key, default)
         return getattr(self,key)
-    
-    def update(self, other : Mapping = None, **kwargs):
+
+    def setdefault( self, __key__ : str|Sequence|None = None, default : Any = None, **keys ) -> Any:
+        """
+        Returns the value for ``key`` or ``default`` if not found. In the latter case it
+        adds ``default`` as value for ``key`` to the dictionary.
+        Equivalent to :meth:`dict.setdefault`.
+        
+        Alternatively, this function takes a list of keys and their default values in dictionary notation
+        in which case the read values are returned in order. You cannot mix using ``key`` and ``keys``.
+
+        **Standard usage**
+
+        This function supports ``key`` being a sequence in which case this function returns
+        a tuple of the same length with the respective results. The ``default`` value
+        will be interpreted accordingly.
+        
+        Hence, the following works::
+            
+            from cdxcore.pretty import PrettyObject
+            
+            r = PrettyObject(a=1, b=2)
+            a,b,c = r.setdefault( ['a', 'b','c'],[11,22,33] )
+            print(a,b,c) # -> 1,2,33        
+            print(r.c) # -> 33
+        
+        **Keyword usage**
+
+        Provide keys with default values, i.e.::
+
+            from cdxcore.pretty import PrettyObject
+            
+            r = PrettyObject(a=1, b=2)
+            a,b,c = r.setdefault( a=11, b=22, c=33 )
+            print(a,b,c) # -> 1,2,33
+            print(r.c) # -> 33
+        """
+        
+        if not __key__ is None:
+            verify_inp( len(keys) == 0, "Cannot specify both a 'key' and free keyword arguments")
+            if not isinstance(__key__, str) and isinstance(__key__, Sequence):
+                if not isinstance(default, str) and isinstance(default, Sequence):
+                    return tuple( self._setdefault1(k,d) for k,d in zip(__key__, default) )
+                return tuple( self._setdefault1(k,default) for k in __key__ )   
+            else:
+                return self._setdefault1(__key__, default)
+        else:
+            return tuple( self._setdefault1(k,d) for k, d in keys.items() )     
+
+    def update(self, other : Mapping|None = None, **kwargs) -> PrettyObject:
         """
         Equivalent to :meth:`dict.update`. 
         
@@ -294,6 +567,7 @@ class PrettyObject(MutableMapping):
         magically unbound.
         """
         if not other is None:
+            verify_inp( isinstance(other,Mapping), lambda : f"'other' must be a mapping; found type {type(other)}")
             for k, v in other.items():
                 self[k] = v
         for k, v in kwargs.items():
@@ -319,8 +593,10 @@ class PrettyObject(MutableMapping):
         copy.update(other)
         return copy
     def __ror__(self, other):
-        copy = self.copy()
-        copy.update(other)
+        if not isinstance(other, Mapping):
+            return NotImplemented
+        copy = PrettyObject(other)
+        copy.update(self)
         return copy
         
     # dictionary comparison
@@ -354,12 +630,16 @@ class PrettyObject(MutableMapping):
         """
         return other <= self
 
-    def __neq__(self, other):
+    def __ne__(self, other):
         """
         Comparison operator. Unlike dictionary comparison, this comparision operator
         preservers order.
         """
         return not self == other    
+
+    # Backwards compatibility for older code (note: Python uses __ne__ for !=)
+    def __neq__(self, other):
+        return self.__ne__(other)
     
     # print representation
     def __repr__(self):
@@ -476,3 +756,81 @@ class PrettyObject(MutableMapping):
                 return ItemAccess()
                 
         return Access()
+
+class PrettyHierarchy( PrettyObject ):
+    """
+    A :class:`cdxcore.pretty.PrettyObject` which can easily create hierarchies of :class:`cdxcore.pretty.PrettyObject`'s.
+    
+    This works::
+        
+        from cdxcore.pretty import PrettyHierarchy
+        
+        r = PrettyHierarchy()
+        r.a = 1
+        r.x.b = 2
+        
+        assert r.a == 1
+        assert isinstance(r.x,PrettyHierarchy)
+        assert r.x.b == 2
+        
+    Some oddities::
+        
+        from cdxcore.pretty import PrettyHierarchy
+        
+        r = PrettyHierarchy()
+        
+        r.A = 1
+        print( r.a )   # -> prints an empty PrettyHierarchy
+        _ = r.b        # generates an empty PrettyHierarchy
+        assert set(r) == {'A','a','b'} # all above created entries.
+        
+    Runtime semantics can be confusing as :class:`cdxcore.pretty.PrettyHierarchy` creates objects
+    on the fly if an attrbute is not known. Hence typos can generate confusing error messages: 
+    assume we have some code that creates a :class:`cdxcore.pretty.PrettyHierarchy`::
+        
+        data = PrettyHierarchy()
+        data = ...
+        data.center = compute_centre()
+        
+    Somewhere else we then access ``data.centre`` instread of ``data.center``:
+        
+        np.sum( data.centre )
+        
+    This raises ``TypeError: 'PrettyHierarchy' object is not callable`` instead of an :class:`AttributeError`.
+        
+    Note that ``["x"]`` keeps working as expected, i.e. it will fail if 'x' does not exist.
+    """
+    
+    def __getattr__(self, key : str) -> Any:
+        # Avoid auto-creating special/private attributes and common numeric protocol names.
+        # This prevents confusing downstream errors (e.g. numpy calling `.sum()` on an
+        # auto-created PrettyHierarchy) and matches the unit test expectations.
+        if key.startswith("_"):
+            raise AttributeError(key)
+        if key in {
+            # Common numpy/pandas reduction methods
+            "sum", "prod", "mean", "min", "max", "std", "var", "any", "all",
+            "argmin", "argmax",
+            # Common array/introspection attributes
+            "shape", "dtype", "ndim", "size",
+        }:
+            raise KeyError(key)
+        r = PrettyHierarchy()
+        setattr(self, key, r )
+        return r
+    
+    def _get1item(self, key : str) -> Any:
+        # do not call self.__getattr__
+        try:
+            return super().__getattribute__(key)
+        except AttributeError as e:
+            raise KeyError(key,*e.args)        
+            
+    def __getitem__(self, key : str|Sequence) -> Any:
+        """ Vector version of [] """
+        if not isinstance(key, str) and isinstance(key, Sequence):
+            return tuple( self._get1item(k) for k in key )
+        return self._get1item(key)
+
+no_default = PrettyObject.no_default
+# :meta:private

@@ -802,19 +802,8 @@ class PrettyHierarchy( PrettyObject ):
     """
     
     def __getattr__(self, key : str) -> Any:
-        # Avoid auto-creating special/private attributes and common numeric protocol names.
-        # This prevents confusing downstream errors (e.g. numpy calling `.sum()` on an
-        # auto-created PrettyHierarchy) and matches the unit test expectations.
-        if key.startswith("_"):
+        if key.startswith("__"):
             raise AttributeError(key)
-        if key in {
-            # Common numpy/pandas reduction methods
-            "sum", "prod", "mean", "min", "max", "std", "var", "any", "all",
-            "argmin", "argmax",
-            # Common array/introspection attributes
-            "shape", "dtype", "ndim", "size",
-        }:
-            raise KeyError(key)
         r = PrettyHierarchy()
         setattr(self, key, r )
         return r

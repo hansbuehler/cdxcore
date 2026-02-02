@@ -37,8 +37,6 @@ except ModuleNotFoundError:  # pragma: no cover
     cp = None
 
 inv_sqrt_2pi = 1.0 / np.sqrt(2.0 * np.pi)
-eps_sqrtVar  = 0.00001*((0.1/255.)**0.5)
-eps_strike   = 1E-6
 
 def is_number( x ):
     """ Whether 'x' is a nuumber """
@@ -527,6 +525,9 @@ class BS(object):
 
             max_iters : int, default ``100``
                 Maximum iterations. Usually the routine uses very few iterations.
+
+            eps : float, default ``1E-10``
+                Only used to decide whether stirke or sqrtVar are zero.
 
             min_vega : float, default ``1E-12``
                 Minimum vega for taking an updates step.

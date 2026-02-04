@@ -395,7 +395,10 @@ class Test(unittest.TestCase):
         a = np.exp( np.random.normal( size=(20,10) ).astype( np.float64 ) )
         to_file("nparray.bin", a)
         """
-        a = from_file("nparray.bin")
+        try:
+            a = from_file("tests/nparray.bin")
+        except FileNotFoundError:
+            a = from_file("nparray.bin")
         b = a.astype(np.float32, copy=True)
         c = a.astype(np.float16, copy=True)
         self.assertEqual( unique_hash( a ), "1bac6e6c06b9ed1603670cb6895c1aaa")

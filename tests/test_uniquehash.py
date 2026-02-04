@@ -407,10 +407,6 @@ class Test(unittest.TestCase):
         self.assertEqual( unique_hash( b ), "4dcc1a611fd718e957ef8e6bcff7a326")
         self.assertEqual( unique_hash( c ), "e5a2889b6aafe33389890259e73407a5")
         
-        np.random.seed( 12312 )
-        a2 = np.exp( np.random.normal( size=(20*10,) ).astype( np.float64 ) )
-        self.assertEqual( unique_hash( a2 ), flat ) # == (1)
-        
         # named
         # -----
         

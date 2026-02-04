@@ -147,8 +147,8 @@ class BS(object):
             verify( not isinstance(is_call, np.ndarray), "'is_call' must be a single boolean when 'k', 'vol', 'sqrtT' are numbers" )
             if k==0. or vf==0.:
                 pd1   = inv_sqrt_2pi
-                N1    = 1. if k<1. else 0.
-                N2    = N1
+                delta =  1. if k<1. else 0.
+                dk    = -1. if k<1. else 0.
                 C     = max( 1.-k, 0. )
                 # Mask log-strike in intrinsic regime (k==0 or vol*sqrtT==0)
                 logK  = ( 0. if not need_logK or k==0. else math.log(k) ) if logK is None else logK
@@ -156,12 +156,15 @@ class BS(object):
                 gamma = 0.
                 theta = 0.
             else:
-                logK = math.log(k) if logK is None else logK
-                d1   = -logK / vf + 0.5 * vf
-                d2   = d1 - vf
-                N1   = ndtr(d1) if need_N1 else None
-                N2   = ndtr(d2) if need_N2 else None
-                C    = N1 - k * N2 if (what & BS.PRICE) else None
+                logK =  math.log(k) if logK is None else logK
+                d1    = -logK / vf + 0.5 * vf
+                d2    = d1 - vf
+                N1    = ndtr(d1) if need_N1 else None
+                N2    = ndtr(d2) if need_N2 else None
+                C     = N1 - k * N2 if (what & BS.PRICE) else None
+                delta = N1
+                dk    = -N2 if not N2 is None else None
+                del N1, N2
 
                 if need_pd1:
                     pd1   = inv_sqrt_2pi * math.exp(-0.5 * d1**2)
@@ -180,8 +183,8 @@ class BS(object):
             verify( logK is None or logK.shape == k.shape, "'logK' must be of same shape as 'k'" )
             intr = (k==0.) | (vf==0.)
             if np.sum(intr) == k.size:
-                N1    = np.where(k < 1., f1, f0) if need_N1 else None
-                N2    = ( np.where(k < 1., f1, f0) if N1 is None else N1 ) if need_N2 else None
+                delta =   np.where(k < 1., f1, f0) if (what & BS.DELTA) else None
+                dk    = - np.where(k < 1., f1, f0) if (what & BS.DK) else None
                 C     = np.maximum( f1-k, f0 )
                 vega  = np.zeros_like(k) if (what & BS.VEGA) else None
                 gamma = ( vega if not vega is None else np.zeros_like(k)) if (what & BS.GAMMA) else None
@@ -197,11 +200,14 @@ class BS(object):
                     logK = np.log( np.where( k==0., f1, k ) ) if not intr is None else np.log(k)
                 vf_  = np.where( intr, f1, vf ) if not intr is None else vf
 
-                d1   = (-logK / vf_) + 0.5 * vf 
-                d2   = d1 - vf
-                N1   = ( np.where(intr, f1, ndtr(d1)) if not intr is None else ndtr(d1) ) if need_N1 else None
-                N2   = ( np.where(intr, f1, ndtr(d2)) if not intr is None else ndtr(d2) ) if need_N2 else None
-                C    = ( np.where(intr, np.maximum(f0,f1-k), N1 - k * N2 ) if not intr is None else (N1 - k * N2) ) if (what & BS.PRICE) else None 
+                d1    = (-logK / vf_) + 0.5 * vf 
+                d2    = d1 - vf
+                N1    = ( np.where(intr, f1, ndtr(d1)) if not intr is None else ndtr(d1) ) if need_N1 else None
+                N2    = ( np.where(intr, f1, ndtr(d2)) if not intr is None else ndtr(d2) ) if need_N2 else None
+                C     = ( np.where(intr, np.maximum(f0,f1-k), N1 - k * N2 ) if not intr is None else (N1 - k * N2) ) if (what & BS.PRICE) else None
+                delta = N1 
+                dk    = -N2 if not N2 is None else None 
+                del N1, N2
 
                 if need_pd1:
                     pd1   = inv_sqrt_2pi * np.exp(-0.5 * d1**2) 
@@ -216,11 +222,11 @@ class BS(object):
                     theta = None
 
         assert not (what & BS.PRICE) or not C is None
-        assert not (what & BS.DELTA) or not N1 is None
-        assert not (what & BS.DK) or not N2 is None
+        assert not (what & BS.DELTA) or not delta is None
+        assert not (what & BS.DK) or not dk is None
         assert C is None or np.all(np.isfinite(C)), "Infinite C"
-        assert N1 is None or np.all(np.isfinite(N1)), "Infinite N1"
-        assert N2 is None or np.all(np.isfinite(N2)), "Infinite N2"
+        assert delta is None or np.all(np.isfinite(delta)), "Infinite delta"
+        assert dk is None or np.all(np.isfinite(dk)), "Infinite dk"
         assert vega is None or np.all(np.isfinite(vega)), "Infinite vega"
         assert gamma is None or np.all(np.isfinite(gamma)), "Infinite gamma"
         assert theta is None or np.all(np.isfinite(theta)), "Infinite theta"
@@ -230,20 +236,20 @@ class BS(object):
             if np.any( ~is_call ):
                 # C-P=1-K => P=C-1+K
                 C = np.where( is_call, C, C + k - 1. ) if not C is None else None
-                N1 = np.where( is_call, N1, N1 - 1. ) if not N1 is None else None
-                N2 = np.where( is_call, N2, N2 - 1. ) if not N2 is None else None
+                delta = np.where( is_call, delta, delta - 1. ) if not delta is None else None
+                dk = np.where( is_call, dk, dk + 1. ) if not dk is None else None
         elif not bool(is_call):
             C = C + k - 1. if not C is None else None
-            N1 = N1 - 1. if not N1 is None else None
-            N2 = N2 - 1. if not N2 is None else None
+            delta = delta - 1. if not delta is None else None
+            dk = dk + 1. if not dk is None else None
 
         ret = PrettyObject()
         if what == BS.PRICE:
             return C
         if what == BS.DELTA:
-            return N1
+            return delta
         if what == BS.DK:
-            return -N2
+            return dk
         if what == BS.VEGA:
             return vega
         if what == BS.GAMMA:

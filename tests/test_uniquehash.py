@@ -395,11 +395,7 @@ class Test(unittest.TestCase):
         a = np.exp( np.random.normal( size=(20,10) ).astype( np.float64 ) )
         to_file("nparray.bin", a)
         """
-        b = from_file("tests/nparray.bin")
-        print(b.shape, b.dtype)
-
-        np.random.seed( 12312 )
-        a = np.exp( np.random.normal( size=(20,10) ).astype( np.float64 ) )
+        a = from_file("nparray.bin")
         b = a.astype(np.float32, copy=True)
         c = a.astype(np.float16, copy=True)
         self.assertEqual( unique_hash( a ), "1bac6e6c06b9ed1603670cb6895c1aaa")

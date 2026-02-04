@@ -7,7 +7,6 @@ Created on Tue Apr 14 21:24:52 2020
 import unittest as unittest
 
 def import_local():
-    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
@@ -571,7 +570,27 @@ class Test2(unittest.TestCase):
         self.assertEqual(h1.cache_info.path[-13:], "cache_test/2/")
         self.assertEqual(h1.cache_info.filename, "3 b5bb289e")
         self.assertEqual(h1.cache_info.unique_id, "2/3 b5bb289e")
-        
+
+        # invalid file names
+        with self.assertRaises(ValueError):
+            h1 = root.cache( uid=lambda x,y : f"{x}:/{y}")(h)
+            h1(2,3)
+        # invalid file names
+        with self.assertRaises(ValueError):
+            h1 = root.cache( uid=lambda x,y : f"{x}\\/{y}")(h)
+            h1(2,3)
+
+        h1 = root.cache( label=lambda x,y : f"{x}:/{y}")(h)
+        h1(2,3)
+        self.assertEqual(h1.cache_info.path[-14:], "cache_test/2;/")
+        self.assertEqual(h1.cache_info.filename, "3 b5bb289e")
+        self.assertEqual(h1.cache_info.unique_id, "2;/3 b5bb289e")
+
+        h1 = root.cache( label=lambda x,y : f"{x}\\/{y}")(h)
+        h1(2,3)
+        self.assertEqual(h1.cache_info.path[-14:], "cache_test/2_/")
+        self.assertEqual(h1.cache_info.filename, "3 b5bb289e")
+        self.assertEqual(h1.cache_info.unique_id, "2_/3 b5bb289e")
         
     def test_cache_version(self):
         """ version changes """

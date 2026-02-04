@@ -3369,7 +3369,7 @@ class SubDir(object):
             Use ``uid`` instead if ``label`` represents valid unique filenames. You cannot specify both ``uid`` and ``label``.
             If neither ``uid`` and ``label`` are present, ``name`` will be used.
             
-            A ``label`` can start with a directory, i.e. ``lablel : lambda x, y : f"x/y"`` is a valid pattern.
+            A ``label`` can contain directory information, i.e. ``label = lambda x, y : f"x/y"`` is a valid pattern.
             
             **Usage:**
             
@@ -3396,9 +3396,10 @@ class SubDir(object):
         uid : str | Callable | None, default ``None``
             Alternative to ``label`` which is assumed to generate a unique cache file name. It has the same
             semantics as ``label``. When used, parameters to the decorated function are not hashed
-            as the ``uid`` is assumed to be already unique. The string must be a valid file name
+            as the ``uid`` is assumed to be already unique. The string must be a valid file name. 
 
-            A ``uid`` can start with a directory.
+            A ``uid`` can contain directory information separated by ``/`` i.e.
+           ``uid = lambda x, y : f"x/y"`` is a valid pattern. Each sub-directory must be a valid directory. Do not use ``\\`` even under windows.
             
             Use ``label`` if the id is not unique. You cannot specify both ``uid`` and ``label``.
             If neither ``uid`` and ``label`` are present, ``name`` will be used (as non-unique ``label``).
@@ -3871,10 +3872,7 @@ class _CacheWrapper(object):
     
     def cache_create_id( self, args : Collection, kwargs : Mapping ) -> tuple:
         """
-        Expert usage: Creates a unique_id, filename, a label, the sub_dir, and the list of
-        relevant function arguments for parsing
-        given the function arguments provided when ``F(*args,**kwargs)``
-        is called.
+        Expert usage: Creates a unique_id, filename, a label, the sub_dir, and the list of relevant function arguments for parsing the function arguments when ``F(*args,**kwargs)`` is called.
         
         Parameters
         ----------
@@ -3908,25 +3906,34 @@ class _CacheWrapper(object):
         arguments = None
         
         if not self._uid_or_label.is_simple_str:
-            arguments    = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
-            uid_or_label = self._uid_or_label(**arguments)
+            arguments         = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
+            full_uid_or_label = self._uid_or_label(**arguments)
         else:
-            uid_or_label = self._uid_or_label()
+            full_uid_or_label = self._uid_or_label()
             
-        filename     = uid_or_label
+        if self._unique and "\\" in full_uid_or_label:
+            raise ValueError(f"The unique filename '{full_uid_or_label}' computed for '{self._name}' contains '\\'. Use forward slashes to define a directory structure instead.")
+
         fn_sub_dir   = None
-        rix          = uid_or_label.rfind("/")
+        rix          = full_uid_or_label.rfind("/")
+        uid_or_label = full_uid_or_label
         if rix != -1:
-            if rix==len(uid_or_label)-1:
-                raise ValueError(f"The unique filename '{uid_or_label}' computed for '{self._name}' terminates with '/'. When using directories also make sure the filename is present.")
-            fn_sub_dir   = uid_or_label[:rix+1]
-            uid_or_label = uid_or_label[rix+1:]
+            if rix==len(full_uid_or_label)-1:
+                raise ValueError(f"The unique filename '{full_uid_or_label}' computed for '{self._name}' terminates with '/'. When using directories also make sure the filename is present.")
+            fn_sub_dir   = full_uid_or_label[:rix].split("/")
+            uid_or_label = full_uid_or_label[rix+1:]
         del rix
 
         if self._unique:
             if not is_filename(uid_or_label):
-                raise ValueError(f"The unique filename '{uid_or_label}' computed for '{self._name}' contains invalid characters for a filename. When using `uid` make sure that "+\
+                raise ValueError(f"The unique filename '{full_uid_or_label}' computed for '{self._name}' contains invalid characters for a filename. When using `uid` make sure that "+\
                                  "the returned filename is indeed a valid filename (and unique)")
+            if not fn_sub_dir is None:
+                for psd in fn_sub_dir:
+                    if not is_filename(psd):
+                        raise ValueError(f"The unique filename '{full_uid_or_label}' computed for '{self._name}' contains invalid characters in the directory '{psd}'. When using `uid` make sure that "+\
+                                        "the returned filename and each of the sub directories is indeed a valid filename (and unique)")              
+
             label    = uid_or_label
             filename = uniqueFileName( uid_or_label )
         else:
@@ -3948,10 +3955,17 @@ class _CacheWrapper(object):
             sub_dir      = sub_dir(sub_dir_name)
             del sub_dir_name
             
+        unique_id = None
         if not fn_sub_dir is None:
-            sub_dir = sub_dir(fn_sub_dir)
+            unique_id = ""
+            for psd in fn_sub_dir:
+                if psd=="":
+                    raise ValueError(f"The generated filename '{full_uid_or_label}' computed for '{self._name}' contains invalid empty sub-directory.")
+                psd       = psd if self._unique else fmt_filename(psd)
+                sub_dir   = sub_dir(psd)
+                unique_id += psd + "/"
 
-        unique_id = ( fn_sub_dir + filename ) if not fn_sub_dir is None else filename
+        unique_id = filename if unique_id is None else ( unique_id + filename )
         return unique_id, filename, label, sub_dir, arguments
 
     def wrapper(self) -> Callable:

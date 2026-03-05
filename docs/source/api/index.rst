@@ -20,6 +20,7 @@ API Reference
 
    npio
    npshm
+   bs
 
    dynaplot
 

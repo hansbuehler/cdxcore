@@ -1,9 +1,33 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Sep 25 17:25:04 2025 by HB
-Last Updated on Tues Oct 7 10:26 2025 by RS
-"""
+Basic
+`Black & Scholes <https://en.wikipedia.org/wiki/Black%E2%80%93Scholes_model>`__ pricing routines.
 
+Overview
+--------
+
+This module offers with the ``bs`` instance of :class:`cdxcore.bs.BS` a basic Black & Scholes pricing framework for the drift-less case::
+
+    from cdxbasics.bs import bs
+    call = bs.price(1.,vol=0.2,sqrtT=0.1)
+
+Aside from the respective pricing functions and greeks, ``bs`` object also offers
+with :meth:`cdxcore.bs.BS.implied`
+a "mass" implied volatility
+solver. It can solve implied volatilities for a large number of options in one big Euler/bisection search.
+
+The module contains the :class:`cdxcore.bs.BS`, whose use case is to define the member :attr:`cdxcore.bs.bs`
+which provides the pricing functionality.
+    
+Import
+------
+.. code-block:: python
+
+    from cdxcore.bs import bs
+    
+Documentation
+-------------
+"""
 from .pretty import PrettyValueObject
 from .verbose import Context   # is now a local include
 from .err import verify, verify_inp
@@ -36,45 +60,69 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     cp = None
 
-inv_sqrt_2pi = 1.0 / np.sqrt(2.0 * np.pi)
+_inv_sqrt_2pi = 1.0 / np.sqrt(2.0 * np.pi)
 
-def is_number( x ):
-    """ Whether 'x' is a nuumber """
+def _is_number( x ):
+    """ Whether 'x' is a number """
     return isinstance( x, (float, int, np.number) )
 
 class BSFLAGS(IntFlag):
-    PRICE = auto()  # Price, for a call (N1 - k N2)
-    DELTA = auto()  # Delta (N1 for a call)
-    DK = auto()     # dK (-N2 for a call)
-    GAMMA = auto()  # Gamma
-    VEGA = auto()   # Vega 
-    THETA = auto()  # Theta
-    LOGK = auto()   # logK with 1. where k=0 or vol*sqrtT=0
+    PRICE = auto()  #: Flag to request Price, for a call: N1 - k N2
+    DELTA = auto()  #: Flag to request Delta: N1 for a call
+    DK = auto()     #: Flag to request dK: -N2 for a call
+    GAMMA = auto()  #: Flag to request Gamma
+    VEGA = auto()   #: Flag to request Vega 
+    THETA = auto()  #: Flag to request Theta
+    LOGK = auto()   #: Flag to request logK, set to 1 where k=0 or vol*sqrtT=0
 
 class BS(object):
     """
     Base class for the computation of Black & Scholes analytics
-    in "pure" price domain/
+    in drift-less ("pure") price domain.
+    
+    The class is synthactic sugar; simply use the one instance ``bs`` via::
+        
+        from cdxcore.bs import bs
+        
+    Then you can do::
+    
+        call = bs.price( 1., 0.2, sqrtT=0.5 )
+        vega = bs.vega( 1., 0.2, sqrtT=0.5 )
+        
+    The most useful function is ``bs.implied`` documented under :meth:`cdxcore.bs.BS.implied``.
     """
 
-    PRICE = BSFLAGS.PRICE  # price
-    DELTA = BSFLAGS.DELTA  # delta
-    DK    = BSFLAGS.DK     # dk
-    GAMMA = BSFLAGS.GAMMA  # gamma
-    VEGA  = BSFLAGS.VEGA   # vega
-    THETA = BSFLAGS.THETA  # theta
-    LOGK  = BSFLAGS.LOGK   # logK (for reuse)
+    PRICE = BSFLAGS.PRICE  #: Flag to request Price, for a call: N1 - k N2
+    DELTA = BSFLAGS.DELTA  #: Flag to request Delta: N1 for a call
+    DK    = BSFLAGS.DK     #: Flag to request dK: -N2 for a call
+    GAMMA = BSFLAGS.GAMMA  #: Flag to request Gamma
+    VEGA  = BSFLAGS.VEGA   #: Flag to request Vega 
+    THETA = BSFLAGS.THETA  #: Flag to request Theta
+    LOGK  = BSFLAGS.LOGK   #: Flag to request logK, set to 1 where k=0 or vol*sqrtT=0
 
     def __init__(self):
         pass
 
     def __call__( self, k : np.ndarray|float, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., what : int = PRICE, is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ) -> PrettyValueObject|np.ndarray|float:
         r"""
-        Compute Black Scholes call option prices, delta, and dk in pure price domain.
-        Essentially these are all the quantities which require computation of ``N(d1)`` and ``N(d2)``.
+        Compute Black Scholes call option prices, and greeks in drift-less price domain efficiently.
         
-        The function blends into the intrinsic functions for $$k\downarrow0$ or $\mathrm{vol}\,\sqrt{t} \downarrow0$.
+        This function aims to support almost any broadcast combination for its inputs.
         
+        The function returns values for the intrinsic call/put functions when strikes or sqrt-variances approach zero.
+        
+        Example of using broadcastable shapes::
+            
+            from cdxcore.bs import bs, np
+            sqrtT = np.array( [0.2, 0.4] ).reshape((1,2))
+            nms   = np.linspace( -1,+1,11 ).reshape((11,1))
+            k     = np.exp( nms * sqrtT )
+            v     = np.random.normal( size=(11,1) )**2
+            sqrtT = np.array( [0.2, 0.4] ).reshape((1,2))
+    
+            price, vega = bs( k=k, vol=v, sqrtT=sqrtT, what=bs.PRICE|bs.VEGA )['price','vega']         
+            assert price.shape == (11,2)
+            
         Parameters
         ----------
         k : np.ndarray | float
@@ -86,7 +134,7 @@ class BS(object):
         sqrtT : np.ndarray | float, default ``1``
             Square-root of time.
 
-        what : BS, default ``BS.PRICE``
+        what : combination of :class:`cdxcore.bs.BSFLAGS` flags, default ``BS.PRICE``
             A bitmask indicating what to compute. Can be any combination of:
 
             * ``BS.PRICE`` : Call price
@@ -95,16 +143,17 @@ class BS(object):
             * ``BS.VEGA``  : Vega
             * ``BS.GAMMA`` : Gamma
             * ``BS.THETA`` : Theta
-            * ``BS.LOGK``  : Log-strike, with 0. whereever ``k==0``. This is mainly useful to avoid recomputing ``log(k)`` multiple times.
+            * ``BS.LOGK``  : Log-strike, with 1 whereever ``k==0``. This is mainly useful to avoid recomputing ``log(k)`` multiple times.
 
             Note that if only one item is requested the function returns a ``np.ndarray`` or ``float``.
-            Otherwise it will return a `cdxcore.pretty.PrettyValueObject` with the requested outputs as attributes.
+            Otherwise it will return a :class:`cdxcore.pretty.PrettyValueObject` with the requested outputs as attributes.
             The following then works as expected::
 
                 from cdxcore.bs import bs
                 price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA )['price','vega'] 
 
-            The order of items is ``price, delta, dk, gamma, vega, theta, logK`` *whichever was requested*; hence you can also do::
+            The order of items is always "price", "delta", "dk", "gamma", "vega", "theta", "logK"
+            *whichever was requested*; hence you can also do::
 
                 price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA )
 
@@ -114,8 +163,9 @@ class BS(object):
 
         Returns
         -------
-        result : np.ndarray|float|PrettyValueObject[str, np.ndarray|float]
-            If only one ``what`` was requested, this function returns a ``float`` or ``np.ndarray``, depending on inputs.
+        result : np.ndarray | float | PrettyValueObject[str, np.ndarray|float]
+            If only one ``what`` was requested, this function returns a ``float`` or ``np.ndarray`` for whatever calculation
+            was requested.
             
             If several ``what`` were requested, this function returns a ``PrettyObject`` with the requested outputs as attributes, named and in order:
 
@@ -132,7 +182,7 @@ class BS(object):
                 from cdxcore.bs import bs
                 price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA )['price','vega'] 
                 
-            or in order of ``price, delta, dk, gamma, vega, theta, logK`` (whenever reauested) directly in tuple notation::
+            or in order of "price", "delta", "dk", "gamma", "vega", "theta", "logK" (whenever reauested) directly in tuple notation::
 
                 price, gamma, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA|bs.GAMMA )
                 
@@ -153,11 +203,11 @@ class BS(object):
 
         vf   = vol * sqrtT
         
-        if is_number( k ) and is_number( vf ):
-            verify( logK is None or is_number(logK), "'logK' must be of same shape as 'k'" )
+        if _is_number( k ) and _is_number( vf ):
+            verify( logK is None or _is_number(logK), "'logK' must be of same shape as 'k'" )
             verify( not isinstance(is_call, np.ndarray), "'is_call' must be a single boolean when 'k', 'vol', 'sqrtT' are numbers" )
             if k==0. or vf==0.:
-                pd1   = inv_sqrt_2pi
+                pd1   = _inv_sqrt_2pi
                 delta =  1. if k<1. else 0.
                 dk    = -1. if k<1. else 0.
                 C     = max( 1.-k, 0. )
@@ -178,7 +228,7 @@ class BS(object):
                 del N1, N2
 
                 if need_pd1:
-                    pd1   = inv_sqrt_2pi * math.exp(-0.5 * d1**2)
+                    pd1   = _inv_sqrt_2pi * math.exp(-0.5 * d1**2)
                     vega  = pd1 / sqrtT if (what & BS.VEGA) else None
                     gamma = pd1 / vf if (what & BS.GAMMA) else None
                     theta = 0.5 * vol * pd1 / sqrtT if (what & BS.THETA) else None
@@ -221,7 +271,7 @@ class BS(object):
                 del N1, N2
 
                 if need_pd1:
-                    pd1   = inv_sqrt_2pi * np.exp(-0.5 * d1**2) 
+                    pd1   = _inv_sqrt_2pi * np.exp(-0.5 * d1**2) 
                     pd1   = np.where( intr, f0, pd1 ) if not intr is None else pd1
                     vega  = pd1 / ( np.where(intr,f1,sqrtT) if not intr is None else sqrtT ) if (what & BS.VEGA) else None
                     gamma = pd1 / ( np.where(intr,f1,vf) if not intr is None else vf ) if (what & BS.GAMMA) else None
@@ -289,7 +339,7 @@ class BS(object):
 
     def price( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
         r"""
-        Compute Black Scholes option prices in pure price domain.
+        Compute Black Scholes option prices in drift-less price domain.
         
         Parameters
         ----------
@@ -317,7 +367,7 @@ class BS(object):
 
     def delta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
         r"""
-        Compute Black Scholes option deltas in pure price domain.
+        Compute Black Scholes option deltas in drift-less price domain.
         
         Parameters
         ----------
@@ -345,7 +395,7 @@ class BS(object):
 
     def dk( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
         r"""
-        Compute Black Scholes dk (derivative in k) in pure price domain.
+        Compute Black Scholes dk (derivative in k) in drift-less price domain.
         
         Parameters
         ----------
@@ -373,7 +423,7 @@ class BS(object):
 
     def gamma( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
         r"""
-        Compute Black Scholes option gamma in pure price domain.
+        Compute Black Scholes option gamma in drift-less price domain.
         
         Parameters
         ----------
@@ -401,7 +451,7 @@ class BS(object):
 
     def vega( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
         r"""
-        Compute Black Scholes option vega in pure price domain.
+        Compute Black Scholes option vega in drift-less price domain.
         
         Parameters
         ----------
@@ -429,7 +479,7 @@ class BS(object):
 
     def theta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True,*,  logK : np.ndarray|float|None = None ):
         r"""
-        Compute Black Scholes option theta in pure price domain.
+        Compute Black Scholes option theta in drift-less price domain.
         
         Parameters
         ----------
@@ -476,39 +526,35 @@ class BS(object):
         Solve for implied volatilities using a robust bisection and Newton-Raphson hybrid method.
         This function is designed to be run for a large number of potentially unrelated options, for example for a time series of surfaces of options.
 
-        This routine
+        This routine:
 
         1) Assigns ``max_vol`` to every option whose price is at or above the option price implied by ``vol_max``, and ``vol_min`` to every option whose price is at or below
-        the option price implied by ``vol_min``.
-        2) Initializes the search at ``default_vol`` if it is an array, or otherwise using the closed-form approximation https://repub.eur.nl/pub/1472/ERS%202004%20054%20FA.pdf (20).
-        If ``default_vol`` is a float, then it is only used where the approximation fails to yield a value.
-        3) Run a hybrid bisection and Newton-Raphson method to find the implied volatilities for the remaining options until
+           the option price implied by ``vol_min``.
+        
+        2) Initializes the search at ``default_vol`` if it is an array, or otherwise using the `closed-form approximation (20) <https://repub.eur.nl/pub/1472/ERS%202004%20054%20FA.pdf>`__.
+           If ``default_vol`` is a float, then it is only used where the approximation fails to yield a value.
+        
+        3) Run a hybrid bisection and Newton-Raphson method to find the implied volatilities for the remaining options until the maximum number of itersations, ``max_iters``, is reached
+           or the method has converged in the sense that::
 
-                ``|price(vol) - market_price| < price_tol`` 
+                |price(vol) - market_price| < price_tol
 
-        By default the function just returns the implied volatilities, or their last best guess, but if ``ret_only_vols`` is set to ``False``,
+        By default the function just returns the implied volatilities, or their last best guesses.
+        If ``ret_only_vols`` is set to ``False``,
         then it returns a :class:`cdxcore.pretty.PrettyValueObject` containing the fitted prices, a boolean area indicating issues, and an error statistics object
         in the following fields:
 
-            * ``vols`` contains the fitted volatilities;
-            * ``fits`` contaisn the 
-            * ``prices`` contains the input prices at those values.
-            * ``failed`` contains a boolean array indicating which fits did not converge.
+        * ``vols`` contains the fitted volatilities.
+        * ``fits`` contains the the prices at the fitted volatilities.
+        * ``prices`` contains the input prices at those values.
+        * ``failed`` contains a boolean array indicating which fits did not converge.
 
-            * ``max_iters``: the input ``max_iters``.
-            * ``iters``: iterations used.
-            * ``max_err``: maximum price error.
-            * ``l1_err``: average price error.
-            * ``l2_err``: quadratic average price error.
+        * ``max_iters``: the input ``max_iters``.
+        * ``iters``: iterations used.
+        * ``max_err``: maximum price error.
+        * ``l1_err``: average price error.
+        * ``l2_err``: quadratic average price error.
 
-            vols=vols,
-                fits=fits,
-                prices=prices,
-                failed=failed,
-                num_failed=num_failed,
-                max_err=max_err,
-                l1_err=l1_err,
-                l2_err=l2_err,
         Parameters
         ----------
             k : np.ndarray
@@ -846,12 +892,13 @@ class BS(object):
 bs = BS()
 """
 Main instance of the :class:`cdxcore.bs.BS` class.
+
 This is synthatic sugar for being able to write::
 
     from cdxcore.bs import bs
     price, vega = bs( k, vol, sqrtT, is_call, what=BS.PRICE|BS.VEGA )
 
-or
+or::
 
     gamma = bs.gamma( k, vol, sqrtT, is_call )
 """

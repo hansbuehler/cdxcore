@@ -3519,7 +3519,7 @@ class SubDir(object):
               This pattern is thread-safe when compared to using::
               
                   xy = f( x=1, y=2 )
-                  uid = f.cache_info.filename
+                  uid = f.cache_info.filename                  
         """
         def wrap( F : Callable ):
             wrapper = _CacheWrapper(F=F,

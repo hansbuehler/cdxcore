@@ -117,10 +117,15 @@ class TestBS(unittest.TestCase):
         self.assertEqual( vega_, vega )
         self.assertEqual( theta_, theta )
         
-        
-    
-    
+        sqrtT = np.array( [0.2, 0.4] ).reshape((1,2))
+        nms   = np.linspace( -1,+1,11 ).reshape((11,1))
+        k     = np.exp( nms * sqrtT )
+        v     = np.random.normal( size=(11,1) )**2
+        sqrtT = np.array( [0.2, 0.4] ).reshape((1,2))
 
+        price, vega = bs( k=k, vol=v, sqrtT=sqrtT, what=bs.PRICE|bs.VEGA )['price','vega']         
+        self.assertEqual( price.shape, (11,2))
+        self.assertEqual( vega.shape, (11,2))
 
 if __name__ == "__main__":
     unittest.main()

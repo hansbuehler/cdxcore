@@ -97,7 +97,7 @@ def _create_header( shape : tuple, dtype : type ):
  
     # get type code (byte)
     total    = 4+1+3+len(shape)*8
-    verify( len(shape) < 0x100**4, lambda : f"Cannot handle numpy array with shape {shape}: shape information exceeds {fmt_digits(0x100**4)}.", exception=ValueError )   
+    verify( total < 0x100*4, lambda : f"Cannot handle numpy array with shape {shape}: total header information has length {total} and exceeds {fmt_digits(0x100**4)}.", exception=ValueError )   
     header   = int(total).to_bytes(4,"big",signed=False)  # write long total size
 
     #print("_create_header", shape, dtype, total )
@@ -119,7 +119,7 @@ def _create_header( shape : tuple, dtype : type ):
     assert len(header) == total, ("Internal consistency error", len(header), total )
     return header
 
-def _decode_header( header : bytes ):
+def _decode_header( buffer : bytes|memoryview, align : int = None ):
     """
     Binary header:
         Bytes
@@ -127,11 +127,16 @@ def _decode_header( header : bytes ):
             [4]            : dtype code for _DTYPE_TO_CODE
             [5:8]          : length of the shape tuple
             [8+i*8:16+i*8] : the actual tuple values
+            
+    This function returns dtype, shape, body from the binary 'buffer'
+    input. If the data is not padded, then body starts at the first byte
+    past the header; if the data is padded to 'align' (eg 64 bytes for optimal cache behaviour),
+    then the corresponding rounding will be applied.
     """
     # total size
-    total = int.from_bytes( header[0:4], "big", signed=False )
-    verify( total <= len(header), lambda : f"Internal file header consistency error: header length is given as {fmt_digits(total)} but byte stream only has {fmt_digits(len(header))} bytes.", exception=ValueError )   
-    header = header[4:]
+    total = int.from_bytes( buffer[0:4], "big", signed=False )
+    verify( total <= len(buffer), lambda : f"Internal file header consistency error: header length is given as {fmt_digits(total)} but byte stream only has {fmt_digits(len(buffer))} bytes.", exception=ValueError )   
+    header = buffer[4:]
     
     # dtype
     dtypec = int.from_bytes( header[:1], "big", signed=False )
@@ -150,7 +155,12 @@ def _decode_header( header : bytes ):
     shape     = tuple(shape)
     #print("_decode_header", shape, dtype, total )
 
-    return dtype, shape, header
+    if align is None:
+        body = header
+    else:
+        align = int(max( align,  dtype.alignment ))
+        body  = buffer[ ((total + align - 1)//align  ) * align: ]
+    return dtype, shape, body
 
 # ===============================================
 # Write

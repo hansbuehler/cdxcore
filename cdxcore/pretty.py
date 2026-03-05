@@ -224,19 +224,19 @@ class PrettyObject(MutableMapping):
         a, b = r['a','b']
         print(a,b)      # -> 1,2
         
-    Reading elements with defaults, classic method:
+    Reading elements with defaults, classic method::
 
         r = PrettyObject(a=1,b=2)
         a, b, c = r.get(['a','b','c'],[1,2,33])
         print(a,b,c)      # -> 1,2,33
         
-    Reading elements with defaults, keyword methd
+    Reading elements with defaults, keyword method::
     
         r = PrettyObject(a=1,b=2)
         a, b, c = r.get(a=11,b=22,c=33)
         print(a,b,c)      # -> 1,2,33
         
-    Popping elements with defaults, keyword methd
+    Popping elements with defaults, keyword method::
     
         r = PrettyObject(a=1,b=2)
         a, b, c = r.pop(a=11,b=22,c=33)

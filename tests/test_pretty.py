@@ -92,7 +92,46 @@ class Test(unittest.TestCase):
         x = g.setdefault("x", 1.)
         self.assertEqual(x, 1.)
         self.assertEqual(g.x, 1.)
+
+        # multi element        
+        g1 = PrettyObject()
+        g1['a','b'] = 1,2
+        self.assertEqual(g1.a,1)
+        self.assertEqual(g1.b,2)
+        self.assertEqual(g1['a','b'], (1,2))
         
+        a,b,c = g1.get(['a','b','c'],[11,22,33]) 
+        self.assertEqual( a, 1 )
+        self.assertEqual( b, 2 )
+        self.assertEqual( c, 33 )
+        self.assertTrue( not c in g1 )
+
+        a,b,c = g1.get(a=11,b=22,c=33)
+        self.assertEqual( a, 1 )
+        self.assertEqual( b, 2 )
+        self.assertEqual( c, 33 )
+        self.assertTrue( not c in g1 )
+
+        a,b,d = g1.setdefault(a=11,b=22,d=44)
+        self.assertEqual( a, 1 )
+        self.assertEqual( b, 2 )
+        self.assertEqual( d, 44 )
+        self.assertTrue( not c in g1 )
+        self.assertTrue( g1.d, 44 )
+        
+        a,b,c = g1.pop(a=11,b=22,c=33)
+        self.assertEqual( a, 1 )
+        self.assertEqual( b, 2 )
+        self.assertEqual( c, 33 )
+        self.assertTrue( set(g1) == {'d'})
+        
+        g1 = PrettyObject()
+        g1['a','b'] = 1,2
+        
+        a,b = g1 # this unpacks labels
+        self.assertEqual(a,"a")
+        self.assertEqual(b,"b")
+
         # functions
         def F(self,x):
             self.x = x # set 'x'
@@ -396,9 +435,13 @@ class Test(unittest.TestCase):
 
         a,b = r
         self.assertEqual((a,b), (1,2))
+        
+        self.assertEqual( set(r), {1,2})
 
         for i, ix in enumerate(r):
             self.assertEqual(ix, i+1)
+
+        
 
 if __name__ == '__main__':
     unittest.main()

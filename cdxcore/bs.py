@@ -4,7 +4,7 @@ Created on Thu Sep 25 17:25:04 2025 by HB
 Last Updated on Tues Oct 7 10:26 2025 by RS
 """
 
-from .pretty import PrettyObject, PrettyValueObject
+from .pretty import PrettyValueObject
 from .verbose import Context   # is now a local include
 from .err import verify, verify_inp
 from .util import fmt_digits
@@ -101,7 +101,7 @@ class BS(object):
             Otherwise it will return a `cdxcore.pretty.PrettyValueObject` with the requested outputs as attributes.
             The following then works as expected::
 
-                from aae.tools.bs import bs
+                from cdxcore.bs import bs
                 price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA )['price','vega'] 
 
             The order of items is ``price, delta, dk, gamma, vega, theta, logK`` *whichever was requested*; hence you can also do::
@@ -115,7 +115,9 @@ class BS(object):
         Returns
         -------
         result : np.ndarray|float|PrettyValueObject[str, np.ndarray|float]
-            Returns a ``PrettyObject`` with the requested outputs as attributes, named
+            If only one ``what`` was requested, this function returns a ``float`` or ``np.ndarray``, depending on inputs.
+            
+            If several ``what`` were requested, this function returns a ``PrettyObject`` with the requested outputs as attributes, named and in order:
 
             * ``price``
             * ``delta``
@@ -125,9 +127,17 @@ class BS(object):
             * ``theta``
             * ``logK``
 
-            See comments above on using this in one-line assignments.
+            That means you can access the result as follows::
+                
+                from cdxcore.bs import bs
+                price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA )['price','vega'] 
+                
+            or in order of ``price, delta, dk, gamma, vega, theta, logK`` (whenever reauested) directly in tuple notation::
+
+                price, gamma, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA|bs.GAMMA )
+                
         """
-        assert np.all(np.isfinite(k)), ("Infinite strikes found")
+        assert np.all(np.isfinite(k)), ("Infinite k found")
         assert np.all(np.isfinite(vol)), ("Infinite volatilities found")
         assert np.all(np.isfinite(sqrtT)), ("Infinite sqrtT values found")
         verify_inp( np.min(k) >= 0., "'k' cannot be negative")
@@ -141,7 +151,8 @@ class BS(object):
         need_pd1  = (what & (BS.VEGA|BS.GAMMA|BS.THETA)) != 0
         need_logK = (what & BS.LOGK) != 0
 
-        vf   = vol * sqrtT    
+        vf   = vol * sqrtT
+        
         if is_number( k ) and is_number( vf ):
             verify( logK is None or is_number(logK), "'logK' must be of same shape as 'k'" )
             verify( not isinstance(is_call, np.ndarray), "'is_call' must be a single boolean when 'k', 'vol', 'sqrtT' are numbers" )
@@ -243,7 +254,6 @@ class BS(object):
             delta = delta - 1. if not delta is None else None
             dk = dk + 1. if not dk is None else None
 
-        ret = PrettyObject()
         if what == BS.PRICE:
             return C
         if what == BS.DELTA:
@@ -258,19 +268,18 @@ class BS(object):
             return theta
         if what == BS.LOGK:
             return logK
-        # flags        
-        if what & BS.LOGK:
-            ret.logK = logK
+        # flags in order ``price, delta, dk, gamma, vega, theta, logK``
+        ret = PrettyValueObject()
         if what & BS.PRICE:
             ret.price = C
         if what & BS.DELTA:
-            ret.delta = N1
+            ret.delta = delta
         if what & BS.DK:
-            ret.dk = -N2
-        if what & BS.VEGA:
-            ret.vega = vega
+            ret.dk = dk
         if what & BS.GAMMA:
             ret.gamma = gamma
+        if what & BS.VEGA:
+            ret.vega = vega
         if what & BS.THETA:
             ret.theta = theta
         if what & BS.LOGK:
@@ -448,7 +457,7 @@ class BS(object):
 
     def implied(
         self,
-        strikes: np.ndarray,
+        k: np.ndarray,
         prices: np.ndarray,
         is_call: np.ndarray | bool = True,
         sqrtT: np.ndarray | float = 1.0,
@@ -460,7 +469,7 @@ class BS(object):
         eps: float = 1e-10,
         min_vega: float = 1e-12,
         ret_only_vols: bool = True,
-        warn_only : bool = False,
+        on_exceed_bounds : str|None = "warn",
         verbose: Context = Context.quiet,
     ) -> PrettyValueObject|np.ndarray:
         """
@@ -502,21 +511,21 @@ class BS(object):
                 l2_err=l2_err,
         Parameters
         ----------
-            strikes : np.ndarray
-                Any shape.
+            k : np.ndarray
+                Strikes.
 
             prices : np.ndarray
-                Prices in the same shape as ``strikes``.
+                Prices in the same shape as ``k``.
 
             is_call : np.ndarray | bool, default ``True``
-                Boolean or boolean array of shape compatible with ``strikes``.
+                Boolean or boolean array of shape compatible with ``k``.
 
             sqrtT : np.ndarray | float, default ``1``
-                Square-root of time as float or array compatible with ``strikes``.
+                Square-root of time as float or array compatible with ``k``.
 
             price_tol : np.ndarray | float, default ``1E-6``
                 Price tolerance (typically a fraction of spreads) as
-                float or array or array compatible with ``strikes``.
+                float or array or array compatible with ``k``.
                 A standard value is ``0.1*spread``.
 
             vol_min : float, default ``0.01``
@@ -526,7 +535,7 @@ class BS(object):
                 Maximum volatility.
 
             default_vol : np.ndarray | float, default ``0.``
-                Default and initial volatility guess as float or array compatible with ``strikes``.
+                Default and initial volatility guess as float or array compatible with ``k``.
                 See description above. Also note that ``default_vol`` will be clipped to the range ``[vol_min, vol_max]``.
 
             max_iters : int, default ``100``
@@ -541,8 +550,10 @@ class BS(object):
             ret_only_vols : bool, default ``True``
                 Return only vols.
 
-            warn_only : bool, default ``False``
-                If ``True``, warn of any input data issues but proceed afterwards. Does not affect consistency errors.
+            on_exceed_bounds : ``error`` | ``warn`` | ``quiet`` | None, default ``warn``
+                What to do if the input data violate basic option price bounds such as intrinsic from below or
+                unit/strike from above, respectively. 
+                ``None`` is equivalent to ``quiet``.
 
             verbose : :class:`cdxcore.verbose.Context`, default :attr:`cdxcore.verbose.Context.quiet`
                 For printing progress information.
@@ -552,10 +563,10 @@ class BS(object):
         results : np.ndarray | PrettyValueObject
             See above.
         """
-        if strikes.shape != prices.shape:
-            raise ValueError(f"'strikes' and 'prices' must have the same shape; found {strikes.shape} and {prices.shape}")
-        if np.min(strikes) < -0.0:
-            raise ValueError(f"'strikes' must be positive; found {np.min(strikes):.4g}")
+        if k.shape != prices.shape:
+            raise ValueError(f"'k' and 'prices' must have the same shape; found {k.shape} and {prices.shape}")
+        if np.min(k) < -0.0:
+            raise ValueError(f"'k' must be positive; found {np.min(k):.4g}")
         if np.min(price_tol) < 1e-8:
             raise ValueError( f"'price_tol' must be bigger than 1E-8. Found a minimum of {np.min(price_tol):.6g}" )
         if np.min(default_vol) < 0.0:
@@ -575,11 +586,11 @@ class BS(object):
         def match_shape_or_float( x, dtype ):
             if not isinstance( x, np.ndarray):
                 return dtype.type(x)
-            if x.shape == strikes.shape:
+            if x.shape == k.shape:
                 return x
-            return np.full_like( strikes, np.asarray(x,copy=False), dtype=dtype )
+            return np.full_like( k, np.asarray(x,copy=False), dtype=dtype )
 
-        dtype       = np.result_type(strikes.dtype, np.float64)
+        dtype       = np.result_type(k.dtype, np.float64)
         is_call     = match_shape_or_float( is_call, np.dtype(np.bool_) )
         sqrtT       = match_shape_or_float( sqrtT, dtype )   
         price_tol   = match_shape_or_float( price_tol, dtype )
@@ -588,7 +599,7 @@ class BS(object):
 
         if len(prices.shape) > 1:
             # reshape to flat arrays
-            strikes     = strikes.reshape((-1,))
+            k           = k.reshape((-1,))
             prices      = prices.reshape((-1,))
             is_call     = is_call.reshape((-1,)) if isinstance(is_call, np.ndarray) else is_call
             sqrtT       = sqrtT.reshape((-1,)) if isinstance(sqrtT, np.ndarray) else sqrtT
@@ -599,10 +610,10 @@ class BS(object):
         f1   = dtype.type(1.)
         fits = np.zeros_like(prices)  # output prices
         vols = np.zeros_like(prices)  # output vol
-        intr = np.maximum( f0, np.where( is_call, f1 - strikes, strikes - f1) )
+        intr = np.maximum( f0, np.where( is_call, f1 - k, k - f1) )
         total = len(fits)
 
-        upper = np.where(is_call, f1, strikes)
+        upper = np.where(is_call, f1, k)
         err_min = prices - intr
         err_max = prices - upper
         if np.any(err_min < 0.) or np.any(err_max > 0.):
@@ -617,15 +628,18 @@ class BS(object):
             else:
                 err = err_max
 
-            if not warn_only:
+            if on_exceed_bounds == "error":
                 raise ValueError(err)
-            warnings.warn(err)
+            elif on_exceed_bounds == "warn":
+                warnings.warn(err)
+            else:
+                verify_inp( on_exceed_bounds is None or on_exceed_bounds == "quiet", lambda : f"'on_exceed_bounds' must be 'error', 'warn', or 'quiet'. Found '{on_exceed_bounds}'")
             prices = np.maximum( intr, np.minimum( prices, upper ) )
         del err_min, err_max, upper
 
-        logK = np.log( np.where( strikes==0., f1, strikes ) )
-        price_min = self.price(k=strikes, sqrtT=sqrtT, vol=vol_min, is_call=is_call, logK=logK)
-        price_max = self.price(k=strikes, sqrtT=sqrtT, vol=vol_max, is_call=is_call, logK=logK)
+        logK = np.log( np.where( k==0., f1, k ) )
+        price_min = self.price(k=k, sqrtT=sqrtT, vol=vol_min, is_call=is_call, logK=logK)
+        price_max = self.price(k=k, sqrtT=sqrtT, vol=vol_max, is_call=is_call, logK=logK)
         assert price_min.shape == prices.shape
         assert price_max.shape == prices.shape
 
@@ -639,7 +653,7 @@ class BS(object):
         # --------------
 
         # identify intrinsic
-        done = (strikes <= eps) | (sqrtT <= eps) | (np.abs(intr - prices) <= price_tol)
+        done = (k <= eps) | (sqrtT <= eps) | (np.abs(intr - prices) <= price_tol)
         fits[done] = intr[done]
         vols[done] = IX(default_vol, done)
                                 
@@ -672,7 +686,7 @@ class BS(object):
 
             if not isinstance(default_vol, np.ndarray):
                 S = 1.0
-                X = strikes[work]
+                X = k[work]
                 PR_raw = prices[work]
                 isc_work = IX(is_call,work)
 
@@ -724,7 +738,7 @@ class BS(object):
             while True:
                 # check convergence
                 # -----------------
-                fits[work] = self.price( k=strikes[work], sqrtT=IX(sqrtT, work), vol=vols[work], is_call=IX(is_call, work), logK=IX(logK, work) )
+                fits[work] = self.price( k=k[work], sqrtT=IX(sqrtT, work), vol=vols[work], is_call=IX(is_call, work), logK=IX(logK, work) )
                 done = (np.abs(fits - prices) < price_tol) & work
                 work &= ~done
                 if not np.any(work):
@@ -755,7 +769,7 @@ class BS(object):
                 # =>
                 # x ~ ( prices(x) - prices(x0) ) / prices'(x0) + x0
 
-                test_vega = self.vega( k=strikes[work], sqrtT=IX(sqrtT, work), vol=vols[work], logK=IX(logK, work) )
+                test_vega = self.vega( k=k[work], sqrtT=IX(sqrtT, work), vol=vols[work], logK=IX(logK, work) )
                 newton_step = (prices[work] - fits[work]) / np.maximum( test_vega, min_vega )
                 new_vols = vols[work] + newton_step
 

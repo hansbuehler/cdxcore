@@ -14,7 +14,7 @@ with garbage collection clean up, depending in the operating system.
     from cdxcore.npshm import create_shared_array
     import numpy as np
 
-    test_name = "Test 2121"    
+    test_name = "Test2121"    
     test = create_shared_array( test_name, shape=(10,3), dtype=np.int32, force=True, full=0 )
     test[:,1] = 1
 
@@ -25,7 +25,7 @@ with garbage collection clean up, depending in the operating system.
     from cdxcore.npshm import create_shared_array
     import numpy as np
 
-    test_name = "Test 2121"    
+    test_name = "Test2121"    
     test = attach_shared_array( test_name, validate_shape=(10,3), validate_dtype=np.int32 )
     assert np.all( test[:,1] == 1)
     test[:,2] = 2
@@ -82,6 +82,13 @@ import weakref
 from multiprocessing import shared_memory
 import platform as platform
 
+ALIGN = 64
+"""
+Default memory alignment after an internal descriptive header.
+A 64 byte alignment ensures that optimized AVX2, AVX512 etc, see
+(this discussion)[https://stackoverflow.com/questions/77848460/are-64-byte-cpu-cache-line-reads-aligned-on-64-byte-boundaries?utm_source=chatgpt.com]
+"""
+
 def create_shared_array( name  : str, 
                          shape : tuple, 
                          dtype : type|str, *, 
@@ -98,8 +105,6 @@ def create_shared_array( name  : str,
     a newly created :class:`multiprocessing.shared_memory.SharedMemory` buffer.
     The returned object will call :meth:`multiprocessing.shared_memory.SharedMemory.close` 
     upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
-    
-    
        
     **Linux**
 
@@ -162,7 +167,9 @@ def create_shared_array( name  : str,
         raise type(e)(f"Could not create shared memory '{name}' of type {str(dtype)} with shape {shape}: {str(e)}") from e
     
     # allocate shared memory for geometry and data
-    nbytes = int(np.prod(shape)) * dtype.itemsize + len(header)
+    align        = max(ALIGN, dtype.alignment)
+    len_header64 = (( len(header) + align - 1) // align ) * align
+    nbytes       = int(np.prod(shape, dtype=np.int64)) * dtype.itemsize + len_header64
 
     try:
         shm  = shared_memory.SharedMemory(name=name, create=True, size=nbytes )
@@ -170,15 +177,18 @@ def create_shared_array( name  : str,
         if force:
             shm  = shared_memory.SharedMemory(name=name, create=False )
             shm.close()
-            shm.unlink()
+            if not platform.system().startswith("W"):
+                shm.unlink()
             return create_shared_array( name=name, shape=shape, dtype=dtype, raise_on_error=raise_on_error, full=full, force=False, verbose=verbose )
         if raise_on_error:
             raise e
         return None
             
     # assign
-    shm.buf[:len(header)] = header
-    array                  = np.ndarray(shape, dtype=dtype, buffer=shm.buf[len(header):], order="C")
+    shm.buf[:len(header)]             = header
+    if len(header)<len_header64:
+        shm.buf[len(header):len_header64] = b"\x00" * ( len_header64 - len(header) )
+    array                             = np.ndarray(shape, dtype=dtype, buffer=shm.buf[len_header64:], order="C")
     def _finalize():
         if not verbose is None: verbose.report(1,f"create_shared_array: _finalize '{name}'")
         shm.close()
@@ -272,7 +282,7 @@ def attach_shared_array(name : str, *,
     try:    
         dtype,\
         shape,\
-        buf       = _decode_header(buf)
+        buf       = _decode_header(buf, align=ALIGN)
     except Exception  as e:
         raise type(e)(f"Could not attach to shared memory '{name}' : {str(e)}") from e
 
@@ -322,10 +332,6 @@ def read_shared_array(file : int|str,
 
         validate_dtype : dtype | None, default ``None``
             Validate that array has this dtype, if not ``None``. If the array has a different dtype, raise a :class:`ValueError`.
-
-        raise_on_error : bool, default ``True``
-            If a shared array called ``name`` does not exists, this function raises an :class:`FileNotFoundError` exception 
-            if ``raise_on_error`` is ``True``; otherwise it will return ``None``.
 
         read_only : bool, default ``False``
             Whether to set numpy's `writeable flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setflags.html>`__
@@ -439,12 +445,13 @@ def delete_shared_array( name : str, raise_on_error : bool = True, *, verbose : 
     except FileNotFoundError:
         return True
     except Exception as e:
-        if not raise_on_error:
-            return False
-        raise type(e)("Failed to delete shared array '{name}': {str(e)}") from e
+        if raise_on_error:
+            raise type(e)(f"Failed to delete shared array '{name}': {str(e)}") from e
+        return False
+    return True
 
 def is_shared_array( x ) -> bool:
-    """ Whether an array is "shared" """
+    """ Whether an array is "shared". This function does not currently work and always returns ``True`` """
     return True
     assert isinstance(x,np.ndarray), ("'x' must be a np.ndarray", type(x))
     return not x.base is None and str(type(x.base)) == "<class 'shared_array.map_owner'>"

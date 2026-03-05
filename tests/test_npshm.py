@@ -125,7 +125,7 @@ class Test(unittest.TestCase):
             
             # Test shape validation
             test_name_validate = f"test_validate_{np.random.randint(0x100**2)}"
-            array_validate = create_shared_array(test_name_validate, shape=(15, 10), dtype=np.int32, force=True)
+            _ = create_shared_array(test_name_validate, shape=(15, 10), dtype=np.int32, force=True)
             
             # Should succeed with correct shape
             attached_validate = attach_shared_array(test_name_validate, validate_shape=(15, 10))

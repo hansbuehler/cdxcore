@@ -35,6 +35,14 @@ The module contains a few pre-defined hash functions with different hash lengths
 * :func:`cdxcore.uniquehash.unique_hash48`
 * :func:`cdxcore.uniquehash.unique_hash64`
 
+Often it is desirable to generate readable labels or filenames which are still unique.
+This can be accomplished with
+
+* :func:`cdxcore.uniquehash.NamedUniqueHash` is used to append a unique to a descriptive name which does not
+  need to be unique in itself.
+
+* :func:`cdxcore.uniquehash.UniqueLabel` can be used to cut already unique labels down to a given maximum length.
+  The function will essentially add a hash code to the end of the label, if it exceeds the maximum length.
 
 Related functionality
 ---------------------
@@ -179,14 +187,14 @@ class UniqueHash( object ):
     For this reasom the default behaviour here for dictonaries is to sort them before hasing their content. This also applies
     to objects processed via their ``__dict__``.
 
-    This can be turned off with `sort_dicts`.
+    This can be turned off by setting `sort_dicts` to ``False``.
     OrderedDicts or any classes derived from them (such as :class:`cdxcore.prettydict.pdct`)
     are processed in order and not sorted in any case.
 
     **Functions**
 
     By default function members of objects and dictionaries (which include @properties) are
-    ignored. You can set `parse_functions` to True to parse a reduced text of the function code.
+    ignored. You can set `parse_functions` to ``True`` to parse a reduced text of the function code.
     There are a number of additional expert settings for handling functions, see below.
     
     **Numpy, Pandas**
@@ -213,9 +221,11 @@ class UniqueHash( object ):
             That means that strictly speaking
             the two dictionaries ``{'x':1, 'y':2}`` and ``{'y':2, 'x':1}`` are not indentical;
             however Python will sematicallly still assume they are as ``==`` between the two will return True.
-            Accordingly, by default this hash function assumes the order of dictionaries does _not_ 
-            matter unless the are, or are derived from, :class:`OrderedDict` (as is :class:`cdxcore.prettydict.pdct`).
-            Practically that means the function first sorts the keys of mappings before
+            Accordingly, by default this hash function assumes the order of dictionaries does __not__ 
+            matter unless the are, or are derived from, :class:`OrderedDict`
+            (or have their own implementation such as :class:`cdxcore.prettydict.PrettyObject`).
+            
+            Practically that means this function first sorts the keys of mappings before
             hashing their items. 
             
             This can be turned off by setting `sort_dicts=False`. Default is ``True``.
@@ -231,10 +241,10 @@ class UniqueHash( object ):
             Whether to ignore the specific type of a NaN. The default is ``False``.
         f_include_defaults : bool, optional
             (Advanced parameter).
-            When parsing functions whether to include default values. Default is `True``.
+            When parsing functions whether to include default values. Default is ``True``.
         f_include_closure : bool, optional
             (Advanced parameter).
-            When parsing functions whether to include the function colusure. This can be expensive. Default is `True``.
+            When parsing functions whether to include the function colusure. This can be expensive. Default is ``True``.
         f_include_globals : bool, optional
             (Advanced parameter).
             When parsing functions whether to include globals used by the function. This can be expensicve. Default is ``False``.
@@ -288,7 +298,7 @@ class UniqueHash( object ):
         return f"uniqueHash({self.length};{self.parse_underscore},{self.sort_dicts},{self.parse_functions})"
     
     def clone(self):
-        """ Return copy of `self`. """
+        """ Return a shallow copy of `self`. """
         return UniqueHash( **{ k:v for k,v in self.__dict__.items() if not k[:1] == "_"} )
 
     def __call__(__self__, # LEAVE THIS NAME. **kwargs might contain 'self' arguments.
@@ -942,6 +952,7 @@ def NamedUniqueHash( max_length       : int = 60,
     filename_by : str, optional
         If not ``None``, use :class:`cdxcore.util.fmt_filename` with ``by=filename_by`` to ensure the returned string is a valid
         filename for both windows and linux, of at most `max_length` size.
+        
         If set to the string ``default``, use :data:`cdxcore.util.DEF_FILE_NAME_MAP`
         as the default mapping for :func:`cdxcore.util.fmt_filename`.
         
@@ -981,12 +992,14 @@ def UniqueLabel(     max_length       : int = 60,
                      separator        : str = ' ',
                      filename_by      : str = None ) -> Callable:
     """
-    Returns a function:: 
+    Extend unique lables by a hash ID if they exceed ``max_length``.
+    
+    This function returns a function:: 
         
         f( unique_label )
 
-    which generates strings of at most ``max_length``
-    based on a provided ``unique_label``; essentially::
+    which generates strings of at most ``max_length``, based on a provided ``unique_label``.
+    Esentially this function performs::
     
         If len(unique_label) <= max_length:
             unique_label
@@ -1025,8 +1038,11 @@ def UniqueLabel(     max_length       : int = 60,
     filename_by : str
         If not ``None``, use :func:`cdxcore.util.fmt_filename` with ``by=filename_by``
         to ensure the returned string is a valid
-        filename for both windows and linux, of at most ``max_length`` size.
-        If set to the string ``"default"``, :data:`cdxcore.util.DEF_FILE_NAME_MAP`
+        filename for both windows and linux, of at most ``max_length`` size. Note that if ``filename_by``
+        is not ``None``, then the function will always append a hash to ``unique_label``
+        because it cannot asscertain that the filename conversion creates overlapping labels.
+        
+        If set to the string ``"default"``, use :data:`cdxcore.util.DEF_FILE_NAME_MAP`
         as the default mapping for :func:`cdxcore.util.fmt_filename`.
 
     Returns
@@ -1047,7 +1063,7 @@ def UniqueLabel(     max_length       : int = 60,
 
     def unique_label_hash(label) -> str:
         if filename_by is None and len(label) <= max_length and len(label) > 0:
-            # no filename convertsion and label is short enough --> use this name
+            # no filename conversion and label is short enough --> use this name
             return label
             
         base_hash    = unique_hash( label, separator )
@@ -1074,8 +1090,6 @@ def unique_hash8( *args, **kwargs ) -> str:
     *Important* please make sure you aware of the functional considerations
     discussed in :class:`cdxcore.uniquehash.UniqueHash` around
     elements starting with `_` or function members.
-    
-    :meta private:
     """
     return UniqueHash(8)(*args,**kwargs)
 

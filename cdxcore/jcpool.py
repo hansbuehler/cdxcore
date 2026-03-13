@@ -282,8 +282,8 @@ class JCPool( object ):
                 for tx, ty in pool.parallel(
                             pool.delayed(f)( ticker=ticker, tdata=tdata, verbose=verbose(2) )
                             for ticker, tdata in tickerdata.items() ):
-                    verbose.report(1,f"Returned {tx:.2f}, {ty:.2f}")
-        verbose.write(f"Analysis done; this took {tme}.")
+                    verbose.report(1,lambda : f"Returned {tx:.2f}, {ty:.2f}")
+        verbose.write(lambda : f"Analysis done; this took {tme}.")
     
     The output from this code is asynchronous:
 

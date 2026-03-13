@@ -86,7 +86,7 @@ ALIGN = 64
 """
 Default memory alignment after an internal descriptive header.
 A 64 byte alignment ensures that optimized AVX2, AVX512 etc, see
-(this discussion)[https://stackoverflow.com/questions/77848460/are-64-byte-cpu-cache-line-reads-aligned-on-64-byte-boundaries?utm_source=chatgpt.com]
+`this discussion <https://stackoverflow.com/questions/77848460/are-64-byte-cpu-cache-line-reads-aligned-on-64-byte-boundaries?utm_source=chatgpt.com>`__
 """
 
 def create_shared_array( name  : str, 
@@ -208,7 +208,7 @@ def attach_shared_array(name : str, *,
                         read_only      : bool  = False,
                         verbose        : Context|None = None ) -> np.ndarray:
     """
-    Attach a :class:`numpy.ndarray` to an existing named shared array.
+    Attach to an existing named shared array.
     
     This function is a simplistic wrapper around creating a :class:`numpy.ndarray` with
     an existing :class:`multiprocessing.shared_memory.SharedMemory` buffer.

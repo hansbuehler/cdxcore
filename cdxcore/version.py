@@ -1,7 +1,7 @@
 r"""
 
 Framework to track code versions of functions, classes, and their members via a simple decorating mechanism
-implemented with :dec:`cdxcore.verson.version`.
+implemented with :dec:`cdxcore.version.version`.
 
 Overview
 --------
@@ -17,7 +17,7 @@ Versioned Functions
 
 For versioning, basic use is straight forward and self-explanatory::
 
-    from cdxbasics.version import version
+    from cdxcore.version import version
 
     @version("0.0.1")
     def f(x):
@@ -158,6 +158,9 @@ class VersionError(RuntimeError):
     """
     Standardized error type to be raised by applications if a version found did not match an expected
     version. 
+    
+    An example is :meth:`cdxcore.subdir.SubDir.read` which can be used to check the version of 
+    data written to disk.
     """
     def __init__(self, *args: object, version_found : str, version_expected : str ) -> None:
         self.version_found = version_found        #: The version found.
@@ -168,7 +171,7 @@ class Version(object):
     """
     Class to track version dependencies for a given function or class.
     
-    This class is used by :dec:`cdxcore.subdir.version`. Developers will typically access
+    This class is used by :dec:`cdxcore.version.version`. Developers will typically access
     it via a decorated function's ``version`` property.
 
     **Key Properties**
@@ -318,11 +321,11 @@ class Version(object):
             
         * If the element has no dependents::
             
-            "version"
+            version
             
         * If the function has dependencies, return recursively::
             
-            ( "version", { dependency: dependency.version_full() } )
+            ( version, { dependency: dependency.dependencies } )
             
         **Example**::
             
@@ -349,8 +352,6 @@ class Version(object):
                 return f(x*2,z)+a.h(z)
             
             g(1,2)
-            print("version", g.version.input)                # -> version 0.0.1
-            print("full version", g.version.full )           # -> full version 0.0.1 { f: 0.0.2 { h: 0.3.0 }, A.h: 0.4.1 }
             print("depedencies",g.version.dependencies )     # -> depedencies ('0.0.1', {'f': ('0.0.2', {'h': '0.3.0'}), 'A.h': '0.4.1'})
         """
         self._resolve_dependencies()
@@ -600,8 +601,8 @@ def version( version              : str = "0.0.1" ,
         on the version of the defining/base class. Set to ``False`` to turn off. The default is ``True``.
         
     raise_if_has_version : bool, optional
-        Whether to throw an exception of version are already present.
-        This is usually the desired behaviour except if used in another wrapper, see for example
+        Whether to throw an exception if version information are already present.
+        Throwing an exception is usually the desired behaviour except if used in another wrapper, see for example
         :dec:`cdxcore.subdir.SubDir.cache`. The default is ``True``.
 
     Returns
@@ -616,14 +617,15 @@ def version( version              : str = "0.0.1" ,
     
         * :attr:`cdxcore.version.Version.unique_id48`: a 48 character unique ID. Versions for 60 and 64 characters are also pre-defined.
         
-        * :attr:`cdxcore.version.Version.dependencies`: hierarchy of version dependencies as a list.
+        * :attr:`cdxcore.version.Version.dependencies`: hierarchy of version dependencies as nested
+          dictionaries of tuples.
           The recursive definition is as follows: if the function has no dependencies, return::
              
-            "version"
+            version
             
           If the function has dependencies, return recursively::
               
-            ( "version", { dependency: dependency.version_full() } )
+            ( version, { dependency: dependency.dependencies } )
     """
     def wrap(f):
         dep = dependencies

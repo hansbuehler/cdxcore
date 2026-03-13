@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 The main feature of this module is the simple :class:`cdxcore.pretty.PrettyObject`
 class which mimics directory access to its members.
@@ -139,7 +137,7 @@ assume we have some code that creates a :class:`cdxcore.pretty.PrettyHierarchy`:
     data = ...
     data.center = compute_centre()
     
-Somewhere else we then access ``data.centre`` instread of ``data.center``:
+Somewhere else we then access ``data.centre`` instead of ``data.center`` (a typo) using e.g.::
     
     np.sum( data.centre )
     
@@ -155,6 +153,7 @@ Import
 Documentation
 -------------
 """
+from __future__ import annotations
 
 import dataclasses as dataclasses
 from dataclasses import Field
@@ -243,7 +242,7 @@ class PrettyObject(MutableMapping):
         print(a,b,c)      # -> 1,2,33
         assert len(r)==0
         
-    Same for :meth:`cdxcore.pretty.PrettyObject.setdefault`:
+    Same for :meth:`cdxcore.pretty.PrettyObject.setdefault`::
 
         r = PrettyObject(a=1,b=2)
         a, b, c = r.setdefault(a=1,b=2,c=33)
@@ -289,7 +288,7 @@ class PrettyObject(MutableMapping):
     
     * Super/subset operators ``>=`` and ``<=`` test for a super/sup set relationship, respectively.
     
-    * The ``a | b`` returns the union of two :class:`cdxcore.pretty.PrettyObject`. Elements of the ``b`` overwrite any elements of ``a``, if they
+    * ``a | b`` returns the union of two :class:`cdxcore.pretty.PrettyObject`. Elements of the ``b`` overwrite any elements of ``a``, if they
       are present in both. The order of the new dictionary is determined by the order of appearance of keys in first ``a`` and then ``b``, that 
       means in all but trivial cases ``a|b != b|a``.
       
@@ -298,7 +297,7 @@ class PrettyObject(MutableMapping):
     Parameters
     ----------
         copy : Mapping, optional
-            If present, assign elements of ``copy`` to ``self``.
+            If present, assign elements of ``copy`` to ``self``. This is a shallow copy.
 
         ** kwargs:
             Key/value pairs to be added to ``self``.
@@ -810,7 +809,7 @@ class PrettyHierarchy( PrettyObject ):
         data = ...
         data.center = compute_centre()
         
-    Somewhere else we then access ``data.centre`` instread of ``data.center``:
+    Somewhere else we then access ``data.centre`` innstead of ``data.center``, a typo::
         
         np.sum( data.centre )
         

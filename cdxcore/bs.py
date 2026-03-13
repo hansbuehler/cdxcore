@@ -28,6 +28,9 @@ Import
 Documentation
 -------------
 """
+
+from __future__ import annotations
+
 from .pretty import PrettyValueObject
 from .verbose import Context   # is now a local include
 from .err import verify, verify_inp
@@ -510,11 +513,12 @@ class BS(object):
         k: np.ndarray,
         prices: np.ndarray,
         is_call: np.ndarray | bool = True,
-        sqrtT: np.ndarray | float = 1.0,
+        sqrtT: np.ndarray | float = 1.0, *,
         price_tol: np.ndarray | float = 1e-6,
         vol_min: float = 0.01,
         vol_max: float = 5.0,
         default_vol: np.ndarray | float = 0.,
+        mask : np.ndarray|None = None,
         max_iters: int = 100,
         eps: float = 1e-10,
         min_vega: float = 1e-12,
@@ -583,6 +587,10 @@ class BS(object):
             default_vol : np.ndarray | float, default ``0.``
                 Default and initial volatility guess as float or array compatible with ``k``.
                 See description above. Also note that ``default_vol`` will be clipped to the range ``[vol_min, vol_max]``.
+                
+            mask : np.ndarray | None, default ``None``
+                A numpy array boolean mask to indicate which options to process.
+                The implied vol of options excluded by ``mask`` will be set to ``default_vol``.
 
             max_iters : int, default ``100``
                 Maximum iterations. Usually the routine uses very few iterations.
@@ -627,6 +635,8 @@ class BS(object):
             raise ValueError(f"'max_iters' must be positive; found {max_iters}")
         shape = prices.shape
         assert np.all(np.isfinite(prices)), "Infinite input prices"
+        if not mask is None and not isinstance(mask, np.ndarray):
+            raise ValueError("'mask' must be an ndarray")
 
         # convert into same shape if not float
         def match_shape_or_float( x, dtype ):
@@ -640,6 +650,7 @@ class BS(object):
         is_call     = match_shape_or_float( is_call, np.dtype(np.bool_) )
         sqrtT       = match_shape_or_float( sqrtT, dtype )   
         price_tol   = match_shape_or_float( price_tol, dtype )
+        mask        = match_shape_or_float( mask.astype(np.bool_), np.bool_ ) if not mask is None else None
         default_vol = match_shape_or_float( default_vol, dtype)
         default_vol = np.clip( default_vol, vol_min, vol_max )  
 
@@ -651,19 +662,24 @@ class BS(object):
             sqrtT       = sqrtT.reshape((-1,)) if isinstance(sqrtT, np.ndarray) else sqrtT
             price_tol   = price_tol.reshape((-1,)) if isinstance(price_tol, np.ndarray) else price_tol
             default_vol = default_vol.reshape((-1,)) if isinstance(default_vol, np.ndarray) else default_vol
+            mask        = mask.reshape((-1,)) if not mask is None else None
 
         f0   = dtype.type(0.)
         f1   = dtype.type(1.)
         fits = np.zeros_like(prices)  # output prices
         vols = np.zeros_like(prices)  # output vol
         intr = np.maximum( f0, np.where( is_call, f1 - k, k - f1) )
-        total = len(fits)
+        total = len(fits) if mask is None else np.sum(mask)
 
         upper = np.where(is_call, f1, k)
-        err_min = prices - intr
-        err_max = prices - upper
-        if np.any(err_min < 0.) or np.any(err_max > 0.):
-            
+        err_min = prices - intr   < 0. 
+        err_max = prices - upper  > 0.
+        
+        if not mask is None:
+            err_min = np.where( mask, err_min, 0. )
+            err_max = np.where( mask, err_max, 0. )
+
+        if np.any(err_min < 0.) or np.any(err_max > 0.):            
             err_min = f"Found {fmt_digits(np.sum(err_min < 0.))} of {fmt_digits(total)} prices below instrinc value; worst undershoot is {np.min(err_min):.4g}." if np.any(err_min < 0.) else None
             err_max = f"Found {fmt_digits(np.sum(err_max > 0.))} of {fmt_digits(total)} prices above upper bound; worst overshoot is {np.max(err_max):.4g}." if np.any(err_max > 0.) else None
 
@@ -699,7 +715,11 @@ class BS(object):
         # --------------
 
         # identify intrinsic
-        done = (k <= eps) | (sqrtT <= eps) | (np.abs(intr - prices) <= price_tol)
+        done = (k <= eps) | (sqrtT <= eps) | (np.abs(intr - prices) <= price_tol) 
+        if not mask is None:
+            done |= ~mask
+            del mask
+            
         fits[done] = intr[done]
         vols[done] = IX(default_vol, done)
                                 

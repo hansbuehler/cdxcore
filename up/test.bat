@@ -24,8 +24,11 @@ REM ** Flake and test **
 @echo on
 flake8 .\cdxcore --count --select=E9,F63,F7,F82 --show-source --statistics
 flake8 .\tests --count --select=E9,F63,F7,F82 --show-source --statistics
-pytest
+pytest tests
 @echo off
 
 call deactivate
+
+:: linux
+@@ 
 

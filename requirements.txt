@@ -1,0 +1,12 @@
+numpy
+pandas
+matplotlib
+psutil
+polars
+prettytable
+jsonpickle
+numba
+joblib
+blosc
+scipy
+mkdocstrings[python]>=0.18

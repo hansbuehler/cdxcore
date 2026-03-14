@@ -4,7 +4,10 @@
 Created on 2026-01-31
 """
 
-import import_local # for local testing
+try:
+    import import_local
+except ModuleNotFoundError:
+    pass
 import unittest as unittest
 
 from cdxcore.bs import bs

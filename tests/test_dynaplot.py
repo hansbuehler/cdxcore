@@ -4,7 +4,11 @@ Created on Tue Apr 14 21:24:52 2020
 @author: hansb
 """
 
-import import_local # for local testing
+try:
+    import import_local
+except ModuleNotFoundError:
+    pass
+
 import unittest as unittest
     
 """

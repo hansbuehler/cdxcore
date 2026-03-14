@@ -1,4 +1,5 @@
 def import_local():
+    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
@@ -12,8 +13,9 @@ def import_local():
         return
     assert cwd[-5:] == "tests",("Expected current working directory to be in a 'tests' directory", cwd[-5:], "from", cwd)
     assert cwd[-6] in ['/', '\\'],("Expected current working directory 'tests' to be lead by a '\\' or '/'", cwd[-6:], "from", cwd)
-    sys.path.insert( 0, cwd[:-6] )
-    print("import_local: added import directory:", cwd[:-6])
+    if sys.path[0] != cwd[:-6]:
+        sys.path.insert( 0, cwd[:-6] )
+        print("import_local: added import directory:", cwd[:-6])
 import_local()
 # -*- coding: utf-8 -*-
 

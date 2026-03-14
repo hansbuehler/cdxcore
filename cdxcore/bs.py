@@ -30,6 +30,7 @@ Documentation
 """
 
 from __future__ import annotations
+import sys
 
 from .pretty import PrettyValueObject
 from .verbose import Context   # is now a local include
@@ -57,11 +58,6 @@ except ModuleNotFoundError:  # pragma: no cover
             # Use vectorize to preserve shape for arbitrary ndarrays.
             return 0.5 * (1.0 + np.vectorize(lambda t: math.erf(float(t) / _sqrt2))(x))
         return 0.5 * (1.0 + math.erf(float(x) / _sqrt2))
-
-try:
-    import cvxpy as cp
-except ModuleNotFoundError:  # pragma: no cover
-    cp = None
 
 _inv_sqrt_2pi = 1.0 / np.sqrt(2.0 * np.pi)
 
@@ -923,3 +919,9 @@ or::
     gamma = bs.gamma( k, vol, sqrtT, is_call )
 """
     
+
+
+
+
+
+

@@ -133,8 +133,8 @@ def create_shared_array( name  : str,
             Numpy dtype of the array.
             
         raise_on_error : bool, default ``True``
-            If an array called ``name`` already exists, this function raises an :class:`FileExistsError` exception 
-            if ``raise_on_error`` is ``True``; otherwise it will return ``None``.
+            If an array called ``name`` already exists: if ``raise_on_error`` is ``True``, then this function raises an :class:`FileExistsError` exception;
+            otherwise it will return ``None``.
             
         full : float | :class:`numpy.ndarray` | None, default ``None``
             Value to fill array with, or ``None`` to not fill the array.
@@ -242,8 +242,10 @@ def attach_shared_array(name : str, *,
             Validate that array has this dtype, if not ``None``. If the array has a different dtype, raise a :class:`ValueError`.
 
         raise_on_error : bool, default ``True``
-            If an array called ``name`` does not exists, this function raises an :class:`FileNotFoundError` exception 
-            if ``raise_on_error`` is ``True``; otherwise it will return ``None``.
+            If an array called ``name`` does not exists: if ``raise_on_error`` is ``True``, this function raises an :class:`FileNotFoundError` exception;
+            otherwise it will return ``None``.
+            
+            This function will always raise a :class:`ValueError`  if the shape or dtype validation fails.
 
         read_only : bool, default ``False``
             Whether to set numpy's `writeable flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setflags.html>`__

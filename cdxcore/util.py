@@ -877,7 +877,7 @@ def expected_str_fmt_args(fmt: str) -> Mapping:
                          keywords=kws
                        )
 
-class AcvtiveFormat( object ):
+class ActiveFormat( object ):
     """
     Format as a string or callable.
     
@@ -886,12 +886,12 @@ class AcvtiveFormat( object ):
     
     Example::
         
-        from cdxcore.util import AcvtiveFormat
+        from cdxcore.util import ActiveFormat
         
-        fmt = AcvtiveFormat("{x:.2f}", "test format" )
+        fmt = ActiveFormat("{x:.2f}", "test format" )
         print( fmt(x=1) )
 
-        fmt = AcvtiveFormat(lambda x : "{x:.2f}", "test format" )
+        fmt = ActiveFormat(lambda x : f"{x:.2f}", "test format" )
         print( fmt(x=1) )
         
     The advantage of using the ``lambda x : {x:.2f}`` method is that it allows 
@@ -914,13 +914,13 @@ class AcvtiveFormat( object ):
             Mechanism for defining default keywords which are provided by the environment, not the user.
             For example::
                 
-                from cdxcore.util import AcvtiveFormat
+                from cdxcore.util import ActiveFormat
                 
-                fmt = AcvtiveFormat("{name} {x:.2f}", "test format", reserved_keywords=dict(name="test") )
+                fmt = ActiveFormat("{name} {x:.2f}", "test format", reserved_keywords=dict(name="test") )
                 print( fmt(x=1) )
                 
         strict : bool, default ``False``
-            If ``False`` this function does not validate that all arguments passed to :meth:`cdxcore.util.AcvtiveFormat.__call__`
+            If ``False`` this function does not validate that all arguments passed to :meth:`cdxcore.util.ActiveFormat.__call__`
             have to be understood by the formatting function. This is usally the best solution as the calling entity
             just passes everything and the formatter selects what it needs.
             
@@ -961,7 +961,7 @@ class AcvtiveFormat( object ):
         return  self._required_all_arguments is None
         
     def __str__(self) -> str:
-        return f"AcvtiveFormat({self.label}:{self.name})({fmt_list(sorted(self._required_all_arguments))})"
+        return f"ActiveFormat({self.label}:{self.name})({fmt_list(sorted(self._required_all_arguments))})"
     
     @property
     def required_arguments(self) -> set:
@@ -980,8 +980,8 @@ class AcvtiveFormat( object ):
             All arguments to be passed to the format string or function.
 
             If this object was constructed with ``strict=True`` then the list of arguments
-            must match :attr:`cdxcore.util.AcvtiveFormat.required_arguments` except for
-            :attr:`cdxcore.util.AcvtiveFormat.reserved_keywords`.
+            must match :attr:`cdxcore.util.ActiveFormat.required_arguments` except for
+            :attr:`cdxcore.util.ActiveFormat.reserved_keywords`.
 
         Returns
         -------

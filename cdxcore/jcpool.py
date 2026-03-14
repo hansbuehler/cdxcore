@@ -15,8 +15,10 @@ Import
 Documentation
 -------------
 """
+from __future__ import annotations
 
 from joblib import Parallel as joblib_Parallel, delayed as _jl_delayed, cpu_count
+import multiprocessing as mp
 from multiprocessing import Manager, Queue
 from threading import Thread, get_ident as get_thread_id
 import gc as gc
@@ -26,10 +28,59 @@ import functools as functools
 import uuid as uuid
 import os as os
 import datetime as datetime
+import joblib as joblib
+import psutil as psutil
+import math as math
+import logging as logging
 
 from .verbose import Context, Timer
 from .subdir import SubDir
 from .uniquehash import unique_hash8
+from .err import verify_inp
+from .util import fmt_digits
+
+class _PromoteMemoryLeakToFatal(logging.Filter):
+    """ 
+    Utility class to promote a memory leak INFO to a FATAL error.
+    By default this will trigger a runtime debug warning (not an exception).
+    
+    This is somewhat brittle and relies on the code specifics in https://github.com/joblib/joblib/blob/main/joblib/externals/loky/process_executor.py
+    """
+    def filter(self, record):
+        if "Memory leak detected" in record.getMessage():
+            record.levelno = logging.FATAL
+            record.levelname = "FATAL"
+        return True            
+
+def _ProcessF( *, 
+               mem_leak_enforce : bool,
+               mem_leak_max_memory : int,
+               mem_leak_timer : float,
+               logging_level : int|None,
+               F : Callable,
+               F_args : list,
+               F_kwargs : dict ):
+    """
+    Child process wrapper
+    """
+    import joblib as joblib_
+    import multiprocessing as mp_
+
+    # ensure a memory leak becomes a FATAL
+    # (the default level is WARNING)
+    # ------------------------------------
+
+    logger = mp_.util.log_to_stderr(level=logging_level) if not logging_level is None else mp_.util.getLogger()
+    logger.addFilter(_PromoteMemoryLeakToFatal())
+    
+    # adjust memory leak detection
+    # ----------------------------
+
+    joblib_.externals.loky.process_executor._USE_PSUTIL = mem_leak_enforce
+    joblib_.externals.loky.process_executor._MAX_MEMORY_LEAK_SIZE = mem_leak_max_memory
+    joblib_.externals.loky.process_executor._MEMORY_LEAK_CHECK_DELAY = mem_leak_timer
+
+    return F(*F_args, **F_kwargs)
 
 class ParallelContextChannel( Context ):
     """
@@ -364,19 +415,59 @@ class JCPool( object ):
 
     Note that in this case the function returns only after all jobs have been processed.
     
+    ** Loky Memory Leak Detection **
+    
+    ``JCPool`` uses the `loky <https://loky.readthedocs.io/en/stable/index.html>'__ backend by default.
+    Loky `tries to avoid memory leaks by monitoring the current processes' memory allocation 
+    and kills the process if it thinks it accidentially allocates too much memory <https://loky.readthedocs.io/en/stable/API.html#protection-against-memory-leaks>`__.
+                                                                                   
+    This monitoring consists of two components:
+    
+    * After a first initial period (the first task, usually), Loky assess the intial memory used by the process uing :mod:`psutil`.
+    * Before each subsequent task, if a minimum time period has passed (a second by default) it:
+      1. Checks whether the process allocated more than this number + 300MB by default.
+      2. If that happens, Loky will call :func:`gc.collect` (a very expensive operation)
+      3. Then check again perform above test. If this exceeds the initial number + 300MB it will kill the process.
+      
+    The github code is `here <https://github.com/joblib/loky/blob/master/loky/process_executor.py>`__.
+       
+    For most intensive machine learning tasks such as data pipeline processing this will lead to killing the process early on.
+    By default, Loky is quiet about killing a process which it thinks leaks memory. The default implementation of ``JCPool``
+    changes Loky's INFO to FATAL and reports it to ``stderr`` if this happens.
+    This can be turned off by setting ``logging_level`` to ``None``.
+
+    To manually check whether a Loky joblib process is killed due to a perceived memory leak, use::
+            
+        import multiprocessing.util as mp_util
+        mp_util.log_to_stderr(level=mp_util.INFO)
+        
+    Check for ``"Memory leak detected: shutting down worker"`` and then ``"Exit due to memory leak"``.
+
+    You can either modify this behaviour to a more moderate setting, or turn it off:
+        
+    * **Turn off**: set ``mem_leak_enforce`` to ``False`` to turn off memory checking.
+      *However* in this case Loky will still regularly call :func:`gc.collect`, by default if a second or more has passed after the last task.
+      You can chnage that delay by using ``mem_leak_timer``.
+    * **Modify**: set tjhe memory threshold to a bigger number than 300MB by using ``mem_leak_max_memory``; this can be a float representing the percentage
+      of total physical memory. You can chnage the delay of checking vs the new threshold by using ``mem_leak_timer``.
+    
     Parameters
     ----------
-        num_workers : int, optional
+        num_workers : int, default ``1``
             
-            The number of workers. If ``num_workers`` is ``1`` then no parallel process or thread is started.
+            The number of workers. If ``num_workers`` is ``1`` then no parallel process or thread is started
+            per default `joblib <https://joblib.readthedocs.io/en/latest/generated/joblib.Parallel.html>`__ functionality.
+            
             Just as for `joblib <https://joblib.readthedocs.io/en/latest/generated/joblib.Parallel.html>`__ you can
             use a negative ``num_workers`` to set the number of workers to the ``number of CPUs + num_workers + 1``.
             For example, a ``num_workers`` of ``-2`` will use as many jobs as CPUs are present less one.
             If ``num_workers`` is negative, the effective number of workers will be at least ``1``.
             
+            For debugging can set the number of workes to zero to bypass ``joblib`` entirely.
+            
             Default is ``1``.
         
-        threading : bool, optional
+        threading : bool, default ``False``
         
             If ``False``, the default, then the pool will act as a ``"loky"`` multi-process pool with the associated overhead
             of managing data accross processes.
@@ -386,46 +477,109 @@ class JCPool( object ):
             when engaged in heavy I/O or compiled code such as :mod:`numpy`., :mod:`pandas`,
             or generated with `numba <https://numba.pydata.org/>`__.
             
-        tmp_root_dir : str | SubDir, optional
+        tmp_root_dir : str | SubDir, default ``"!/.cdxmp"``
         
             Temporary directory for memory mapping large arrays. This is a root directory; the function
             will create a temporary sub-directory with a name generated from the current state of the system.
             This sub-directory will be deleted upon destruction of ``JCPool`` or when :meth:`cdxcore.jcpool.JCPool.terminate`
-            is called.
+            is called. This function uses :class:`cdxcore.subdir.SubDir` and therefore supports for example
+            root directories ``!/`` (local temporary directory), ``?/`` (a temporary directory root), and ``~/`` as
+            the home directory.
             
             This parameter can also be ``None`` in which case the `default behaviour <https://joblib.readthedocs.io/en/latest/generated/joblib.Parallel.html>`__
             of :class:`joblib.Parallel` is used.
             
-            Default is ``"!/.cdxmp"``.
+            Default is ``"?/.cdxmp"`` which creates a temporary temp directory using, :func:`tempfile.gettempdir`, and places
+            a subdirectory ``".cdxmp"`` inside it.
             
-        verbose : Context, optional
+        mem_leak_enforce : bool, default ``True``
+        
+            This parameter controls whether Loky is allowed to detect memory leaks when multi-processing is used. 
+            See the section on "Loky Memory Leak Detection" above for background.
+
+            This parameter has no effect if ``threading`` is ``True``.
+            
+        mem_leak_max_memory : int | float, default ``DEFAULT_MEM_LEAK_MAX_MEMORY``
+        
+            This parameter sets the memory threshold after which Loky assumes a process leaks memory and kills it. 
+            See the section on "Loky Memory Leak Detection" above for background.
+
+            * If ``mem_leak_max_memory`` is an ``int`` it specifies the amount of memory in bytes a process may allocate before it is killed. It must be above :attr:`cdxcore.jcpool.JCPool.MIN_MAX_MEMORY`.
+            * If ````mem_leak_max_memory`` is a ``float`` it specified the amount of memory a process may allocated as percentage of total avaible physical memory.
+              This will be floored by attr:`cdxcore.jcpool.JCPool.MIN_MAX_MEMORY`.
+            
+            The default :attr:`cdxcore.jcpool.JCPool.DEFAULT_MEM_LEAK_MAX_MEMORY` is typically 300MB.
+
+            This parameter has no effect if ``threading`` is ``True``.
+            
+        mem_leak_timer : float, default ``DEFAULT_MEM_LEAK_TIMER``
+        
+            This parameter controls how many seconds Loky waits before detecting memory leaks (if ``mem_leak_enforce`` is ``True``) or how
+            often it calls :func:`gc.collect` (if ``mem_leak_enforce`` is ``False``). 
+            See the section on "Loky Memory Leak Detection" above for background.
+            
+            The default, :attr:`cdxcore.jcpool.JCPool.DEFAULT_MEM_LEAK_TIMER` is one second.
+
+            This parameter has no effect if ``threading`` is ``True``.
+            
+        logging_level : int | None, default :attr:logging.ERROR
+        
+            Sets the global level for :mod:`multiprocessing` upon which to print log messages to ``stderr``.
+            Essentially, if not ``None``, then :func:`multiprocessing.util.log_to_stderr` is called.
+            
+        verbose : :class:`cdxcore.verbose.Context`, default :attr:`cdxcore.verbose.Context.quiet`
             
             A :class:`cdxcore.verbose.Context` object used to print out multi-processing/threading information.
             This is *not* the ``Context`` provided to child processes/threads.
             
-            Default is ``quiet``.
+            Default is ``quiet``, a context which does not print anything.
 
-        parallel_kwargs : dict, optional
+        parallel_kwargs : dict, default empty
         
             Additional keywords for :class:`joblib.Parallel`.
     
     """
-    def __init__(self, num_workers      : int = 1,
-                       threading        : bool = False,
-                       tmp_root_dir     : str|SubDir= "!/.cdxmp",  *,
-                       verbose          : Context = Context.quiet,
-                       parallel_kwargs  : dict = {} ) -> None:
+    
+    DEFAULT_MEM_LEAK_MAX_MEMORY = joblib.externals.loky.process_executor._MAX_MEMORY_LEAK_SIZE     #: Default Loky memory leak size, usually 300MB
+    DEFAULT_MEM_LEAK_TIMER      = joblib.externals.loky.process_executor._MEMORY_LEAK_CHECK_DELAY  #: Default loky memory leak and :func:`gc.collect` timer in seconds, usually 1.#
+    MIN_MAX_MEMORY              = 10_000_000  #: lower bound for memory leak detection per process. See discussion on "Loky Memory Leak Detection" above.
+        
+    def __init__(self, num_workers          : int = 1,
+                       threading            : bool = False,
+                       tmp_root_dir         : str|SubDir= "!/.cdxmp",  *,
+                       mem_leak_enforce     : bool = True,
+                       mem_leak_max_memory  : int|float = DEFAULT_MEM_LEAK_MAX_MEMORY,
+                       mem_leak_timer       : float = DEFAULT_MEM_LEAK_TIMER,
+                       logging_level        : int|None = logging.ERROR,
+                       verbose              : Context = Context.quiet,
+                       parallel_kwargs      : dict = {} ) -> None:
         """
         Initialize a multi-processing pool. Thin wrapper around joblib.parallel for cdxcore.verbose.Context() output
         """
-        tmp_dir_ext            = unique_hash8( uuid.getnode(), os.getpid(), get_thread_id(), datetime.datetime.now() )
-        num_workers            = int(num_workers)
-        tmp_root_dir           = SubDir(tmp_root_dir) if not tmp_root_dir is None else None
-        self._tmp_dir          = tmp_root_dir(tmp_dir_ext, ext='', create_directory=False) if not tmp_root_dir is None else None
-        self._verbose          = verbose if not verbose is None else Context("quiet")
-        self._threading        = threading
-        self._no_pool          = num_workers == 0
+        tmp_dir_ext                = unique_hash8( uuid.getnode(), os.getpid(), get_thread_id(), datetime.datetime.now() )
+        num_workers                = int(num_workers)
+        tmp_root_dir               = SubDir(tmp_root_dir) if not tmp_root_dir is None else None
+        self._tmp_dir              = tmp_root_dir(tmp_dir_ext, ext='', create_directory=False) if not tmp_root_dir is None else None
+        self._verbose              = verbose if not verbose is None else Context("quiet")
+        self._threading            = threading
+        self._no_pool              = num_workers == 0
+        self._pool                 = None # for error message handling
+        
+        if isinstance(mem_leak_max_memory, float):
+            verify_inp( 0. < mem_leak_max_memory < 1., lambda : f"If 'mem_leak_max_memory' is a float it must be strictly between 0 and 1; found {mem_leak_max_memory:.4g}")
+            mem_leak_max_memory = max( self.MIN_MAX_MEMORY, math.ceil( psutil.virtual_memory().total * mem_leak_max_memory ) )
+        else:
+            verify_inp( isinstance(mem_leak_max_memory, int), lambda : f"'mem_leak_max_memory' must be an integer or a float; found {type(mem_leak_max_memory)}")
+            verify_inp( mem_leak_max_memory >= self.MIN_MAX_MEMORY, lambda : f"If 'mem_leak_max_memory' is an integer it must be positive and above {fmt_digits(self.MIN_MAX_MEMORY)}. Found {fmt_digits(mem_leak_max_memory)}")
+            
+        self._mem_leak_enforce     = mem_leak_enforce
+        self._mem_leak_max_memory  = mem_leak_max_memory
+        self._mem_leak_timer       = float(mem_leak_timer)
+        self._logging_level        = logging_level
 
+        logger = mp.util.log_to_stderr(level=logging_level) if not logging_level is None else mp.util.getLogger()
+        logger.addFilter(_PromoteMemoryLeakToFatal())
+            
         if num_workers < 0:
             num_workers = max( self.cpu_count() + num_workers + 1, 1 )
         
@@ -457,6 +611,10 @@ class JCPool( object ):
     def is_no_pool(self) -> bool:
         """ Whether this is an actual pool or not (i.e. the pool was constructed with zero workers) """
         return self._no_pool
+    @property
+    def mem_leak_max_memory(self) -> int|None:
+        """ returns the effective ``mem_leak_max_memory`` used by the pool as integer, or ``None`` if not used. """
+        return self._mem_leak_max_memory if self._mem_leak_enforce else None
     
     @staticmethod
     def cpu_count( only_physical_cores : bool = False ) -> int:
@@ -539,7 +697,7 @@ class JCPool( object ):
             if isinstance(v, Context) and not isinstance(v.channel, ParallelContextChannel):
                 raise RuntimeError(f"Keyword argument '{k}' for {F.__qualname__} is a Context object, but its channel is not set to 'ParallelContextChannel'. Use JPool.context().")
 
-    def delayed(self, F : Callable):
+    def delayed(self, F : Callable ):
         """
         Decorate a function for parallel execution.
         
@@ -562,9 +720,18 @@ class JCPool( object ):
         """
         if self._threading or self._no_pool:
             return _jl_delayed(F)
+
         def delayed_function( *args, **kwargs ):
             JCPool._validate( F, args, kwargs )
-            return F, args, kwargs # mimic joblin.delayed()
+            kwargs_Process = dict( mem_leak_enforce=self._mem_leak_enforce,
+                                   mem_leak_max_memory=self._mem_leak_max_memory,
+                                   mem_leak_timer=self._mem_leak_timer,
+                                   logging_level=self._logging_level,
+                                   F=F,
+                                   F_args=args, 
+                                   F_kwargs=kwargs
+                                   )
+            return _ProcessF, [], kwargs_Process # mimic joblib.delayed()
         try:
             delayed_function = functools.wraps(F)(delayed_function)
         except AttributeError:

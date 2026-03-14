@@ -385,7 +385,7 @@ from .err import verify, error, warn, fmt as txtfmt, verify_inp, warn_if
 from .pretty import PrettyObject
 from .verbose import Context
 from .version import Version, version as version_decorator, VersionError
-from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename, fmt_dict, AcvtiveFormat, qualified_name
+from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename, fmt_dict, ActiveFormat, qualified_name
 from .uniquehash import unique_hash48, UniqueLabel, NamedUniqueHash, named_unique_filename48_8
 
 """
@@ -3751,8 +3751,8 @@ class _CacheWrapper(object):
         reserved             = {}
         reserved[name_of_func_name_arg] = self._name
         self._uid_or_label = self._uid_or_label if not self._uid_or_label is None else self._name
-        self._uid_or_label = AcvtiveFormat(self._uid_or_label,label=which,name=self._name,reserved_keywords=reserved ) 
-        self._in_sub_dir   = AcvtiveFormat(self._in_sub_dir,label="in_sub_dir",name=self._name,reserved_keywords=reserved ) if not self._in_sub_dir is None else None
+        self._uid_or_label = ActiveFormat(self._uid_or_label,label=which,name=self._name,reserved_keywords=reserved ) 
+        self._in_sub_dir   = ActiveFormat(self._in_sub_dir,label="in_sub_dir",name=self._name,reserved_keywords=reserved ) if not self._in_sub_dir is None else None
 
         # wrap up
         # -------

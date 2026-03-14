@@ -14,7 +14,7 @@ sys.setrecursionlimit(100)
 """
 Imports
 """
-from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker, CacheController
+from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker, CacheController, CacheInfo
 from cdxcore.version import version, VersionError
 from cdxcore.uniquehash import unique_hash16
 from cdxcore.verbose import Context
@@ -26,8 +26,9 @@ import polars as pl
 class Test(unittest.TestCase):
 
     def test_subdir(self):
+        pass
 
-        sub = SubDir("?/.tmp_test_for_cdxbasics.subdir", delete_everything=True )
+        sub = SubDir("?/.tmp_test_for_cdxcore.subdir", delete_everything=True )
         sub['y'] = 2
         sub.write('z',3)
         sub.write_string('l',"hallo")
@@ -77,7 +78,7 @@ class Test(unittest.TestCase):
             sub.delete('x',raise_on_error=True)
 
         # sub dirs
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", delete_everything=True )
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir", delete_everything=True )
         s1 = sub("subDir1")
         s2 = sub("subDir2/")
         s3 = SubDir("subDir3/",parent=sub)
@@ -88,7 +89,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s4.path, sub.path + "subDir4/")
         lst = str(sorted(sub.sub_dirs()))
         self.assertEqual(lst, "[]")
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", delete_everything=True )
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir", delete_everything=True )
         s1 = sub("subDir1", create_directory=True)
         s2 = sub("subDir2/", create_directory=True)
         s3 = SubDir("subDir3/",parent=sub, create_directory=True)
@@ -106,7 +107,7 @@ class Test(unittest.TestCase):
         sub.delete_everything()
 
         # test vectors
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", delete_everything=True )
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir", delete_everything=True )
         sub[['y','z']] = [2,3]
 
         self.assertEqual(sub[['y','z']], [2,3])
@@ -122,9 +123,9 @@ class Test(unittest.TestCase):
         sub.delete_everything()
 
         # test setting ext
-        sub1 = "!/.tmp_test_for_cdxbasics.subdir"
+        sub1 = "!/.tmp_test_for_cdxcore.subdir"
         fd1  = SubDir(sub1).path
-        sub  = SubDir("!/.tmp_test_for_cdxbasics.subdir/test;*.bin", delete_everything=True )
+        sub  = SubDir("!/.tmp_test_for_cdxcore.subdir/test;*.bin", delete_everything=True )
         self.assertEqual(sub.path, fd1+"test/")
         fn   = sub.full_file_name("file")
         self.assertEqual(fn,fd1+"test/file.bin")
@@ -135,7 +136,7 @@ class Test(unittest.TestCase):
         self.assertEqual(sub1.full_file_name("test"),sub.path+"test.tst")
 
         # test versioning
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir")
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir")
         version = "1.0.0"
         sub.write("test", "hans", version=version )
         r = sub.read("test", version=version )
@@ -153,7 +154,7 @@ class Test(unittest.TestCase):
 
         # test JSON
         x = np.ones((10,))
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.JSON_PICKLE )
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir", fmt=SubDir.JSON_PICKLE )
         sub.write("test", x)
         r = sub.read("test", None, raise_on_error=True)
         r = sub.read("test", None)
@@ -161,14 +162,14 @@ class Test(unittest.TestCase):
         self.assertEqual(sub.ext, ".jpck")
         sub.delete_everything()
 
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.JSON_PLAIN )
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir", fmt=SubDir.JSON_PLAIN )
         sub.write("test", x)
         r = sub.read("test", None)
         self.assertEqual( list(x), list(r) )
         self.assertEqual(sub.ext, ".json")
         sub.delete_everything()
 
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.BLOSC )
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir", fmt=SubDir.BLOSC )
         sub.write("test_2", x)
         r = sub.read("test_2", None, raise_on_error=True )
         self.assertEqual( list(x), list(r) )
@@ -181,7 +182,7 @@ class Test(unittest.TestCase):
             # wrong version
         sub.delete_everything()
 
-        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.GZIP )
+        sub = SubDir("!/.tmp_test_for_cdxcore.subdir", fmt=SubDir.GZIP )
         sub.write("test", x)
         r = sub.read("test", None )
         self.assertEqual( list(x), list(r) )
@@ -486,7 +487,7 @@ class Test2(unittest.TestCase):
         def f( func_name, x, y ):
             pass
         f("test",1,y=2)
-        self.assertTrue( isinstance(f.cache_info, PrettyObject))
+        self.assertTrue( isinstance(f.cache_info, CacheInfo))
         self.assertTrue( list(f.cache_info.arguments.keys()) == ['func_name', 'x', 'y'] )
         self.assertTrue( list(f.cache_info.arguments.values()) == ['test', '1', '2'] )
         

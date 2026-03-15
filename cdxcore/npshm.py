@@ -42,26 +42,48 @@ Loading binary files
 This module's' :func:`cdxcore.npshm.read_shared_array` reads numpy arrays stored to disk
 with :func:`cdxcore.npio.to_file` directly into shared memory.
 
-Garbage Collection
-^^^^^^^^^^^^^^^^^^
+Persistence / Garbage Collection
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The functions here are simplistic wrappers around :class:`multiprocessing.shared_memory.SharedMemory` on
 Linux and Windows. The returned object will call :meth:`multiprocessing.shared_memory.SharedMemory.close` 
-upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
-   
-**Linux**
-
-Under Linux above settings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
-is manually deleted. Call :func:`cdxcore.npshm.delete_shared_array` to delete a shared file manually.
-
-The amount of shared memory available on Linux is limited by default.
-Use ```findmnt -o AVAIL,USED /dev/shm`` to check available size. Modify ``/etc/fstab`` to amend.
+upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`, at least not by default.
 
 **Windows**
 
-Windows keeps track of access to shared memory and will release it automatically upon garbage collection of the last Python object,
-or upon destruction of all processes with access to the shared memory block. Therefore the object does not persist between 
-independent runs of your software.
+Under windows, shared memory semantics are very clean: multiple processes can attached to some shared memory; once
+the last process relinquished their lock, the memory will be removed from the system.
+
+**Linux**
+
+Linux is more complicated: prior to Python 3.12 it did not track resource usage, and cleaning up shared memory upon termination
+of all processes was left to the user. From 3.13 onwards, this is somehow automated, but the default implementation 
+produces unseeming warning messages if memory is not *also* cleaned up manually.
+
+
+* **auto-clean up**:
+  The *last* process should call :meth:`multiprocessing.shared_memory.SharedMemory.unlink` or, here, :func:`cdxcore.npshm.delete_shared_array`.
+  Calling :meth:`multiprocessing.shared_memory.SharedMemory.unlink` more often is not guaranteed to work, even though in our experiments
+  under Ubuntu that did not cause issues so far. 
+  Obviously asking the last process to close a resource is not very convenient in a true parallel processing setup.
+  
+  To implement this pattern in :mod:`cdxcore.npshm`, the user can either implement the above manually, or specify the ``unlink``
+  keyword when creating/attaching to a shared memory.
+  
+  From Python 3.13 onwards :class:`multiprocessing.shared_memory.SharedMemory` actually optionally makes use of a resource tracker to automatically
+  delete shared memory, but it will issue a warning if it does so. You still have to do above if you want to avoid the warning.
+  
+* **Persistence**:
+  Under Linux, you can retain shared memory files in ``/dev/shm/`` after the last process exits. 
+  For this use case under Python 3.13, set ``track`` to ``False``
+  for all shared memory use.
+  
+*PS: The amount of shared memory available on Linux is limited by default.
+Use ```findmnt -o AVAIL,USED /dev/shm`` to check available size. Modify ``/etc/fstab`` to amend.*
+
+Please refer to the `documentation <https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory>`__ 
+for full details.
+
 
 Import
 ------
@@ -77,10 +99,12 @@ Documentation
 from .config import Config, Int, Float # NOQA
 from .npio import read_into, read_dtype_and_shape, _create_header, _decode_header
 from .verbose import Context
+from .err import verify_inp
 import numpy as np
 import weakref
 from multiprocessing import shared_memory
 import platform as platform
+import sys as sys
 
 ALIGN = 64
 """
@@ -89,27 +113,51 @@ A 64 byte alignment ensures that optimized AVX2, AVX512 etc, see
 `this discussion <https://stackoverflow.com/questions/77848460/are-64-byte-cpu-cache-line-reads-aligned-on-64-byte-boundaries?utm_source=chatgpt.com>`__
 """
 
-def create_shared_array( name  : str, 
-                         shape : tuple, 
-                         dtype : type|str, *, 
+def _shared_memory( name : str, create : bool, track : bool|None, size : int = 0 ):
+    if not platform.system().startswith("W"):
+        if sys.version_info < (3, 13):
+            if track is None:
+                track = False
+            else:
+                verify_inp( not track, "'track' cannot be 'True' for linux prior to Python version 3.13, see https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory")
+    else:
+        if track is None:
+            track = True
+        else:
+            verify_inp( track, "'track' cannot be 'False' for Windows, see https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory")
+
+    if sys.version_info >= (3, 13):
+        return shared_memory.SharedMemory(name=name, create=create, size=size, track=track )
+    else:
+        return shared_memory.SharedMemory(name=name, create=create, size=size ) 
+
+def create_shared_array( name   : str, 
+                         shape  : tuple, 
+                         dtype  : type|str, *, 
                          raise_on_error : bool = True, 
-                         full  : float|np.ndarray|None = None,
-                         force : bool = False, 
-                         verbose : Context|None = None ) -> np.ndarray:
+                         full   : float|np.ndarray|None = None,
+                         force  : bool = False, 
+                         track  : bool|None = None,
+                         unlink : bool = False,
+                         verbose: Context|None = None ) -> np.ndarray:
     """
     Create a new named shared array.
-    
-    This function can ``force`` creation of a new array on Linux only.
     
     This function is a simplistic wrapper around creating a :class:`numpy.ndarray` with
     a newly created :class:`multiprocessing.shared_memory.SharedMemory` buffer.
     The returned object will call :meth:`multiprocessing.shared_memory.SharedMemory.close` 
-    upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
-       
+    upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink` (by default).
+
+    This function can ``force`` creation of a new array on Linux only.
+           
     **Linux**
 
     Under Linux above settings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
     is manually deleted. Call :func:`cdxcore.npshm.delete_shared_array` to delete a shared file manually.
+
+    From Python 3.13 onwards, the ``track`` argument can be used to explicitly delete the shared array upon exist of the last process.
+
+    See discussion `here <https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory>`__
     
     The amount of shared memory available on Linux is limited by default.
     Use ```findmnt -o AVAIL,USED /dev/shm`` to check available size. Modify ``/etc/fstab`` to amend.
@@ -123,8 +171,9 @@ def create_shared_array( name  : str,
     Parameters
     ----------
         name : str
-            Name of the array. This must be a valid file name.
+            Name of the array. This must be a valid file name. 
             In Linux, shared memory is managed via ``/dev/shm/``.
+            This is the pure filename, do not include ``/dev/shm/``.            
             
         shape : tuple
             Shape of the array.
@@ -144,6 +193,22 @@ def create_shared_array( name  : str,
             Note that while the file might be get deleted the actual memory is
             only freed after all references are destroyed.
             
+        track : bool, default ``True``
+            For Python 3.13 and above only: if set to ``True``, automatically delete the file upon exit
+            of the last Python process. This option is not available prior to Python 3.13 under Linux.
+            For windows, ``track`` is always ``True``.
+            
+        unlink : bool, default ``False``
+            Call :meth:`multiprocessing.shared_memory.SharedMemory.unlink` upon deletion of the numpy array.
+            This has no effect on windows. On linux, this means:
+            
+            1. The file on ``/dev/shm/`` is deleted, hence no other processes can attach to it.
+            2. Existing shared memory instances remain valid.
+            
+            For expert use only: "trying to access data inside a shared memory block after unlink() may result in memory access errors, depending on platform";
+            see discussion `here <https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory>`__.
+            It is recommended to manually call :func:`cdxcore.npshm.delete_shared_array` instead.
+            
         verbose : :class:`cdxcore.verbose.Context` | None, default ``None``
             If not ``None`` print out activity information, typically for debugging.
         
@@ -157,7 +222,6 @@ def create_shared_array( name  : str,
         File exists : :class:`FileExistsError`
            If an array ``name`` already exists (and ``raise_on_error`` is ``True``).
     """
-    
     shape = tuple(shape)
     dtype = np.dtype( dtype )
     
@@ -172,13 +236,16 @@ def create_shared_array( name  : str,
     nbytes       = int(np.prod(shape, dtype=np.int64)) * dtype.itemsize + len_header64
 
     try:
-        shm  = shared_memory.SharedMemory(name=name, create=True, size=nbytes )
+        shm  = _shared_memory(name=name, create=True, size=nbytes, track=track ) 
+        
     except FileExistsError as e:
         if force:
-            shm  = shared_memory.SharedMemory(name=name, create=False )
+            # attach to existing shared memory and try delete it
+            shm  = shared_memory.SharedMemory(name=name, create=False, track=track )
             shm.close()
             if not platform.system().startswith("W"):
                 shm.unlink()
+            # re-try
             return create_shared_array( name=name, shape=shape, dtype=dtype, raise_on_error=raise_on_error, full=full, force=False, verbose=verbose )
         if raise_on_error:
             raise e
@@ -192,7 +259,8 @@ def create_shared_array( name  : str,
     def _finalize():
         if not verbose is None: verbose.report(1,f"create_shared_array: _finalize '{name}'")
         shm.close()
-        #shm.unlink() c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
+        if unlink:
+            shm.unlink() # c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
     weakref.finalize(array, _finalize )
     if not verbose is None: verbose.write(f"create_shared_array '{name}'")
 
@@ -206,6 +274,8 @@ def attach_shared_array(name : str, *,
                         validate_dtype : type|None  = None, 
                         raise_on_error : bool  = True,
                         read_only      : bool  = False,
+                        track          : bool|None  = None,
+                        unlink         : bool  = False,
                         verbose        : Context|None = None ) -> np.ndarray:
     """
     Attach to an existing named shared array.
@@ -213,15 +283,20 @@ def attach_shared_array(name : str, *,
     This function is a simplistic wrapper around creating a :class:`numpy.ndarray` with
     an existing :class:`multiprocessing.shared_memory.SharedMemory` buffer.
     The returned object will call :meth:`multiprocessing.shared_memory.SharedMemory.close` 
-    upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink`.
+    upon garbage collection, but not :meth:`multiprocessing.shared_memory.SharedMemory.unlink` by default.
        
     **Linux**
 
     Under Linux above settings means that the shared file will reside permanently -- and will remain sharable -- in ``/dev/shm/`` until it 
     is manually deleted. Call :func:`cdxcore.npshm.delete_shared_array` to delete a shared file manually.
+
+    From Python 3.13 onwards, the ``track`` argument can be used to explicitly delete the shared array upon exist of the last process.
+
+    See discussion `here <https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory>`__
     
     The amount of shared memory available on Linux is limited by default.
     Use ```findmnt -o AVAIL,USED /dev/shm`` to check available size. Modify ``/etc/fstab`` to amend.
+    
     
     **Windows**
     
@@ -251,6 +326,22 @@ def attach_shared_array(name : str, *,
             Whether to set numpy's `writeable flag <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setflags.html>`__
             to ``False``.
 
+        track : bool, default ``True``
+            For Python 3.13 and above only: if set to ``True``, automatically delete the file upon exit
+            of the last Python process. This option is not available prior to Python 3.13 under Linux.
+            For windows, ``track`` is always ``True``.
+            
+        unlink : bool, default ``False``
+            Call :meth:`multiprocessing.shared_memory.SharedMemory.unlink` upon deletion of the numpy array.
+            This has no effect on windows. On linux, this means:
+            
+            1. The file on ``/dev/shm/`` is deleted, hence no other processes can attach to it.
+            2. Existing shared memory instances remain valid.
+            
+            For expert use only: "trying to access data inside a shared memory block after unlink() may result in memory access errors, depending on platform";
+            see discussion `here <https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory>`__.
+            It is recommended to manually call :func:`cdxcore.npshm.delete_shared_array` instead.
+
         verbose : :class:`cdxcore.verbose.Context` | None, default ``None``
             If not ``None`` print out activity information, typically for debugging.
 
@@ -268,7 +359,7 @@ def attach_shared_array(name : str, *,
     """
     
     try:
-        shm       = shared_memory.SharedMemory( name=name, create=False )
+        shm       = _shared_memory( name=name, create=False, track=track )
         buf       = shm.buf
     except NameError as e:
         if raise_on_error:
@@ -292,7 +383,8 @@ def attach_shared_array(name : str, *,
     def _finalize():
         if not verbose is None: verbose.report(1,f"attach_shared_array: _finalize '{name}'")
         shm.close()
-        #shm.unlink() c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
+        if unlink:
+            shm.unlink() # c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
     weakref.finalize(array, _finalize )
 
     if not validate_shape is None and tuple(array.shape) != validate_shape: raise ValueError(f"Shared array {name} has shape {array.shape} not {validate_shape}", tuple(array.shape))
@@ -312,6 +404,8 @@ def read_shared_array(file : int|str,
                       buffering       : int  = -1,
                       read_only       : bool = False,
                       return_status   : bool = False,
+                      track           : bool|None = None,
+                      unlink          : bool = False,
                       verbose         : Context|None = None ) -> np.ndarray:
     """
     Read a shared array from disk into a new named shared :class:`numpy.ndarray` in binary format
@@ -382,7 +476,7 @@ def read_shared_array(file : int|str,
             validate_shape = validate_shape if not validate_shape is None else shape
             validate_dtype = validate_dtype if not validate_dtype is None else dtype
 
-        r = attach_shared_array( name, validate_shape=validate_shape, validate_dtype=validate_dtype, raise_on_error=False, read_only=read_only, verbose=verbose )
+        r = attach_shared_array( name, validate_shape=validate_shape, validate_dtype=validate_dtype, raise_on_error=False, read_only=read_only, track=track, unlink=unlink, verbose=verbose )
         if not r is None:
             if not return_status:
                 return r

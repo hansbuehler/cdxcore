@@ -59,6 +59,7 @@ Import
 Documentation
 -------------
 """
+from __future__ import annotations
 
 import datetime as datetime
 from zoneinfo import ZoneInfo
@@ -96,12 +97,12 @@ class DebugTrace(object):
     :class:`cdxcore.uniquehash.DebugTraceVerbose` for debugging. The latter prints out tracing during the computation
     of a hash, while to former collects all this information in a simplistic data structure. Note that this can be quite memory intensive.
     """
-    def _update( self, x, msg : str = None ):
+    def _update( self, x, msg : str|None = None ):
         """ Notify processing of `x`, with an optional process `msg`
         :meta private:
         """#@private
         raise NotImplementedError()        
-    def _update_topic( self, x, msg : str = None ):
+    def _update_topic( self, x, msg : str|None = None ):
         """ Notify processing of a topc `x` with message `msg`, and return a sub-trace context
         :meta private:
         """#@private
@@ -302,7 +303,7 @@ class UniqueHash( object ):
         return UniqueHash( **{ k:v for k,v in self.__dict__.items() if not k[:1] == "_"} )
 
     def __call__(__self__, # LEAVE THIS NAME. **kwargs might contain 'self' arguments.
-                 *args, debug_trace : DebugTrace = None, **kwargs) -> str:
+                 *args, debug_trace : DebugTrace|None = None, **kwargs) -> str:
         """
         Returns a unique hash for the ``arg`` and ``kwargs`` parameters passed to this function.
         
@@ -863,7 +864,7 @@ class DebugTraceVerbose(DebugTrace):
             Context object or ``None`` for a new context object
             with full visibility (it prints everything).
     """
-    def __init__(self, strsize : int = 50, verbose : Context = None ) -> None:
+    def __init__(self, strsize : int = 50, verbose : Context|None = None ) -> None:
         """
         Initialize tracer.
         """
@@ -901,7 +902,7 @@ class DebugTraceVerbose(DebugTrace):
 def NamedUniqueHash( max_length       : int = 60,
                      id_length        : int = 16,  *,
                      separator        : str = ' ',
-                     filename_by      : str = None,
+                     filename_by      : str|None = None,
                      **unique_hash_arguments 
                      ) -> Callable:
     """
@@ -937,19 +938,19 @@ def NamedUniqueHash( max_length       : int = 60,
 
     Parameters
     ----------
-    max_length : int, optional
+    max_length : int, default 60
         Total length of the returned string including the ID.
         Defaults to ``60`` to allow file names with extensions of up to three letters.
         
-    id_length : int, optional
+    id_length : int, defqult 16
         Intended length of the hash `ID`, default ``16``.
         
-    separator : str, optional
+    separator : str, default ``' '``
         Separator between `label` and `id_length`.
         Note that the separator will be included in the ID calculation, hence different separators
         lead to different IDs. Default ``' '``.
         
-    filename_by : str, optional
+    filename_by : str | None, default ``None``
         If not ``None``, use :class:`cdxcore.util.fmt_filename` with ``by=filename_by`` to ensure the returned string is a valid
         filename for both windows and linux, of at most `max_length` size.
         
@@ -990,7 +991,7 @@ def NamedUniqueHash( max_length       : int = 60,
 def UniqueLabel(     max_length       : int = 60,
                      id_length        : int = 8,
                      separator        : str = ' ',
-                     filename_by      : str = None ) -> Callable:
+                     filename_by      : str|None = None) -> Callable:
     """
     Extend unique lables by a hash ID if they exceed ``max_length``.
     
@@ -1021,21 +1022,21 @@ def UniqueLabel(     max_length       : int = 60,
 
     Parameters
     ----------
-    max_length : int
+    max_length : int, default 60
         Total length of the returned string including the ID.
         Defaults to 60 to allow file names with extensions with three letters.
         
-    id_length : int
+    id_length : int, default 8
         Indicative length of the hash function, default 8.
         id_length will be reduced to `max_length` if neccessary.
         
-    separator : str
+    separator : str, default ``' '``
         Separator between the label and the unique ID.
         
         Note that the separator will be included in the ID calculation, hence different separators
         lead to different IDs.
         
-    filename_by : str
+    filename_by : str | None, default ``None``
         If not ``None``, use :func:`cdxcore.util.fmt_filename` with ``by=filename_by``
         to ensure the returned string is a valid
         filename for both windows and linux, of at most ``max_length`` size. Note that if ``filename_by``
@@ -1070,6 +1071,7 @@ def UniqueLabel(     max_length       : int = 60,
         label_hash   = fseparator + base_hash
         if len(label_hash) >= max_length or len(label) == 0:
             # hash and separator exceed total length. Note that len(base_hash) <= max_length
+            # no file name formatting needed - base_hash is a valid filebame
             label = base_hash
         else:
             # convert label to filename
@@ -1167,3 +1169,24 @@ def named_unique_filename48_8( label : str, *args, **kwargs ) -> str:
     """
     return NamedUniqueHash( max_length=48, id_length=8, filename_by="default" )(label, *args, **kwargs)
     
+def unique_label48_8( label : str, as_file_name : bool = False ) -> str:
+    """
+    Returns a unique label. This function assumes that ``label`` is inherently unique, but
+    might exceed the maximum length of 48. In that case a unique hash of length 8 is added
+    to the truncated label and returned.
+    
+    This function may also convert any unique label into a unique, valid file name if ``as_file_name`` is ``True``.
+    In that
+    case it always adds an ID (because it cannot gurantee that the conversion to a file name
+    is unique). By default the function does not convert to a file name.
+    
+    ``label`` is assumed to be unique.
+    
+    This is the hash function returned by :class:`cdxcore.uniquehash.UniqueLabel`
+    with parameters ``max_length=48, id_length=8, filename_by=filename_by if as_file_name else None``.
+
+    *Important* please make sure you aware of the functional considerations
+    discussed in :class:`cdxcore.uniquehash.UniqueHash` around
+    elements starting with `_` or function members.
+    """
+    return UniqueLabel( max_length=48, id_length=8, filename_by="default" if as_file_name else None )(label)

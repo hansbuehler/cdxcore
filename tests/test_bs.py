@@ -5,9 +5,11 @@ Created on 2026-01-31
 """
 
 try:
-    import import_local
+    from import_local import import_local
+    import_local()
 except ModuleNotFoundError:
     pass
+
 import unittest as unittest
 
 from cdxcore.bs import bs

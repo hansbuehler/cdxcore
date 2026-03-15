@@ -3,16 +3,13 @@
 Created on Tue Apr 14 21:24:52 2020
 @author: hansb
 """
-
 try:
-    import import_local
+    from import_local import import_local
+    import_local()
 except ModuleNotFoundError:
     pass
+
 import unittest as unittest
-import sys as sys
-sys.setrecursionlimit(1000)
-
-
 from cdxcore.npio import _DTYPE_TO_CODE, _CODE_TO_DTYPE, to_file, read_into, from_file
 from cdxcore.subdir import SubDir
 import numpy as np

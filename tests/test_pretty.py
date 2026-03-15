@@ -4,9 +4,11 @@ Created on Tue Apr 14 21:24:52 2020
 @author: hansb
 """
 try:
-    import import_local
+    from import_local import import_local
+    import_local()
 except ModuleNotFoundError:
     pass
+
 import unittest as unittest
 import dataclasses as dataclasses
 import sys as sys
@@ -14,7 +16,7 @@ import os as os
 import pickle as pickle
 import tempfile as tempfile
 import shutil as shutil
-sys.setrecursionlimit(100)
+#sys.setrecursionlimit(100)
 from cdxcore.pretty import PrettyObject, Sequence, PrettyHierarchy, PrettyValueObject
 
 class A1(PrettyObject):

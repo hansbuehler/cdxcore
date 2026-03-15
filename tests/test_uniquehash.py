@@ -5,22 +5,22 @@ Created on Tue Apr 14 21:24:52 2020
 """
 
 try:
-    import import_local
+    from import_local import import_local
+    import_local()
 except ModuleNotFoundError:
     pass
+
 import unittest as unittest
 import numpy as np
 import pandas as pd
 import datetime as datetime
 from zoneinfo import ZoneInfo
 from enum import Enum
-import sys
-sys.setrecursionlimit(100)
     
 """
 Imports
 """
-from cdxcore.uniquehash import UniqueHash, NamedUniqueHash, UniqueLabel, unique_hash32 as unique_hash, unique_hash8, unique_hash16, unique_hash32, unique_hash48, unique_hash64, DEF_FILE_NAME_MAP, DebugTraceCollect, DebugTraceVerbose
+from cdxcore.uniquehash import UniqueHash, NamedUniqueHash, UniqueLabel, unique_hash32 as unique_hash, unique_hash8, unique_hash16, unique_hash32, unique_hash48, unique_hash64, DEF_FILE_NAME_MAP, DebugTraceCollect, DebugTraceVerbose, unique_label48_8
 from cdxcore.pretty import PrettyObject
 from cdxcore.npio import from_file, to_file
 
@@ -481,6 +481,13 @@ class Test(unittest.TestCase):
         b = TestEnum.B
         self.assertNotEqual( unique_hash(a), unique_hash(b) )
 
+
+        # unique_label48_8
+        self.assertEqual( unique_label48_8("abc"), "abc" )
+        self.assertEqual( unique_label48_8("abc", as_file_name=True), "abc 7aa59946" )
+        l = "abcde"*10 
+        self.assertEqual( unique_label48_8(l), "abcdeabcdeabcdeabcdeabcdeabcdeabcdeabcd 2b4ca680")
+        
                     
             
 if __name__ == '__main__':

@@ -71,7 +71,7 @@ produces unseeming warning messages if memory is not *also* cleaned up manually.
   keyword when creating/attaching to a shared memory.
   
   From Python 3.13 onwards :class:`multiprocessing.shared_memory.SharedMemory` actually optionally makes use of a resource tracker to automatically
-  delete shared memory, but it will issue a warning if it does so. You still have to do above if you want to avoid the warning.
+  delete shared memory, but it will issue a warning if it does so. You still have to perform above clean up if you want to avoid the warning.
   
 * **Persistence**:
   Under Linux, you can retain shared memory files in ``/dev/shm/`` after the last process exits. 

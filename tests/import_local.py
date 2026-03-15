@@ -16,6 +16,5 @@ def import_local():
     if sys.path[0] != cwd[:-6]:
         sys.path.insert( 0, cwd[:-6] )
         print("import_local: added import directory:", cwd[:-6])
-import_local()
 # -*- coding: utf-8 -*-
 

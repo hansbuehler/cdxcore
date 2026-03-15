@@ -5,19 +5,36 @@ Created on Tue Apr 14 21:24:52 2020
 """
 
 try:
-    import import_local
+    from import_local import import_local
+    import_local()
 except ModuleNotFoundError:
     pass
-import unittest as unittest
-import numpy as np
-import datetime as datetime
-from zoneinfo import ZoneInfo
 
-from cdxcore.filelock import FileLock
+import unittest as unittest
+import platform
+
+IS_WINDOWS  = platform.system()[0] == "W"
+BAD_WINDOWS = False
+
+if IS_WINDOWS:
+    try:
+        import win32file as win32file#NOQA
+    except ModuleNotFoundError:
+        import warnings
+        warnings.warn("Could not find win32file from pywin32. Will not run any tests")
+        BAD_WINDOWS = True
+
+if not BAD_WINDOWS:
+    from cdxcore.filelock import FileLock
+else:
+    FileLock = None
 
 class Test(unittest.TestCase):
 
     def test_fl(self):
+        
+        if BAD_WINDOWS:
+            return
         
         fn   = "filelock_test"
         lock = FileLock("!/"+fn,acquire=True, wait=False)

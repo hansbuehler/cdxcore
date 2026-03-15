@@ -5,9 +5,11 @@ Created on Tue Apr 14 21:24:52 2020
 """
 
 try:
-    import import_local
+    from import_local import import_local
+    import_local()
 except ModuleNotFoundError:
     pass
+
 import unittest as unittest
 from cdxcore.verbose import Context
 from cdxcore.uniquehash import unique_hash32 as unique_hash

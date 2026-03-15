@@ -88,7 +88,6 @@ if IS_WINDOWS:
     import win32con
     import pywintypes
     import win32security
-    import win32api
     _WIN_HIGHBITS=0xffff0000 #high-order 32 bits of byte range to lock
 
 else:

@@ -6,6 +6,7 @@ Created on Tue Apr 14 21:24:52 2020
 
 try:
     import import_local
+    import_local()
 except ModuleNotFoundError:
     pass
 

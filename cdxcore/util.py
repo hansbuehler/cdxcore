@@ -840,7 +840,6 @@ def is_filename( filename : str , by : str | Collection = "default" ) -> bool:
             return False
     return True
 
-
 def expected_str_fmt_args(fmt: str) -> Mapping:
     """
     Inspect a ``{}`` Python format string and report what arguments it expects.

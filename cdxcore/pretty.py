@@ -5,16 +5,17 @@ class which mimics directory access to its members.
 Overview
 --------
 
-The purpose is a functional-programming style pattern for generating complex objects::
+The purpose is a functional-programming style pattern for generating complex objects,
+while mimicing a dictionary object::
 
-    from cdxbasics.prettydict import PrettyObject
+    from cdxcore.pretty import PrettyObject
     pdct = PrettyObject(z=1)
     
     pdct.num_samples = 1000
     pdct.num_batches = 100
     pdct.method = "signature"
     
-The object allows accessing members via ``[]``:
+The object allows accessing members via ``[]``::
     
     print( pdct['num_samples'] )   # -> 1000
     print( pdct['num_batches'] )   # -> 100
@@ -46,7 +47,7 @@ Vectorized access
 
 Several member functions of :class:`cdxcore.pretty.PrettyObject` support member access for example::
     
-    from cdxbasics.prettydict import PrettyObject
+    from cdxcore.pretty import PrettyObject
     r = PrettyObject()
 
     # assign    
@@ -79,11 +80,21 @@ by positon:
 * ``cdxcore.pretty.PrettyObject.at_pos.items[i]`` returns the `i` th item.
 
 For example::
+
+    from cdxcore.pretty import PrettyObject
+    pdct = PrettyObject(z=1)
+    
+    pdct.num_samples = 1000
+    pdct.num_batches = 100
+    pdct.method = "signature"
     
     print(pdct.at_pos[3])      # -> prints "signature"
     print(pdct.at_pos.keys[3]) # -> prints "method"
 
-You can also assign member functions to a :class:`cdxcore.pretty.PrettyObject`.
+Member Functions
+^^^^^^^^^^^^^^^^
+
+You can assign member functions to a :class:`cdxcore.pretty.PrettyObject`.
 The following works as expected::
     
       pdct.f = lambda self, y: return self.y*x
@@ -95,11 +106,11 @@ Dataclasses
 
 :mod:`dataclasses` rely on default values of any member being "frozen" objects, which most user-defined objects and
 :class:`cdxcore.pretty.PrettyObject` objects are not.
-This limitation applies as well to `flax <https://flax-linen.readthedocs.io/en/latest/api_reference/flax.linen/module.html>`__ modules.
+This limitation also  applies to `flax <https://flax-linen.readthedocs.io/en/latest/api_reference/flax.linen/module.html>`__ modules.
 To use non-frozen default values, use the
 :meth:`cdxcore.pretty.PrettyObject.as_field` function::
 
-    from cdxbasics.prettydict import PrettyObject
+    from cdxcore.pretty import PrettyObject
     from dataclasses import dataclass
     
     @dataclass
@@ -118,13 +129,13 @@ Hierachies
 This module also provides :class:`cdxcore.pretty.PrettyHierarchy` derived from :class:`cdxcore.pretty.PrettyObject`
 which allows, in addition, automatic generation of hierarchies e.g.::
     
-    from cdxbasics.prettydict import PrettyHierarchy
+    from cdxcore.pretty import PrettyHierarchy
     r = PrettyHierarchy(a=1,b=2)
     r.x.c = 3
     
 This is a short cut for::
     
-    from cdxbasics.prettydict import PrettyHierarchy
+    from cdxcore.pretty import PrettyHierarchy
     r = PrettyHierarchy(a=1,b=2)
     r.x = PrettyHierarchy()
     r.x.c = 3

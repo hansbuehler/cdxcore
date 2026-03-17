@@ -1384,6 +1384,11 @@ class TrackTime(object):
         """
         return None if self.count == 0 else ( float(self.lap_seconds) / float(self.count) )
     
+    @property
+    def current_lap_seconds(self) -> float|None:
+        """ Returns elapsed seconds in the current lap only. Returns None if the timer was not started. """
+        return self.time() - self._ref if not self._ref is None else None
+
     def fmt_seconds(self) -> str:
         """
         A human readable string for :attr:`cdxcore.util.TrackTime.seconds`, e.g. "1s" or "3:21"
@@ -1403,8 +1408,24 @@ class TrackTime(object):
         """
         A human readable string for :attr:`cdxcore.util.TrackTime.average_lap_seconds`, e.g. "1s" or "3:21"
         computed using :func:`cdxcore.util.fmt_seconds`.
+        
+        This function will raise a :class:`RuntimeError` if 
+        no laps have been recorded. Use :attr:`cdxcore.util.Tracktime.count` to check this.
         """
-        return fmt_seconds(self.average_lap_seconds)
+        als = self.average_lap_seconds
+        verify( not als is None, "'fmt_average_lap_seconds' called before any laps were recorded" )
+        return fmt_seconds(als) 
+
+    def fmt_current_lap_seconds(self) -> str:
+        """
+        A human readable string for :attr:`cdxcore.util.TrackTime.current_lap_seconds`, e.g. "1s" or "3:21"
+        computed using :func:`cdxcore.util.fmt_seconds`. 
+        This counts only the current lap. This function will raise a :class:`RuntimeError` if 
+        no lap is currently running.
+        """
+        clsc = self.lap_seconds
+        verify( not clsc is None, "'fmt_current_lap_seconds' called outside a running lap" )
+        return fmt_seconds(clsc)
 
     def __call__(self, sub_topic, start : bool = True) -> TrackTime:
         """

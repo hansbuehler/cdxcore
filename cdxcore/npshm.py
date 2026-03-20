@@ -79,7 +79,7 @@ produces unseeming warning messages if memory is not *also* cleaned up manually.
   for all shared memory use.
   
 *PS: The amount of shared memory available on Linux is limited by default.
-Use ```findmnt -o AVAIL,USED /dev/shm`` to check available size. Modify ``/etc/fstab`` to amend.*
+Use ``findmnt -o AVAIL,USED /dev/shm`` to check available size. Modify ``/etc/fstab`` to amend.*
 
 Please refer to the `documentation <https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory>`__ 
 for full details.

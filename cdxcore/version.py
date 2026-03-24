@@ -162,7 +162,7 @@ class VersionError(RuntimeError):
     An example is :meth:`cdxcore.subdir.SubDir.read` which can be used to check the version of 
     data written to disk.
     """
-    def __init__(self, *args: object, version_found : str, version_expected : str ) -> None:
+    def __init__(self, *args: object, version_found : str = "?", version_expected : str = "?") -> None:
         self.version_found = version_found        #: The version found.
         self.version_expected = version_expected  #: The version expected. 
         RuntimeError.__init__(self, *args)

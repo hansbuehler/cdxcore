@@ -996,7 +996,7 @@ class ActiveFormat( object ):
         
         if self._required_all_arguments is None:
             # label function or string does not need any parameters
-            return self._fmt if isinstance( self._fmt, str ) else self.fmt()
+            return self._fmt if isinstance( self._fmt, str ) else self._fmt()
             
         fmt_arguments = {}
         for k in self._required_all_arguments:

@@ -22,6 +22,7 @@ from cdxcore.pretty import PrettyObject
 from collections import OrderedDict
 import numpy as np
 import polars as pl
+import pandas as pd
 
 class Test(unittest.TestCase):
 
@@ -662,6 +663,39 @@ class Test2(unittest.TestCase):
             y = np.random.normal(size=(20,)).astype(np.int32)
             
             df = pl.DataFrame( {'x': pl.Series( x, dtype=pl.Int32 ), 'y' : pl.Series( y, dtype=pl.Int32 ) } )
+        
+            sub.write("test", df)        
+            r = sub.read("test", raise_on_error=True)
+            self.assertTrue( np.all( r==df) )
+            
+            sub.write("test", df, version="0.1")        
+            r = sub.read("test", version="0.1", raise_on_error=True)
+            self.assertTrue( np.all( r==df) )
+
+            sub.write("test", df, version="0.1")        
+            r = sub.read("test", version="*", raise_on_error=True)
+            self.assertTrue(np.all( r==df) )
+
+            sub.write("test", df, version="0.1")   
+            with self.assertRaises(VersionError):
+                r = sub.read("test", version="0.2", raise_on_error=True)
+
+            with self.assertRaises(ValueError):
+                sub.write("test", [1,2,3], raise_on_error=True ) # attempt to write non-polar object
+                
+            sub.write("test", [1,2,3], fmt=SubDir.PICKLE, ext="prq") # hard overwrite format         
+            with self.assertRaises(KeyError):
+                sub.read("test", raise_on_error=True)            
+        
+        finally:
+            sub.delete_everything()
+
+    def test_pandas(self):
+        
+        sub = SubDir("?/.pandas", delete_everything=True, fmt=SubDir.PANDAS_PARQUET )
+        self.assertEqual(sub.ext,".pdq")
+        try:
+            df = pd.DataFrame(data={"col1": [1, 2], "col2": [3, 4]})
         
             sub.write("test", df)        
             r = sub.read("test", raise_on_error=True)

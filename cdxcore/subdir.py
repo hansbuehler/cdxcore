@@ -104,6 +104,9 @@ File Format
 * ``POLARS_PARQUET`` writes :class:`polars.DataFrames` using parquet files.
   In this mode, only parquet files can be read and written. Versioning is supported.
 
+* ``PANDAS_PARQUET`` writes :class:`pandas.ataFrames` using parquet files.
+  In this mode, only parquet files can be read and written. Versioning is supported.
+
 **Summary of properties i/o modes:**
 
 +----------------+------------------+----------------+-------+-------------+-----------+------------+
@@ -119,7 +122,9 @@ File Format
 +----------------+------------------+----------------+-------+-------------+-----------+------------+
 | GZIP           | yes              | no             | high  | yes         | .pgz      | all        |
 +----------------+------------------+----------------+-------+-------------+-----------+------------+
-| POLARS_PARQUET | yes              | no             | high  | yes         | .pgz      | polars     |
+| POLARS_PARQUET | yes              | no             | high  | yes         | .prq      | polars     |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| PANDAS_PARQUET | yes              | no             | high  | yes         | .pdq      | pandas     |
 +----------------+------------------+----------------+-------+-------------+-----------+------------+
 
 You may specify the file format when instantiating :class:`cdxcore.subdir.SubDir`::
@@ -377,6 +382,9 @@ from functools import update_wrapper
 from typing import Any, Iterator
 
 import polars as pl
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import json as json
 import gzip as gzip
 import blosc as blosc
@@ -434,12 +442,15 @@ class Format(Enum):
     +----------------+------------------+----------------+-------+-------------+-----------+------------+
     | GZIP           | yes              | no             | high  | yes         | .pgz      | all        |
     +----------------+------------------+----------------+-------+-------------+-----------+------------+
-    | POLARS_PARQUET | yes              | no             | high  | yes         | .pgz      | polars     |
+    | POLARS_PARQUET | yes              | no             | high  | yes         | .prq      | polars     |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | PANDAS_PARQUET | yes              | no             | high  | yes         | .pdq      | pandas     |
     +----------------+------------------+----------------+-------+-------------+-----------+------------+
     
-    :class:`cdxcore.subdir.SubDir` supports ``POLARS_PARQUET`` for reading and writing :class:`polars.DataFrame` files
+    :class:`cdxcore.subdir.SubDir` supports ``POLARS_PARQUET`` and ``PANDAS_PARQUET`` for reading and writing :class:`polars.DataFrame` 
+    and :class:`pandas.DataFrame` files
     to parquet. Version information is stored in meta data. 
-    When used, the object passed to :meth:`cdxcore.subdir.write` must be a polars data frame.
+    When used, the object passed to :meth:`cdxcore.subdir.write` must be of the correct data frame type.
     """
     PICKLE = 0       #: Standard binary :mod:`pickle` format.
     JSON_PICKLE = 1  #: :mod:`jsonpickle` format.
@@ -447,6 +458,7 @@ class Format(Enum):
     BLOSC = 3        #: :mod:`blosc` binary compressed format.
     GZIP = 4         #: :mod:`gzip` binary compressed format.
     POLARS_PARQUET = 10  # :class:`polars.DataFrame` i/o with parquet
+    PANDAS_PARQUET = 11  # :class:`pandas.DataFrame` i/o with parquet
     
 PICKLE = Format.PICKLE
 JSON_PICKLE = Format.JSON_PICKLE
@@ -454,6 +466,7 @@ JSON_PLAIN = Format.JSON_PLAIN
 BLOSC = Format.BLOSC
 GZIP = Format.GZIP
 POLARS_PARQUET = Format.POLARS_PARQUET
+PANDAS_PARQUET = Format.PANDAS_PARQUET
 
 class VersionPresentError(RuntimeError):
     """
@@ -817,6 +830,25 @@ class SubDir(object):
 
     Version handling is supported with parquet files.
 
+    **Pandas**
+    
+    A ``SubDir`` can read and write :class:`pandas.DataFrame` if the format is set to :attr:`cdxcore.subdir.Format.PANDAS_PARQUET`::
+        
+        import pandas as pd
+        import numpy as np
+        from cdxcore.subdir import SubDir
+        
+        x = np.linspace(0,1,5)
+        y = np.sin(x)
+        df = pd.DataFrame({"x":x, "y":y})
+        
+        sub = SubDir("!/pandas", fmt=SubDir.PANDAS_PARQUET)
+        sub.write("test", df)
+        r = sub.read("test", raise_on_error=True)
+        assert np.all(r == df)
+
+    Version handling is supported with parquet files.
+
     Parameters
     ----------
     name : str:
@@ -862,6 +894,7 @@ class SubDir(object):
         * 'zbsc' for BLOSC.
         * 'pgz' for GZIP.
         * 'prq' for POLARS_PARQUET.
+        * 'pdq' for PANDAS_PARQUET.
         
     fmt : :class:`cdxcore.subdir.Format` | None, default ``Format.PICKLE``
 
@@ -918,6 +951,9 @@ class SubDir(object):
     """ :meta private: """
     
     POLARS_PARQUET = Format.POLARS_PARQUET
+    """ :meta private: """
+    
+    PANDAS_PARQUET = Format.PANDAS_PARQUET
     """ :meta private: """
     
     DEFAULT_FORMAT = Format.PICKLE
@@ -1281,6 +1317,8 @@ class SubDir(object):
             return ".pgz"
         if fmt == Format.POLARS_PARQUET:
             return ".prq"
+        if fmt == Format.PANDAS_PARQUET:
+            return ".pdq"
         error("Unknown format '%s'", str(fmt))
 
     @staticmethod
@@ -1624,6 +1662,21 @@ class SubDir(object):
                     if handle_version == SubDir.VER_CHECK:
                         return True
                     data = pl.read_parquet(full_file_name)
+                    return data
+                
+            elif fmt == Format.PANDAS_PARQUET:
+                ok   = True
+                if not version is None:
+                    test_version = pq.read_metadata(full_file_name).metadata or {}
+                    test_version = test_version.get(b'cdxcore.subdir.version', None)
+                    test_version = test_version.decode("utf-8") if not test_version is None else None
+                    if handle_version == SubDir.VER_RETURN:
+                        return test_version
+                    ok = (version == "*" or test_version == version)
+                if ok:
+                    if handle_version == SubDir.VER_CHECK:
+                        return True
+                    data = pd.read_parquet(full_file_name)
                     return data
                 
             elif fmt == Format.BLOSC:
@@ -2081,6 +2134,20 @@ class SubDir(object):
                     if not isinstance( obj, pl.DataFrame ):
                         raise ValueError(f"When using format POLARS_PARQUET you must save only polars DataFrames. Found type '{type(obj)}'.")
                     obj.write_parquet( full_file_name, metadata = None if version is None else dict(version=version) )
+
+                elif fmt == Format.PANDAS_PARQUET:
+                    # only if a version is provided write it into the file
+                    if not isinstance( obj, pd.DataFrame ):
+                        raise ValueError(f"When using format PANDAS_PARQUET you must save only pandas DataFrames. Found type '{type(obj)}'.")
+
+                    table = pa.Table.from_pandas(obj)
+                    if not version is None:
+                        meta = dict(table.schema.metadata or {})
+                        meta[b"cdxcore.subdir.version"] = version.encode("utf-8")
+                        table = table.replace_schema_metadata(meta)
+                        del meta
+                    pq.write_table(table, full_file_name)
+                    del table
 
                 elif fmt == Format.BLOSC:
                     # only if a version is provided write it into the file

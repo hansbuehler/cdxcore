@@ -23,6 +23,7 @@ from collections import OrderedDict
 import numpy as np
 import polars as pl
 import pandas as pd
+import datetime as datetime
 
 class Test(unittest.TestCase):
 
@@ -728,8 +729,11 @@ class Test2(unittest.TestCase):
         sub = SubDir("?/.pandas", delete_everything=True, fmt=SubDir.PYTREE_HDF5 )
         self.assertEqual(sub.ext,".h5")
         try:
-            x = { 'x': np.array([1,2,3]), 'y': np.array([4,5,6], dtype=np.float32), 'a': { 'z': np.array([7,8,9]) } }
-
+            x = { 'x': np.array([1,2,3]), 'y': np.array([4,5,6], dtype=np.float32), 'a': { 'z': np.array([7,8,9]), 'int':42, 'float':3.14 },
+                            'date': datetime.date(2022,3,18), 
+                            'datetime': datetime.datetime(2022,3,18,12,34,56),
+                            'time': datetime.time(12,34,56),
+                            'text': "Hello world" }
             def equal( x, y ):
                 if isinstance(x, np.ndarray):
                     if not isinstance(y, np.ndarray):
@@ -744,10 +748,13 @@ class Test2(unittest.TestCase):
                         if not equal( x[k], y[k] ):
                             return False
                     return True
-
+                else:
+                    return x==y
 
             sub.write("test",x)
             r = sub.read("test", raise_on_error=True)
+            print(x)
+            print(r)
             self.assertTrue( equal( x, r ))
 
             sub.write("test", x, version="0.1")        

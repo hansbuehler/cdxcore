@@ -1709,14 +1709,40 @@ class SubDir(object):
                         if handle_version == SubDir.VER_CHECK:
                             return True
                         def read_h5(h, top:str):
-                            if isinstance(h, h5py.Dataset):
-                                return h[()]
-                            else:
-                                verify( isinstance(h, h5py.Group), lambda : f"Cannot load H5 file: element {top} is of unsupported type {type(h)}. Full file name: '{full_file_name}'.")
-                                r = dict()                                                  
-                                for fk, fv in h.items():
-                                    r[fk] = read_h5(fv, top=f"{top}.{fk}")
-                                return r
+                            r = dict()
+                            for k,v in h.items():
+                                if isinstance(v, h5py.Dataset):
+                                    if k[:4] == "_1_N":
+                                        v = v[()]
+                                        assert isinstance(v, (float, int, np.generic)), ("Internal error: expected numeric dataset to be read as a number, but got type %s", type(v))
+                                        r[k[4:]] = v
+                                        continue
+                                    if k[:4] == "_1_S":
+                                        v = v[()]
+                                        v = v.decode("utf-8")
+                                        assert isinstance(v, str), ("Internal error: expected string dataset to be read as a string, but got type %s", type(v))
+                                        r[k[4:]] = v
+                                        continue
+                                    if k[:4] == "_1_D":
+                                        v = v[()]
+                                        v = v.decode("utf-8")
+                                        r[k[4:]] = datetime.date.fromisoformat(v)
+                                        continue
+                                    if k[:4] == "_1_d":
+                                        v = v[()]
+                                        v = v.decode("utf-8")
+                                        r[k[4:]] = datetime.datetime.fromisoformat(v)
+                                        continue
+                                    if k[:4] == "_1_T":
+                                        v = v[()]
+                                        v = v.decode("utf-8")
+                                        r[k[4:]] = datetime.time.fromisoformat(v)
+                                        continue
+                                    else:
+                                        r[k] = v[()]
+                                elif isinstance(v, h5py.Group):
+                                    r[k] = read_h5( v, top=f"{top}.{k}" )
+                            return r
                         verify( set(f) == {'root'}, f"Cannot load H5 file: file must contain unique root note 'root'. Found nodes {sorted(f)}. Full file name '{full_file_name}'.")
                         return read_h5(f["root"],file)
                 
@@ -2194,19 +2220,36 @@ class SubDir(object):
                     with h5py.File(full_file_name, "w") as f:
                         if not version is None:
                             f.attrs["version"] = version.encode("utf-8")
+                    
+                        dtstr = h5py.string_dtype(encoding='utf-8')
                         def write_h5(f, k, v, top:str):
-                            if isinstance(v, str):
-                                dt = h5py.string_dtype(encoding='utf-8')
-                                f.create_dataset(k, data=np.array(v, dtype=dt))
-                            elif isinstance( v, np.ndarray ):
+                            if k[:3] == '_1_':
+                                raise ValueError("Cannot write '{full_file_name}: HDF5 format does not allow key names starting with '_1_'. Found '{k}'.")
+                            if isinstance( v, np.ndarray ):
                                 f.create_dataset(k, data=v)
-                            elif isinstance( v, Mapping ):
+                                return
+                            if isinstance(v, str):
+                                f.create_dataset('_1_S'+k, data=np.array(v, dtype=dtstr))
+                                return
+                            if isinstance( v, (int, np.integer, float, np.floating)):                                          
+                                f.create_dataset('_1_N'+k, data=np.array(v))
+                                return 
+                            if isinstance( v, datetime.datetime):
+                                f.create_dataset('_1_d'+k, data=np.array(v.isoformat(),dtype=dtstr))
+                                return
+                            if isinstance( v, datetime.date):
+                                f.create_dataset('_1_D'+k, data=np.array(v.isoformat(),dtype=dtstr))
+                                return 
+                            if isinstance( v, datetime.time):
+                                f.create_dataset('_1_T'+k, data=np.array(v.isoformat(),dtype=dtstr))
+                                return
+                            if isinstance( v, Mapping ):
                                 grp = f.create_group(k)
                                 ktop = f"{top}.{k}"
                                 for kk, kv in v.items():
                                     write_h5( grp, kk, kv, top = ktop)
-                            else:
-                                raise ValueError(f"Cannot write HDF5 file: key {top}.{k} is of unsupported type {type(v)}. Full file name: '{full_file_name}'")
+                                return
+                            raise ValueError(f"Cannot write HDF5 file: key {top}.{k} is of unsupported type {type(v)}. Full file name: '{full_file_name}'")
                         write_h5(f,"root",obj,file)
                     
                 elif fmt == Format.BLOSC:

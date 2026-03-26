@@ -723,6 +723,54 @@ class Test2(unittest.TestCase):
         finally:
             sub.delete_everything()
 
+    def test_hdf5(self):
+
+        sub = SubDir("?/.pandas", delete_everything=True, fmt=SubDir.PYTREE_HDF5 )
+        self.assertEqual(sub.ext,".h5")
+        try:
+            x = { 'x': np.array([1,2,3]), 'y': np.array([4,5,6], dtype=np.float32), 'a': { 'z': np.array([7,8,9]) } }
+
+            def equal( x, y ):
+                if isinstance(x, np.ndarray):
+                    if not isinstance(y, np.ndarray):
+                        return False
+                    return np.all( x==y )
+                elif isinstance(x, dict):
+                    if not isinstance(y, dict):
+                        return False
+                    if set(x.keys()) != set(y.keys()):
+                        return False
+                    for k in x.keys():
+                        if not equal( x[k], y[k] ):
+                            return False
+                    return True
+
+
+            sub.write("test",x)
+            r = sub.read("test", raise_on_error=True)
+            self.assertTrue( equal( x, r ))
+
+            sub.write("test", x, version="0.1")        
+            r = sub.read("test", version="0.1", raise_on_error=True)
+            self.assertTrue( equal( r, x) )
+
+            sub.write("test", x, version="0.1")        
+            r = sub.read("test", version="*", raise_on_error=True)
+            self.assertTrue(equal( r, x ))
+
+            sub.write("test", x, version="0.1")   
+            with self.assertRaises(VersionError):
+                r = sub.read("test", version="0.2", raise_on_error=True)
+
+            with self.assertRaises(ValueError):
+                sub.write("test", [1,2,3], raise_on_error=True ) # attempt to write non-polar object
+                
+            sub.write("test", [1,2,3], fmt=SubDir.PICKLE, ext="h5") # hard overwrite format         
+            with self.assertRaises(KeyError):
+                sub.read("test", raise_on_error=True)            
+        finally:
+            sub.delete_everything()
+
     def test_subdir_file_operations(self):
         """Test various file operations in SubDir"""
         

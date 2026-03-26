@@ -104,8 +104,11 @@ File Format
 * ``POLARS_PARQUET`` writes :class:`polars.DataFrames` using parquet files.
   In this mode, only parquet files can be read and written. Versioning is supported.
 
-* ``PANDAS_PARQUET`` writes :class:`pandas.ataFrames` using parquet files.
+* ``PANDAS_PARQUET`` writes :class:`pandas.DataFrames` using parquet files.
   In this mode, only parquet files can be read and written. Versioning is supported.
+
+* ``PYTREE_HDF5`` writes pytrees, i.e. colllections of collections of numpy arrays using HDF5 files.
+  Versioning is supported.
 
 **Summary of properties i/o modes:**
 
@@ -125,6 +128,8 @@ File Format
 | POLARS_PARQUET | yes              | no             | high  | yes         | .prq      | polars     |
 +----------------+------------------+----------------+-------+-------------+-----------+------------+
 | PANDAS_PARQUET | yes              | no             | high  | yes         | .pdq      | pandas     |
++----------------+------------------+----------------+-------+-------------+-----------+------------+
+| PYTREE_HDF5    | yes              | no             | high  | yes         | .h5       | numpy      |
 +----------------+------------------+----------------+-------+-------------+-----------+------------+
 
 You may specify the file format when instantiating :class:`cdxcore.subdir.SubDir`::
@@ -382,14 +387,17 @@ from functools import update_wrapper
 from typing import Any, Iterator
 
 import polars as pl
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import json as json
 import gzip as gzip
 import blosc as blosc
+import h5py as h5py
+
 import sys as sys
-from .err import verify, error, warn, fmt as txtfmt, verify_inp, warn_if
+from .err import verify, error, warn, fmt as txtfmt, verify_inp, warn_if#NOQA
 from .pretty import PrettyObject
 from .verbose import Context
 from .version import Version, version as version_decorator, VersionError
@@ -446,6 +454,8 @@ class Format(Enum):
     +----------------+------------------+----------------+-------+-------------+-----------+------------+
     | PANDAS_PARQUET | yes              | no             | high  | yes         | .pdq      | pandas     |
     +----------------+------------------+----------------+-------+-------------+-----------+------------+
+    | PYTREE_HDF5    | yes              | no             | high  | yes         | .h5       | numpy      |
+    +----------------+------------------+----------------+-------+-------------+-----------+------------+
     
     :class:`cdxcore.subdir.SubDir` supports ``POLARS_PARQUET`` and ``PANDAS_PARQUET`` for reading and writing :class:`polars.DataFrame` 
     and :class:`pandas.DataFrame` files
@@ -459,6 +469,7 @@ class Format(Enum):
     GZIP = 4         #: :mod:`gzip` binary compressed format.
     POLARS_PARQUET = 10  # :class:`polars.DataFrame` i/o with parquet
     PANDAS_PARQUET = 11  # :class:`pandas.DataFrame` i/o with parquet
+    PYTREE_HDF5 = 12 #: Pytree i/o for nested collections of numpy arrays
     
 PICKLE = Format.PICKLE
 JSON_PICKLE = Format.JSON_PICKLE
@@ -467,6 +478,7 @@ BLOSC = Format.BLOSC
 GZIP = Format.GZIP
 POLARS_PARQUET = Format.POLARS_PARQUET
 PANDAS_PARQUET = Format.PANDAS_PARQUET
+PYTREE_HDF5 = Format.PYTREE_HDF5
 
 class VersionPresentError(RuntimeError):
     """
@@ -895,6 +907,7 @@ class SubDir(object):
         * 'pgz' for GZIP.
         * 'prq' for POLARS_PARQUET.
         * 'pdq' for PANDAS_PARQUET.
+        * 'h5' for PYTREE_HDF5.
         
     fmt : :class:`cdxcore.subdir.Format` | None, default ``Format.PICKLE``
 
@@ -954,6 +967,9 @@ class SubDir(object):
     """ :meta private: """
     
     PANDAS_PARQUET = Format.PANDAS_PARQUET
+    """ :meta private: """
+    
+    PYTREE_HDF5 = Format.PYTREE_HDF5
     """ :meta private: """
     
     DEFAULT_FORMAT = Format.PICKLE
@@ -1319,6 +1335,8 @@ class SubDir(object):
             return ".prq"
         if fmt == Format.PANDAS_PARQUET:
             return ".pdq"
+        if fmt == Format.PYTREE_HDF5:
+            return ".h5"
         error("Unknown format '%s'", str(fmt))
 
     @staticmethod
@@ -1678,6 +1696,29 @@ class SubDir(object):
                         return True
                     data = pd.read_parquet(full_file_name)
                     return data
+                
+            elif fmt == Format.PYTREE_HDF5:
+                ok   = True
+                with h5py.File(full_file_name, "r") as f:
+                    if not version is None:
+                        test_version = f.attrs.get("version", None)
+                        if handle_version == SubDir.VER_RETURN:
+                            return test_version
+                        ok = (version == "*" or test_version == version)
+                    if ok:
+                        if handle_version == SubDir.VER_CHECK:
+                            return True
+                        def read_h5(h, top:str):
+                            if isinstance(h, h5py.Dataset):
+                                return h[()]
+                            else:
+                                verify( isinstance(h, h5py.Group), lambda : f"Cannot load H5 file: element {top} is of unsupported type {type(h)}. Full file name: '{full_file_name}'.")
+                                r = dict()                                                  
+                                for fk, fv in h.items():
+                                    r[fk] = read_h5(fv, top=f"{top}.{fk}")
+                                return r
+                        verify( set(f) == {'root'}, f"Cannot load H5 file: file must contain unique root note 'root'. Found nodes {sorted(f)}. Full file name '{full_file_name}'.")
+                        return read_h5(f["root"],file)
                 
             elif fmt == Format.BLOSC:
                 # we do not write 
@@ -2148,7 +2189,26 @@ class SubDir(object):
                         del meta
                     pq.write_table(table, full_file_name)
                     del table
-
+                    
+                elif fmt == PYTREE_HDF5:
+                    with h5py.File(full_file_name, "w") as f:
+                        if not version is None:
+                            f.attrs["version"] = version.encode("utf-8")
+                        def write_h5(f, k, v, top:str):
+                            if isinstance(v, str):
+                                dt = h5py.string_dtype(encoding='utf-8')
+                                f.create_dataset(k, data=np.array(v, dtype=dt))
+                            elif isinstance( v, np.ndarray ):
+                                f.create_dataset(k, data=v)
+                            elif isinstance( v, Mapping ):
+                                grp = f.create_group(k)
+                                ktop = f"{top}.{k}"
+                                for kk, kv in v.items():
+                                    write_h5( grp, kk, kv, top = ktop)
+                            else:
+                                raise ValueError(f"Cannot write HDF5 file: key {top}.{k} is of unsupported type {type(v)}. Full file name: '{full_file_name}'")
+                        write_h5(f,"root",obj,file)
+                    
                 elif fmt == Format.BLOSC:
                     # only if a version is provided write it into the file
                     with open(full_file_name,"wb") as f:
@@ -4082,7 +4142,7 @@ class _CacheWrapper(object):
                      
                     * ``False`` if the object this function
                        would compute exists with the correct version (without loading much of it from disk). 
-                    * ``True`` if the object does not exist, or has the wrong version, it is re-computed and
+                    * ``True`` if the object did not exist, or had the wrong version, and was therefore re-computed and
                        stored on disk.
 
                     Using this keyword is an efficient method to generate a list of all objects that would be generated by a function call, without actually loading them from disk.

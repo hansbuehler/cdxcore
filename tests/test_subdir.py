@@ -733,6 +733,7 @@ class Test2(unittest.TestCase):
                             'date': datetime.date(2022,3,18), 
                             'datetime': datetime.datetime(2022,3,18,12,34,56),
                             'time': datetime.time(12,34,56),
+                            'list': [ "A", "B" ],
                             'text': "Hello world" }
             def equal( x, y ):
                 if isinstance(x, np.ndarray):
@@ -768,13 +769,6 @@ class Test2(unittest.TestCase):
             sub.write("test", x, version="0.1")   
             with self.assertRaises(VersionError):
                 r = sub.read("test", version="0.2", raise_on_error=True)
-
-            with self.assertRaises(ValueError):
-                sub.write("test", [1,2,3], raise_on_error=True ) # attempt to write non-polar object
-                
-            sub.write("test", [1,2,3], fmt=SubDir.PICKLE, ext="h5") # hard overwrite format         
-            with self.assertRaises(KeyError):
-                sub.read("test", raise_on_error=True)            
         finally:
             sub.delete_everything()
 

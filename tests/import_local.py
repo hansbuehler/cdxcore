@@ -1,5 +1,4 @@
 def import_local():
-    return
     """
     In order to be able to run our tests manually from the 'tests' directory
     we force import from the local package.
@@ -16,5 +15,8 @@ def import_local():
     if sys.path[0] != cwd[:-6]:
         sys.path.insert( 0, cwd[:-6] )
         print("import_local: added import directory:", cwd[:-6])
+    else:
+        print("import_local: import directory already present:", cwd[:-6])
+        
 # -*- coding: utf-8 -*-
 

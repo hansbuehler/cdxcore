@@ -676,15 +676,35 @@ class BS(object):
             err_max = np.where( mask, err_max, 0. )
 
         if np.any(err_min < 0.) or np.any(err_max > 0.):            
-            err_min = f"Found {fmt_digits(np.sum(err_min < 0.))} of {fmt_digits(total)} prices below instrinc value; worst undershoot is {np.min(err_min):.4g}." if np.any(err_min < 0.) else None
-            err_max = f"Found {fmt_digits(np.sum(err_max > 0.))} of {fmt_digits(total)} prices above upper bound; worst overshoot is {np.max(err_max):.4g}." if np.any(err_max > 0.) else None
-
-            if not err_min is None and not err_max is None:
-                err = err_min + " " + err_max
-            elif not err_min is None:
-                err = err_min
+            str_err_min = None
+            if np.any(err_min < 0.):                
+                str_err_min = f"Found {fmt_digits(np.sum(err_min < 0.))} of {fmt_digits(total)} prices below instrinc value; worst undershoot is {np.min(prices - intr):.4g}. "
+                ixs = np.arange(len(err_min))[ err_min < 0. ]
+                if len(ixs) > 10:
+                    str_err_min += "Showing first 10 violations: "
+                    ixs = ixs[:10]
+                else:
+                    str_err_min += "Violations: "
+                for ix in ixs:
+                    str_err_min += f"price[{ix}] {prices[ix]} < intrinsic[{ix}] {intr[ix]}, "
+                str_err_min = str_err_min[:-2] + "."
+            str_err_min = None
+            if np.any(err_max > 0.):                
+                str_err_max = f"Found {fmt_digits(np.sum(err_max > 0.))} of {fmt_digits(total)} prices above their  upper bound; worst overshoot is {np.max(prices - upper):.4g}. "
+                ixs = np.arange(len(err_max))[ err_max > 0. ]
+                if len(ixs) > 10:
+                    str_err_max += "Showing first 10 violations: "
+                    ixs = ixs[:10]
+                else:
+                    str_err_max += "Violations: "
+                for ix in ixs:
+                    str_err_max += f"price[{ix}] {prices[ix]} > upper[{ix}] {upper[ix]}, "
+                str_err_max = str_err_max[:-2] + "."
+                
+            if not str_err_min is None and not str_err_max is None:
+                err = str_err_min + " " + str_err_max
             else:
-                err = err_max
+                err = str_err_min if not str_err_min is None else str_err_max
 
             if on_exceed_bounds == "error":
                 raise ValueError(err)

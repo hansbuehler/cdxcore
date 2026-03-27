@@ -1741,6 +1741,16 @@ class SubDir(object):
                                     else:
                                         r[k] = v[()]
                                 elif isinstance(v, h5py.Group):
+                                    if k[:4] == "_1_L":
+                                        k    = k[4:]
+                                        col  = read_h5( v, top=f"{top}.{k}" )
+                                        n    = len(col)
+                                        try:
+                                            r[k] = [ col[str(i)] for i in range(n) ]
+                                        except KeyError as e:
+                                            raise RuntimeError(f"Error reading collection: {e}. Keys: {list(col.keys())}")
+                                        continue
+                                    # dict
                                     r[k] = read_h5( v, top=f"{top}.{k}" )
                             return r
                         verify( set(f) == {'root'}, f"Cannot load H5 file: file must contain unique root note 'root'. Found nodes {sorted(f)}. Full file name '{full_file_name}'.")
@@ -2226,7 +2236,10 @@ class SubDir(object):
                             if k[:3] == '_1_':
                                 raise ValueError("Cannot write '{full_file_name}: HDF5 format does not allow key names starting with '_1_'. Found '{k}'.")
                             if isinstance( v, np.ndarray ):
-                                f.create_dataset(k, data=v)
+                                try:
+                                    f.create_dataset(k, data=v)
+                                except Exception as e:
+                                    raise type(e)(f"Error writing dataset '{top}.{k}' into HDF5 file '{full_file_name}': {str(e)}") from e
                                 return
                             if isinstance(v, str):
                                 f.create_dataset('_1_S'+k, data=np.array(v, dtype=dtstr))
@@ -2249,7 +2262,14 @@ class SubDir(object):
                                 for kk, kv in v.items():
                                     write_h5( grp, kk, kv, top = ktop)
                                 return
-                            raise ValueError(f"Cannot write HDF5 file: key {top}.{k} is of unsupported type {type(v)}. Full file name: '{full_file_name}'")
+                            if isinstance(v, Collection):
+                                grp = f.create_group("_1_L" + k)
+                                ktop = f"{top}.{k}"
+                                for i, d in enumerate(v):
+                                    write_h5( grp, str(i), d, top = ktop)
+                                return 
+                                    
+                            raise ValueError(f"## Cannot write HDF5 file: key {top}.{k} is of unsupported type {type(v)}. Full file name: '{full_file_name}'")
                         write_h5(f,"root",obj,file)
                     
                 elif fmt == Format.BLOSC:

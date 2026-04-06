@@ -24,6 +24,7 @@ import numpy as np
 import polars as pl
 import pandas as pd
 import datetime as datetime
+import pathlib as pathlib
 
 class Test(unittest.TestCase):
 
@@ -299,6 +300,37 @@ class Test(unittest.TestCase):
         self.assertEqual( d2.fmt, SubDir.GZIP )
         self.assertEqual( d1.ext, ".tmp" )
         self.assertEqual( d2.ext, d1.ext )
+
+    def test_Path(self):
+        Path = pathlib.Path
+        subdir0 = SubDir("my_directory")      # relative to current working directory
+        subdir1 = SubDir("./my_directory")    # relative to current working directory
+        subdir2 = SubDir("~/my_directory")    # relative to home directory
+        subdir3 = SubDir("!/my_directory")    # relative to default temp directory
+        
+        p0 = Path(subdir0.path)
+        p1 = Path(subdir1.path)
+        p2 = Path(subdir2.path)
+        p3 = Path(subdir3.path)
+        
+        sd0 = SubDir(p0)
+        sd1 = SubDir(p1)
+        sd2 = SubDir(p2)
+        sd3 = SubDir(p3)
+        
+        self.assertEqual( subdir0, sd0 )
+        self.assertEqual( subdir1, sd1 )
+        self.assertEqual( subdir2, sd2 )
+        self.assertEqual( subdir3, sd3 )
+
+        x = SubDir("test", parent=p0 )
+        y = subdir0("test")
+        self.assertEqual( x, y )
+
+        x = subdir0(Path("test"))
+        y = subdir0("test")
+        self.assertEqual( x, y )
+
 
     def test_cache_mode(self):
 

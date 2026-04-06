@@ -385,6 +385,7 @@ from collections.abc import Collection, Mapping, Callable, Iterable
 from enum import Enum
 from functools import update_wrapper
 from typing import Any, Iterator
+import pathlib as pathlib
 
 import polars as pl
 import numpy as np
@@ -497,17 +498,19 @@ class CacheMode(object):
 
     **Summary mechanics:**
         
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+
-    | Action                                  | on    | gen   | off   | update  | clear  | readonly |
-    +=========================================+=======+=======+=======+=========+========+==========+
-    | load cache from disk if exists          | x     | x     |       |         |        | x        |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+
-    | write updates to disk                   | x     | x     |       |  x      |        |          |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+
-    | delete existing object                  |       |       |       |         | x      |          |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+
-    | delete existing object if incompatible  | x     |       |       |  x      | x      |          |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+      
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
+    | Action                                  | on    | gen   | off   | update  | clear  | readonly | forceuse |
+    +=========================================+=======+=======+=======+=========+========+==========+==========+
+    | load cache from disk if exists          | x     | x     |       |         |        | x        | x        |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
+    | write updates to disk                   | x     | x     |       |  x      |        |          |          |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
+    | delete existing object                  |       |       |       |         | x      |          |          |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
+    | delete existing object if incompatible  | x     |       |       |  x      | x      |          |          |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
+    | throw exception if cache does not exist |       |       |       |         |        |          | x        |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
 
     **Standard Caching Semantics**
 
@@ -528,6 +531,8 @@ class CacheMode(object):
                                    )
                 if not r is None:
                     return r
+                if cache_mode.must_exist:
+                    raise FileNotFoundError(filename, "Cannot read cached file {filename}.")
             
             r = f(...) # compute result
             
@@ -546,7 +551,7 @@ class CacheMode(object):
     Parameters
     ----------
         mode : str, optional
-            Which mode to use: ``"on"``, ``"gen"``, ``"off"``, ``"update"``, ``"clear"`` or ``"readonly"``.
+            Which mode to use: ``"on"``, ``"gen"``, ``"off"``, ``"update"``, ``"clear"``, ``"readonly"`` or ``"cacheonly"``.
             
             The default is ``None`` in which case ``"on"`` is used.
     """
@@ -557,8 +562,9 @@ class CacheMode(object):
     UPDATE = "update"
     CLEAR = "clear"
     READONLY = "readonly"
+    CACHEONLY = "cacheonly"
 
-    MODES = [ ON, GEN, OFF, UPDATE, CLEAR, READONLY ]
+    MODES = [ ON, GEN, OFF, UPDATE, CLEAR, READONLY, CACHEONLY ]
     """
     List of available modes in text form.
     This list can be used as ``cast`` parameter when calling :func:`cdxcore.config.Config.__call__`::
@@ -570,7 +576,7 @@ class CacheMode(object):
             return CacheMode( config("cache_mode", "on", CacheMode.MODES, CacheMode.HELP) )
     """
         
-    HELP = "'on' for standard caching; 'gen' for caching but keep existing incompatible files; 'off' to turn off; 'update' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones"
+    HELP = "'on' for standard caching; 'gen' for caching but keep existing incompatible files; 'off' to turn off; 'update' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones; 'cacheonly' to read an existing cache and fail if it doesn't exist."
     """
     Standard ``config`` help text, to be used with  :func:`cdxcore.config.Config.__call__` as follows::
         
@@ -590,11 +596,12 @@ class CacheMode(object):
         mode      = self.ON if mode is None else mode
         self.mode = mode.mode if isinstance(mode, CacheMode) else str(mode)
         if not self.mode in self.MODES:
-            raise KeyError( self.mode, "Caching mode must be 'on', 'off', 'update', 'clear', or 'readonly'. Found " + self.mode )
-        self._read   = self.mode in [self.ON, self.READONLY, self.GEN]
+            raise KeyError( self.mode, f"Caching mode must be {fmt_list(self.MODES,link='or')}. Found '{self.mode}'" )
+        self._read   = self.mode in [self.ON, self.READONLY, self.GEN, self.CACHEONLY]
         self._write  = self.mode in [self.ON, self.UPDATE, self.GEN]
         self._delete = self.mode in [self.UPDATE, self.CLEAR]
         self._del_in = self.mode in [self.UPDATE, self.CLEAR, self.ON]
+        self._must_exist = self.mode == self.CACHEONLY
 
     def __new__(cls, *kargs, **kwargs):
         """ Copy constructor """
@@ -621,6 +628,11 @@ class CacheMode(object):
     def del_incomp(self) -> bool:
         """ Whether to delete existing data if it is not compatible or has the wrong version. """
         return self._del_in
+    
+    @property
+    def must_exist(self) -> bool:
+        """ Whether a cache must exist. If this fails, raise :class:`FileNotFoundError`. """#
+        return self._must_exist
 
     def __str__(self) -> str:# NOQA
         return self.mode
@@ -661,6 +673,11 @@ class CacheMode(object):
     def is_readonly(self) -> bool:
         """ Whether this cache mode is READONLY. """
         return self.mode == self.READONLY
+
+    @property
+    def is_cacheonly(self) -> bool:
+        """ Whether this cache mode is CACHEONLY. """
+        return self.mode == self.CACHEONLY
 
 class CacheController( object ):
     r"""
@@ -1029,6 +1046,9 @@ class SubDir(object):
             if delete_everything: raise ValueError( "Cannot use 'delete_everything' when cloning a directory")
             assert self._ext=="" or self._ext==self.EXT_FMT_AUTO or self._ext[0] == ".", ("Extension error", self._ext)
             return
+
+        name = str(name) if isinstance(name, pathlib.Path) else name
+        parent = str(parent) if isinstance(parent, pathlib.Path) else parent
 
         # parent
         if isinstance(parent, str):
@@ -2877,7 +2897,9 @@ class SubDir(object):
                        ext : str|None = None,
                        fmt : Format|None = None,
                        delete_wrong_version : bool = True,
-                       create_directory : bool|None = None ) -> Any:
+                       create_directory : bool|None = None,
+                       cache_controller : CacheController|None = None,
+                       ) -> Any:
         """
         Read either data from a file, or return a new sub directory.
         
@@ -2907,7 +2929,7 @@ class SubDir(object):
 
         Parameters
         ----------
-            element : str | None
+            element : str | list[str] | None
                 File or directory name, or a list thereof.
 
                 ``element`` can be ``None`` if ``default`` is left at its dummy value ``SubDir.RET_SUB_DIR`` (the default)
@@ -2977,6 +2999,9 @@ class SubDir(object):
                 *When creating sub-directories:*
                 
                 Format for the new sub-directory; set to ``None`` to inherit the parent's format.
+                
+            cache_controller : :class:`cdxcore.subdir.CacheController` | None, default ``None``
+                Specifies a :class:`cdxcore.subdir.CacheController` other than the default controller of the sub directory.
                                 
         Returns
         -------
@@ -2984,19 +3009,25 @@ class SubDir(object):
             Either the value in the file, a new sub directory, or lists thereof.
         """
         if default is SubDir.RET_SUB_DIR:
-            if not element is None and not isinstance(element, str):
+            verify( version is None, "Cannot specify 'version' when operating in directory mode", exception=ValueError)      
+            if not element is None and not isinstance(element, (str, pathlib.Path)):
                 if not isinstance(element, Collection): 
                     raise ValueError(txtfmt("'element' must be a string or an iterable object. Found type '%s;", type(element)))
-                return [ SubDir( k,parent=self,ext=ext,fmt=fmt,create_directory=create_directory) for k in element ]
-            return SubDir(element,parent=self,ext=ext,fmt=fmt,create_directory=create_directory)
-        verify( not element is None, "Cannot use 'None' as filename", exception=ValueError)
-        return self.read( file=element,
-                          default=default,
-                          raise_on_error=raise_on_error,
-                          version=version,
-                          delete_wrong_version=delete_wrong_version,
-                          ext=ext,
-                          fmt=fmt )
+                return [ SubDir( k,parent=self,ext=ext,fmt=fmt,create_directory=create_directory, cache_controller=cache_controller) for k in element ]
+            return SubDir(element,parent=self,ext=ext,fmt=fmt,create_directory=create_directory, cache_controller=cache_controller)
+        verify( not element is None, "Cannot use 'None' as filename", exception=ValueError)        
+        if create_directory:
+            self.create_directory()
+        d = self
+        if not cache_controller is None:
+            d = SubDir(self,cache_controller=cache_controller)
+        return d.read(  file=element,
+                        default=default,
+                        raise_on_error=raise_on_error,
+                        version=version,
+                        delete_wrong_version=delete_wrong_version,
+                        ext=ext,
+                        fmt=fmt )
 
     def __getitem__( self, file ) -> Any:
         """
@@ -3532,6 +3563,27 @@ class SubDir(object):
                                os.getenv("PROJECT_CACHE_DIR", "!/.cache"),
                                debug_verbose=Context.all    # turn full traing on
                             )
+
+        Writing Tests
+        ^^^^^^^^^^^^^
+        
+        To test a cached function, turn off caching in your tests using the parameter ``override_cache_mode="off"``::
+            
+            from cdxcore.subdir import SubDir
+            cache = SubDir("!/cache")
+            
+            @cache.cache("1.0")
+            def f(x):
+                return x*x
+            
+            def test_f():
+                x2 = f(2,override_cache_mode="off")
+                assert x2 == 4
+
+        A different use case is to avoid a functio ``f`` to run and use cached data only. A good example for this is if
+        ``f`` downloads data from a licensed service, which we do not want to do during testing.
+        For this case, you can use the ``"cacheonly"`` mode. However, you will need to set your caching directory
+        to a directory with existing caches.
 
         Parameters
         ----------
@@ -4256,7 +4308,7 @@ class _CacheWrapper(object):
                 sub_dir.delete( filename )
 
             elif cache_mode.read:
-                if cache_generate_only and sub_dir.is_version( filename, version=idversion ):
+                if cache_generate_only and sub_dir.is_version( filename, version=idversion, delete_wrong_version=cache_mode.del_incomp ):
                     execute.cache_info.last_cached = True
                     if not self.debug_verbose is None:
                         self.debug_verbose.write(f"cache({self._name}): confirmed for '{label}' cache '{sub_dir.full_file_name(filename)}' exists and has version '{idversion}'.")
@@ -4268,9 +4320,14 @@ class _CacheWrapper(object):
                 class Tag:
                     pass
                 tag = Tag()
-                r = sub_dir.read( filename, tag, version=idversion )
+                r = sub_dir.read( filename, tag, version=idversion, delete_wrong_version=cache_mode.del_incomp )
                         
-                if not r is tag:
+                if r is tag:
+                    if cache_mode.must_exist:
+                        ffn = sub_dir.full_file_name(filename)
+                        raise FileNotFoundError( ffn, f"Failed to read cache '{unique_id}' for '{label}'.")
+                    
+                else:
                     if not track_cached_files is None:
                         track_cached_files += self._fullFileName(filename)
      
@@ -4285,7 +4342,7 @@ class _CacheWrapper(object):
                         return unique_id, r
                     return r
             else:
-                verify_inp( not cache_generate_only, lambda : f"Cannot use 'cache_generate_only' with cache mode {cache_mode}: must allow reading.")
+                verify_inp( not cache_generate_only, lambda : f"Cannot use 'cache_generate_only' for '{label}' with cache mode {cache_mode}: must allow reading.")
 
             r = self._F(*args, **kwargs)
             

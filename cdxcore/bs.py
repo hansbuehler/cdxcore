@@ -96,7 +96,7 @@ class BS(object):
     DK    = BSFLAGS.DK     #: Flag to request dK: -N2 for a call
     GAMMA = BSFLAGS.GAMMA  #: Flag to request Gamma
     VEGA  = BSFLAGS.VEGA   #: Flag to request Vega 
-    THETA = BSFLAGS.THETA  #: Flag to request Theta
+    THETA = BSFLAGS.THETA  #: Flag to request Theta, here defined as derivative in time-to-expiry (e.g. it is positive!).
     LOGK  = BSFLAGS.LOGK   #: Flag to request logK, set to 1 where k=0 or vol*sqrtT=0
 
     def __init__(self):
@@ -141,7 +141,7 @@ class BS(object):
             * ``BS.DK``    : Derivative in strike
             * ``BS.VEGA``  : Vega
             * ``BS.GAMMA`` : Gamma
-            * ``BS.THETA`` : Theta
+            * ``BS.THETA`` : Theta as derivative in time-to-expiry, e.g. *it is positive*.
             * ``BS.LOGK``  : Log-strike, with 1 whereever ``k==0``. This is mainly useful to avoid recomputing ``log(k)`` multiple times.
 
             Note that if only one item is requested the function returns a ``np.ndarray`` or ``float``.
@@ -173,7 +173,7 @@ class BS(object):
             * ``dk``
             * ``vega``
             * ``gamma``
-            * ``theta``
+            * ``theta`` (positive!)
             * ``logK``
 
             That means you can access the result as follows::
@@ -228,7 +228,7 @@ class BS(object):
 
                 if need_pd1:
                     pd1   = _inv_sqrt_2pi * math.exp(-0.5 * d1**2)
-                    vega  = pd1 / sqrtT if (what & BS.VEGA) else None
+                    vega  = pd1 * sqrtT if (what & BS.VEGA) else None
                     gamma = pd1 / vf if (what & BS.GAMMA) else None
                     theta = 0.5 * vol * pd1 / sqrtT if (what & BS.THETA) else None
                     del pd1
@@ -236,6 +236,26 @@ class BS(object):
                     vega = None
                     gamma = None
                     theta = None
+
+            if not C is None:
+                assert np.isfinite(C), "Infinite C"
+                assert C <= 1. and C >= max(0.,1-k), "C bound error"
+            if not delta is None:
+                assert np.isfinite(delta), "Infinite delta"
+                assert delta >= 0. and delta <= 1., "Delta bound error"
+            if not dk is None:
+                assert np.isfinite(dk), "Infinite dk"
+                assert dk <= 0. and dk >= -1., "dk bound error"
+            if not vega is None:
+                assert np.isfinite(vega), "Infinite vega"
+                assert vega >= 0. and vega <= sqrtT * _inv_sqrt_2pi, "Vega bound error"
+            if not gamma is None:
+                assert np.isfinite(gamma), "Infinite gamma"
+                assert gamma >= 0. and gamma <= _inv_sqrt_2pi / vf, "Gamma bound error"
+            if not theta is None:
+                assert np.isfinite(theta), "Infinite theta"
+                assert theta >= 0. and theta <= 0.5 * vol * _inv_sqrt_2pi / sqrtT, "Theta bound error"
+
         else:
             dtype = (k if isinstance(k,np.ndarray) else vf).dtype
             f0    = dtype.type(0.) 
@@ -243,6 +263,7 @@ class BS(object):
             verify( logK is None or logK.shape == k.shape, "'logK' must be of same shape as 'k'" )
             intr = (k==0.) | (vf==0.)
             if np.sum(intr) == k.size:
+                # all options are intrinsic
                 delta =   np.where(k < 1., f1, f0) if (what & BS.DELTA) else None
                 dk    = - np.where(k < 1., f1, f0) if (what & BS.DK) else None
                 C     = np.maximum( f1-k, f0 )
@@ -254,6 +275,7 @@ class BS(object):
                    logK  = np.log( np.where( k==0., f1, k ) )
                 del _z
             else:
+                # some options are intrinsic
                 intr = intr if np.any(intr) else None
 
                 if logK is None:
@@ -272,7 +294,7 @@ class BS(object):
                 if need_pd1:
                     pd1   = _inv_sqrt_2pi * np.exp(-0.5 * d1**2) 
                     pd1   = np.where( intr, f0, pd1 ) if not intr is None else pd1
-                    vega  = pd1 / ( np.where(intr,f1,sqrtT) if not intr is None else sqrtT ) if (what & BS.VEGA) else None
+                    vega  = np.where(intr, f0, pd1 * sqrtT) if (what & BS.VEGA) else None
                     gamma = pd1 / ( np.where(intr,f1,vf) if not intr is None else vf ) if (what & BS.GAMMA) else None
                     theta = 0.5 * vol * pd1 / ( np.where(intr,f1,sqrtT) if not intr is None else sqrtT ) if (what & BS.THETA) else None
                     del pd1
@@ -281,15 +303,31 @@ class BS(object):
                     gamma = None
                     theta = None
 
+            if not C is None:
+                assert np.all(np.isfinite(C)), "Infinite C"
+                assert np.all(C <= 1.) and np.all(C >= np.maximum(1.-k,0.)), "C bound error"
+            if not delta is None:
+                assert np.all(np.isfinite(delta)), "Infinite delta"
+                assert np.all(delta >= 0.) and np.all(delta <= 1.), "Delta bound error"
+            if not dk is None:
+                assert np.all(np.isfinite(dk)), "Infinite dk"
+                assert np.all(dk <= 0.) and np.all(dk >= -1.), "dk bound error"
+            if not vega is None:
+                assert np.all(np.isfinite(vega)), "Infinite vega"
+                assert np.all(vega >= 0.) and np.all(vega <= sqrtT * _inv_sqrt_2pi), "Vega bound error"
+            if not gamma is None:
+                assert np.all(np.isfinite(gamma)), "Infinite gamma"
+                assert np.all(gamma >= 0.) and np.all(gamma <= _inv_sqrt_2pi / vf), "Gamma bound error"
+            if not theta is None:
+                assert np.all(np.isfinite(theta)), "Infinite theta"
+                assert np.all(theta >= 0.) and np.all(theta <= 0.5 * vol * _inv_sqrt_2pi / sqrtT), "Theta bound error"
+
         assert not (what & BS.PRICE) or not C is None
         assert not (what & BS.DELTA) or not delta is None
         assert not (what & BS.DK) or not dk is None
-        assert C is None or np.all(np.isfinite(C)), "Infinite C"
-        assert delta is None or np.all(np.isfinite(delta)), "Infinite delta"
-        assert dk is None or np.all(np.isfinite(dk)), "Infinite dk"
-        assert vega is None or np.all(np.isfinite(vega)), "Infinite vega"
-        assert gamma is None or np.all(np.isfinite(gamma)), "Infinite gamma"
-        assert theta is None or np.all(np.isfinite(theta)), "Infinite theta"
+        assert not (what & BS.VEGA) or not vega is None
+        assert not (what & BS.GAMMA) or not gamma is None
+        assert not (what & BS.THETA) or not theta is None
 
         # convert to puts
         if isinstance(is_call, np.ndarray):

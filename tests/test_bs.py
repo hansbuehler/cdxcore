@@ -34,8 +34,8 @@ class TestBS(unittest.TestCase):
         c2 = bs.price( x, vol=v, is_call=True, sqrtT=0.5 )
         self.assertLess( np.max( np.abs( c - c2 ) ), 1E-6 )
 
-        vr = bs.implied( x, c, is_call=True, sqrtT=1., price_tol=1E-6 )
-        vr /= 0.5
+        vr = bs.implied( x, c, is_call=True, sqrtT=1.1, price_tol=1E-6 )
+        vr /= (0.5 / 1.1)
         cr = bs.price( x, vol=vr, is_call=True, sqrtT=0.5 )
         self.assertLess( np.max( np.abs( c - cr ) ), 1E-6 )
         
@@ -43,8 +43,8 @@ class TestBS(unittest.TestCase):
         p2 = bs.price( x, vol=v, is_call=False, sqrtT=0.5 )
         self.assertLess( np.max( np.abs( p - p2 ) ), 1E-7 )
 
-        vr = bs.implied( x, p, is_call=False, sqrtT=1., price_tol=1E-7 )
-        vr /= 0.5
+        vr = bs.implied( x, p, is_call=False, sqrtT=1.1, price_tol=1E-7 )
+        vr /= (0.5 / 1.1)
         pr = bs.price( x, vol=vr, is_call=False, sqrtT=0.5 )
         self.assertLess( np.max( np.abs( p - pr ) ), 1E-6 )
         
@@ -76,14 +76,41 @@ class TestBS(unittest.TestCase):
         self.assertTrue( np.all( theta_ == theta ) )
 
         # float tests
-        price = bs.price( k=0.8, vol=0.2, sqrtT=1., is_call=False)
-        vega  = bs.vega( k=0.8, vol=0.2, sqrtT=1., is_call=False)
-        delta = bs.delta( k=0.8, vol=0.2, sqrtT=1, is_call=False)
-        gamma = bs.gamma( k=0.8, vol=0.2, sqrtT=1, is_call=False)
-        theta = bs.theta( k=0.8, vol=0.2, sqrtT=1, is_call=False)
-        dK    = bs.dk( k=0.8, vol=0.2, sqrtT=1, is_call=False)
+        price = bs.price( k=0.8, vol=0.2, sqrtT=1.1, is_call=False)
+        vega  = bs.vega( k=0.8, vol=0.2, sqrtT=1.1, is_call=False)
+        delta = bs.delta( k=0.8, vol=0.2, sqrtT=1.1, is_call=False)
+        gamma = bs.gamma( k=0.8, vol=0.2, sqrtT=1.1, is_call=False)
+        theta = bs.theta( k=0.8, vol=0.2, sqrtT=1.1, is_call=False)
+        dK    = bs.dk( k=0.8, vol=0.2, sqrtT=1.1, is_call=False)
 
-        price_, delta_, dk_,vega_,  gamma_, theta_ = bs( k=0.8, vol=0.2, sqrtT=1., is_call=False, what=bs.PRICE|bs.VEGA|bs.THETA|bs.GAMMA|bs.DK|bs.DELTA )['price','delta','dk','vega','gamma','theta']
+        # test each vs manual calc
+        from scipy.special import ndtr
+        _inv_sqrt_2pi = 1.0 / np.sqrt(2.0 * np.pi)
+        k_test, vol_test, sqrtT_test = 0.8, 0.2, 1.1
+        vf = vol_test * sqrtT_test
+        logK = math.log(k_test)
+        d1 = -logK / vf + 0.5 * vf
+        d2 = d1 - vf
+        N1 = ndtr(d1)
+        N2 = ndtr(d2)
+        pd1 = _inv_sqrt_2pi * math.exp(-0.5 * d1**2)
+        
+        # Manual calculations for put option
+        price_manual = N1 - k_test * N2 - 1.0 + k_test  # Put = Call - 1 + K
+        delta_manual = N1 - 1.0  # Put delta = Call delta - 1
+        dk_manual = -N2 + 1.0    # Put dk = Call dk + 1
+        gamma_manual = pd1 / vf
+        vega_manual = pd1 * sqrtT_test  # Standard BS vega formula
+        theta_manual = 0.5 * vol_test * pd1 / sqrtT_test
+        
+        self.assertAlmostEqual(price, price_manual, places=10)
+        self.assertAlmostEqual(delta, delta_manual, places=10)
+        self.assertAlmostEqual(dK, dk_manual, places=10)
+        self.assertAlmostEqual(gamma, gamma_manual, places=10)
+        self.assertAlmostEqual(vega, vega_manual, places=10)
+        self.assertAlmostEqual(theta, theta_manual, places=10)
+
+        price_, delta_, dk_,vega_,  gamma_, theta_ = bs( k=0.8, vol=0.2, sqrtT=1.1, is_call=False, what=bs.PRICE|bs.VEGA|bs.THETA|bs.GAMMA|bs.DK|bs.DELTA )['price','delta','dk','vega','gamma','theta']
             
         self.assertEqual( price, price )
         self.assertEqual( delta_, delta )
@@ -92,12 +119,12 @@ class TestBS(unittest.TestCase):
         self.assertEqual( vega_, vega )
         self.assertEqual( theta_, theta )
 
-        r = bs( k=0.8, vol=0.2, sqrtT=1., is_call=False, what=bs.PRICE|bs.VEGA|bs.THETA|bs.GAMMA|bs.DK|bs.DELTA )
+        r = bs( k=0.8, vol=0.2, sqrtT=1.1, is_call=False, what=bs.PRICE|bs.VEGA|bs.THETA|bs.GAMMA|bs.DK|bs.DELTA )
         self.assertEqual( list(r.keys()), ['price','delta','dk','gamma','vega','theta'] )
-        r = bs( k=0.8, vol=0.2, sqrtT=1., is_call=False, what=bs.PRICE|bs.THETA|bs.GAMMA|bs.DELTA )
+        r = bs( k=0.8, vol=0.2, sqrtT=1.1, is_call=False, what=bs.PRICE|bs.THETA|bs.GAMMA|bs.DELTA )
         self.assertEqual( list(r.keys()), ['price','delta','gamma','theta'] )
         
-        price_, delta_, dk_, gamma_, vega_, theta_ = bs( k=0.8, vol=0.2, sqrtT=1., is_call=False, what=bs.PRICE|bs.VEGA|bs.THETA|bs.GAMMA|bs.DK|bs.DELTA )
+        price_, delta_, dk_, gamma_, vega_, theta_ = bs( k=0.8, vol=0.2, sqrtT=1.1, is_call=False, what=bs.PRICE|bs.VEGA|bs.THETA|bs.GAMMA|bs.DK|bs.DELTA )
         
         self.assertEqual( price, price )
         self.assertEqual( delta_, delta )

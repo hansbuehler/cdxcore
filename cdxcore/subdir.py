@@ -482,10 +482,7 @@ PANDAS_PARQUET = Format.PANDAS_PARQUET
 PYTREE_HDF5 = Format.PYTREE_HDF5
 
 class VersionPresentError(RuntimeError):
-    """
-    Exception raised in case a file was read which had a version, but no test version
-    was provided.
-    """
+    """  Exception raised in case a file was read which had a version, but no test version was provided. """
     pass
 
 # ========================================================================
@@ -509,7 +506,7 @@ class CacheMode(object):
     +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
     | delete existing object if incompatible  | x     |       |       |  x      | x      |          |           |
     +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
-    | throw :class:`cdxcore.subdir.CacheMustExistError` if cache does not exist |       |       |       |         |        |          | x         |
+    | throw exceotion if cache does not exist |       |       |       |         |        |          | x         |
     +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
 
     **Standard Caching Semantics**
@@ -556,13 +553,13 @@ class CacheMode(object):
             The default is ``None`` in which case ``"on"`` is used.
     """
 
-    ON = "on"  
-    GEN = "gen"
-    OFF = "off"
-    UPDATE = "update"
-    CLEAR = "clear"
-    READONLY = "readonly"
-    CACHEONLY = "cacheonly"
+    ON = "on"   # :meta private:
+    GEN = "gen" # :meta private:
+    OFF = "off" # :meta private:
+    UPDATE = "update" # :meta private:
+    CLEAR = "clear" # :meta private:
+    READONLY = "readonly" # :meta private:
+    CACHEONLY = "cacheonly" # :meta private:
 
     MODES = [ ON, GEN, OFF, UPDATE, CLEAR, READONLY, CACHEONLY ]
     """

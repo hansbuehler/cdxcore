@@ -738,9 +738,10 @@ class JCPool( object ):
             " functools.wraps fails on some callable objects "
         return delayed_function
 
-    def parallel(self, jobs : Sequence|Mapping) -> Iterable:
+    def parallel(self, jobs : Iterable|Sequence|Mapping) -> Iterable:
         """
         Process a number of jobs in parallel using the current multiprocessing pool.
+        This is equivalent to :meth:`cdxcore.jcpool.JCpool.__call__`.
         
         All functions used in ``jobs`` must have been decorated using :dec:`cdxcore.jcpool.JCPool.delayed`.
         
@@ -755,9 +756,8 @@ class JCPool( object ):
         
         Parameters
         ----------
-            jobs :  Sequence | Mapping
-                Can be a :class:`Sequence` containing ``Callable`` functions,
-                or a :class:`Mapping` whose values are ``Callable`` functions.
+            jobs :  Iterable | Sequence | Mapping
+                A sequence, iterator or mapping of ``Callable`` functions.
 
                 Each ``Callable`` used as part of either must
                 have been decorated with :dec:`cdxcore.jcpool.JCPool.delayed`.
@@ -768,13 +768,14 @@ class JCPool( object ):
                 An iterator which yields results as soon as they are available.   
                 If ``jobs`` is a :class:`Mapping`, then the resutling iterator will generate tuples with the first
                 element equal to the mapping key of the respective function job. This function will *not*
-                return a dictionary.
+                return a dictionary. See the example described in :mod:`cdxcore.jcpool` in section "Dict".
         """
         return _parallel( self._pool, jobs )
     
-    def __call__(self, jobs : Sequence|Mapping) -> Iterable:
+    def __call__(self, jobs : Iterable|Sequence|Mapping) -> Iterable:
         """
         Process a number of jobs in parallel using the current multiprocessing pool.
+        This is equivalent to :meth:`cdxcore.jcpool.JCpool.parallel`.
         
         All functions used in ``jobs`` must have been decorated using :dec:`cdxcore.jcpool.JCPool.delayed`.
         
@@ -789,9 +790,8 @@ class JCPool( object ):
         
         Parameters
         ----------
-            jobs :  Sequence | Mapping
-                Can be a :class:`Sequence` containing ``Callable`` functions,
-                or a :class:`Mapping` whose values are ``Callable`` functions.
+            jobs :  Iterable | Sequence | Mapping
+                A sequence, iterator or mapping of ``Callable`` functions.
 
                 Each ``Callable`` used as part of either must
                 have been decorated with :dec:`cdxcore.jcpool.JCPool.delayed`.
@@ -802,10 +802,10 @@ class JCPool( object ):
                 An iterator which yields results as soon as they are available.   
                 If ``jobs`` is a :class:`Mapping`, then the resutling iterator will generate tuples with the first
                 element equal to the mapping key of the respective function job. This function will *not*
-                return a dictionary.
+                return a dictionary. See the example described in :mod:`cdxcore.jcpool` in section "Dict".
         """
         return _parallel( self._pool, jobs )
-
+    
     def parallel_to_dict(self, jobs : Mapping) -> dict:
         """
         Process a number of jobs in parallel using the current multiprocessing pool,
@@ -831,7 +831,7 @@ class JCPool( object ):
         """
         return _parallel_to_dict( self._pool, jobs )
                 
-    def parallel_to_list(self, jobs : Sequence ) -> Sequence:
+    def parallel_to_list(self, jobs : Iterable|Sequence ) -> Sequence:
         """
         Process a number of jobs in parallel using the current multiprocessing pool,
         and return all results in a list upon completion.
@@ -841,8 +841,8 @@ class JCPool( object ):
         
         Parameters
         ----------
-            jobs : Sequence 
-                An sequence of ``Callable`` functions, each of which 
+            jobs : Iterable | Sequence 
+                An sequence or iterable of ``Callable`` functions, each of which 
                 must have been decorated
                 with :dec:`cdxcore.jcpool.JCPool.delayed`.
                 

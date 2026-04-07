@@ -498,19 +498,19 @@ class CacheMode(object):
 
     **Summary mechanics:**
         
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
-    | Action                                  | on    | gen   | off   | update  | clear  | readonly | forceuse |
-    +=========================================+=======+=======+=======+=========+========+==========+==========+
-    | load cache from disk if exists          | x     | x     |       |         |        | x        | x        |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
-    | write updates to disk                   | x     | x     |       |  x      |        |          |          |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
-    | delete existing object                  |       |       |       |         | x      |          |          |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
-    | delete existing object if incompatible  | x     |       |       |  x      | x      |          |          |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
-    | throw exception if cache does not exist |       |       |       |         |        |          | x        |
-    +-----------------------------------------+-------+-------+-------+---------+--------+----------+----------+
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
+    | Action                                  | on    | gen   | off   | update  | clear  | readonly | cacheonly |
+    +=========================================+=======+=======+=======+=========+========+==========+===========+
+    | load cache from disk if exists          | x     | x     |       |         |        | x        | x         |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
+    | write updates to disk                   | x     | x     |       |  x      |        |          |           |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
+    | delete existing object                  |       |       |       |         | x      |          |           |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
+    | delete existing object if incompatible  | x     |       |       |  x      | x      |          |           |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
+    | throw :class:`cdxcore.subdir.CacheMustExistError` if cache does not exist |       |       |       |         |        |          | x         |
+    +-----------------------------------------+-------+-------+-------+---------+--------+----------+-----------+
 
     **Standard Caching Semantics**
 
@@ -532,7 +532,7 @@ class CacheMode(object):
                 if not r is None:
                     return r
                 if cache_mode.must_exist:
-                    raise FileNotFoundError(filename, "Cannot read cached file {filename}.")
+                    raise CacheMustExistError(filename, "Cannot read cached file {filename}.")
             
             r = f(...) # compute result
             
@@ -678,6 +678,11 @@ class CacheMode(object):
     def is_cacheonly(self) -> bool:
         """ Whether this cache mode is CACHEONLY. """
         return self.mode == self.CACHEONLY
+
+class CacheMustExistError( FileNotFoundError ):
+    """ Exception thrown if :class:`cdxcore.subdir.CacheMode` is set to ``"cacheonly"``
+    and the cache does not exist."""
+    pass
 
 class CacheController( object ):
     r"""
@@ -1731,6 +1736,7 @@ class SubDir(object):
                         def read_h5(h, top:str):
                             r = dict()
                             for k,v in h.items():
+                                assert isinstance(k, str), f"Internal error: assumed that HDF5 keys are strings. Found {str(k)[:20]} type {type(k)}"
                                 if isinstance(v, h5py.Dataset):
                                     if k[:4] == "_1_N":
                                         v = v[()]
@@ -1758,10 +1764,10 @@ class SubDir(object):
                                         v = v.decode("utf-8")
                                         r[k[4:]] = datetime.time.fromisoformat(v)
                                         continue
-                                    else:
-                                        r[k] = v[()]
+                                    r[k] = v[()]
                                 elif isinstance(v, h5py.Group):
                                     if k[:4] == "_1_L":
+                                        # lists
                                         k    = k[4:]
                                         col  = read_h5( v, top=f"{top}.{k}" )
                                         n    = len(col)
@@ -2253,7 +2259,7 @@ class SubDir(object):
                     
                         dtstr = h5py.string_dtype(encoding='utf-8')
                         def write_h5(f, k, v, top:str):
-                            if k[:3] == '_1_':
+                            if isinstance(k, str) and k[:3] == '_1_':
                                 raise ValueError("Cannot write '{full_file_name}: HDF5 format does not allow key names starting with '_1_'. Found '{k}'.")
                             if isinstance( v, np.ndarray ):
                                 try:
@@ -3893,7 +3899,7 @@ class CacheInfo(PrettyObject):
     Functions decorated with :dec:`cdxcore.subdir.SubDir.cache` 
     will have a member ``cache_info`` of this type
     """
-    def __init__(self, name: str, idversion: str, keep_last_arguments : bool ) -> None:
+    def __init__(self, name: str, subdir : SubDir, idversion: str, keep_last_arguments : bool ) -> None:
         """
         :meta private:
         """
@@ -3904,6 +3910,7 @@ class CacheInfo(PrettyObject):
         self.label       = None                  #: Label of the last function call.
         self.version     = idversion             #: (hash) version used. This is equal to ``F.version.unique_id64``.
         self.last_cached = None                  #: Whether the last function call restored data from disk.
+        self.subdir      = subdir
         
         if keep_last_arguments:             
             self.last_arguments = None                #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` for the relevant :class:`cdxcore.subdir.CacheController`.
@@ -4126,7 +4133,7 @@ class _CacheWrapper(object):
         Returns
         -------
             unique_id : str
-                The unique_id for ``F(*args,**kwargs)``.
+                The unique_id for ``F(*args,**kwargs)``. This ID does not contain directory information.
             filename : str
                 Filename for ``F(*args,**kwargs)``, without extension.
             label : str
@@ -4272,6 +4279,11 @@ class _CacheWrapper(object):
                     
                 filename, Result : Any
                     Return from the function ``F(*args,**kwargs)``, cached or not.
+                    
+            Raises
+            ------
+                Must exist: :class:`cdxcore.subdir.CacheMustExistError`
+                    In case the effective cache mode was "``cacheonly``" and the cache file did not exist.
             """
             unique_id, filename, label, sub_dir, arguments = self.cache_create_id(args=args,kwargs=kwargs)
                  
@@ -4301,10 +4313,9 @@ class _CacheWrapper(object):
             # execute caching
             # ---------------
 
-            verify_inp( not cache_generate_only or cache_mode.write, lambda : f"Cannot use 'cache_generate_only' with cache mode {cache_mode}: must allow writing.")
+            verify_inp( not cache_generate_only or cache_mode.write, lambda : f"'{self._name}' '{label}'': cannot use 'cache_generate_only' with cache mode {cache_mode}: must allow writing.")
                     
             if cache_mode.delete:
-                verify_inp( not cache_generate_only, lambda : f"Cannot use 'cache_generate_only' with cache mode {cache_mode}: cannot force deletion.")
                 sub_dir.delete( filename )
 
             elif cache_mode.read:
@@ -4325,7 +4336,7 @@ class _CacheWrapper(object):
                 if r is tag:
                     if cache_mode.must_exist:
                         ffn = sub_dir.full_file_name(filename)
-                        raise FileNotFoundError( ffn, f"Failed to read cache '{unique_id}' for '{label}'.")
+                        raise CacheMustExistError( ffn, f"'{self._name}': failed to read cache '{unique_id}' for '{label}'.")
                     
                 else:
                     if not track_cached_files is None:
@@ -4342,7 +4353,7 @@ class _CacheWrapper(object):
                         return unique_id, r
                     return r
             else:
-                verify_inp( not cache_generate_only, lambda : f"Cannot use 'cache_generate_only' for '{label}' with cache mode {cache_mode}: must allow reading.")
+                verify_inp( not cache_generate_only, lambda : f"'{self._name}': cannot use 'cache_generate_only' for '{label}' with cache mode {cache_mode}: must allow reading.")
 
             r = self._F(*args, **kwargs)
             
@@ -4366,6 +4377,7 @@ class _CacheWrapper(object):
             return r
 
         execute.cache_info   = CacheInfo( self._name, 
+                                          subdir=self._subdir,
                                           idversion=idversion, 
                                           keep_last_arguments=self.cache_controller.keep_last_arguments )
         update_wrapper( wrapper=execute, wrapped=self._F )

@@ -14,7 +14,7 @@ import unittest as unittest
 """
 Imports
 """
-from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker, CacheController, CacheInfo
+from cdxcore.subdir import SubDir, CacheMode, VersionError, VersionPresentError, VersionedCacheRoot, CacheTracker, CacheController, CacheInfo, CacheMustExistError
 from cdxcore.version import version, VersionError
 from cdxcore.uniquehash import unique_hash16
 from cdxcore.verbose import Context
@@ -451,6 +451,16 @@ class Test2(unittest.TestCase):
         _ = f(A(2))
         self.assertTrue( f.cache_info.last_cached )
         
+        # cacheonly
+                
+        _ = f(B(22))# generate
+        _ = f(B(22), override_cache_mode="cacheonly")  # no cache left after this
+        self.assertTrue(f.cache_info.last_cached ) # cached        
+        _ = f(B(22), override_cache_mode="clear")  # no cache left after this
+        with self.assertRaises(CacheMustExistError):
+            _ = f(B(22), override_cache_mode="cacheonly")  # can't read
+        
+        # laberl
         @sub.cache("1.0", label=lambda x: f"f({x})")
         def f(x):
             return x
@@ -468,6 +478,7 @@ class Test2(unittest.TestCase):
         self.assertEqual( f.cache_info.filename, "f(1)" )
         uid, _ = f(1, return_cache_uid=True)
         self.assertEqual( uid, "f(1)" )
+        
         
         # test member caching
         

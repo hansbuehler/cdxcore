@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Basic error handling and reporting functions with minimal runtime performance overhead for string formatting.
 

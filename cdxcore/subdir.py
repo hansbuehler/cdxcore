@@ -1,4 +1,3 @@
-from __future__ import annotations
 """
 Utilities for file i/o, directory management and
 streamlined versioned caching.
@@ -369,6 +368,7 @@ Import
 Documentation
 -------------
 """
+from __future__ import annotations
 
 import os as os
 import uuid as uuid
@@ -404,11 +404,6 @@ from .verbose import Context
 from .version import Version, version as version_decorator, VersionError
 from .util import fmt_list, fmt_filename, DEF_FILE_NAME_MAP, plain, is_filename, fmt_dict, ActiveFormat, qualified_name
 from .uniquehash import unique_hash48, UniqueLabel, NamedUniqueHash, named_unique_filename48_8
-
-"""
-:meta private:
-compression
-"""
 
 def _import_jsonpickle():
     """ For some dodgy reason importing `jsonpickle` normally causes my tests to fail with a recursion error """
@@ -3371,6 +3366,40 @@ class SubDir(object):
         In particular, the filename is now ``h2(1,1).pck`` without any hash.
         If ``uid`` is used the parameter of the function are not hashed. Like ``label`` 
         the parameter ``uid`` can also be a :meth:`str.format` string or a callable.
+
+        **Identifying Files used for Caching**
+
+        To find out into which file a function was cached, use the ``cache_info`` property of type :class:`cdxcore.subdir.CacheInfo` of a decorated function::
+
+            from cdxcore.subdir import SubDir
+            sd = SubDir("!/.cache")
+
+            @sd.cache("0.1", label=lambda x: f"dir/f({x})")
+            def f(x):
+                return x*x
+            _ = f(1, return_cache_uid=True)
+
+            print("unique_id:", f.cache_info.unique_id)
+            print("filename:", f.cache_info.filename)
+            print("full_file_name:", f.cache_info.full_file_name)
+            print("path:", f.cache_info.path)
+            print("sub_dir:", f.cache_info.sub_dir)
+
+        Returns::
+
+            unique_id: dir/f(1) c64e9c51
+            filename: f(1) c64e9c51
+            full_file_name: /tmp/.cache/dir/f(1) c64e9c51.pck
+            path: /tmp/.cache/dir/
+            sub_dir: /tmp/.cache/dir/;*.pck
+
+        Using ``cache_info`` is convenient but not thread-safe. To get the unique ID in a thread-safe way, use the
+        ``return_cache_uid`` parameter of the decorated function. If used, the function returns the unique ID
+        as well as its original function result::
+
+            uid, _ = f(1, return_cache_uid=True)
+            print("Thread safe uid:", uid)
+            # -> Thread safe uid: dir/f(1) c64e9c51
             
         **Controlliong which Parameters to Hash**
             
@@ -3891,26 +3920,45 @@ class CacheTracker(object):
 
 class CacheInfo(PrettyObject):
     """
-    Information on cfunctions decorated with :dec:`cdxcore.subdir.SubDir.cache`.
-    
+    Information on functions decorated with :dec:`cdxcore.subdir.SubDir.cache`.
+
     Functions decorated with :dec:`cdxcore.subdir.SubDir.cache` 
-    will have a member ``cache_info`` of this type
+    will have a member ``cache_info`` of this type. Its information is updated after each function call. Note that this is *not* thread-safe.
+    In order to obtain thread-safe information on caching, use the ``return_cache_uid`` parameter when calling a decorated function::
+
+        from cdxcore.subdir import SubDir
+        sd = SubDir("!/.cache")
+
+        @sd.cache("0.1", label=lambda x: f"f({x})")
+        def f(x):
+            return x*x
+        uid, result = f(1, return_cache_uid=True)
+        print(uid, ":", result) # --> f(1) c64e9c51 : 1
     """
     def __init__(self, name: str, subdir : SubDir, idversion: str, keep_last_arguments : bool ) -> None:
         """
         :meta private:
         """
-        self.name        = name                  #: Decoded name of the function.        
-        self.unique_id   = None                  #: Unique ID of the last function call.
-        self.filename    = None                  #: Unique filename of the last function call.
-        self.path        = None                  #: Fully qualified path where the file was stored.
-        self.label       = None                  #: Label of the last function call.
-        self.version     = idversion             #: (hash) version used. This is equal to ``F.version.unique_id64``.
-        self.last_cached = None                  #: Whether the last function call restored data from disk.
-        self.subdir      = subdir
+        self.name        : str = name                  #: Decoded name of the function.        
+        self.unique_id   : str = None                  #: Unique ID of the last function call.
+        self.filename    : str = None                  #: Unique filename of the last function call.
+        self.label       : str = None                  #: Label of the last function call.
+        self.version     : str = idversion             #: (hash) version used. This is equal to ``F.version.unique_id64``.
+        self.last_cached : bool = None                 #: Whether the last function call restored data from disk; ``None`` if no function call was made yet.
+        self.sub_dir     : SubDir = None               #: Sub-directory where the file was stored (this can differ from the original sub-directory of the function label contains directory information).
         
         if keep_last_arguments:             
-            self.last_arguments = None                #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` for the relevant :class:`cdxcore.subdir.CacheController`.
+            self.last_arguments : dict = None          #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` when the :class:`cdxcore.subdir.CacheController` was created.
+
+    @property
+    def path(self) -> str:
+        """ Path of the last cached file, or ``None`` if no file was cached yet. """
+        return self.sub_dir.path if not self.sub_dir is None else None
+    
+    @property
+    def full_file_name(self) -> str:
+        """ Full file name of the last cached file, or ``None`` if no file was cached yet. """
+        return self.sub_dir.full_file_name(self.filename) if not self.filename is None and not self.sub_dir is None else None
 
 class _CacheWrapper(object):
     
@@ -4130,11 +4178,14 @@ class _CacheWrapper(object):
         Returns
         -------
             unique_id : str
-                The unique_id for ``F(*args,**kwargs)``. This ID does not contain directory information.
+                The unique_id for ``F(*args,**kwargs)``, typically the filename plus any directory information contained in the label or uid.
+                If ``label`` is used, this will terminate in a hash. Use ``label`` to get the label without the hash information (which is therefore not necessarily unique).
             filename : str
-                Filename for ``F(*args,**kwargs)``, without extension.
+                The plain filename for ``F(*args,**kwargs)``, without extension.
+                If the generated label or uid contains directory information, this is stripped off for the filename, but not for the ``unique_id``.
             label : str
                 The readable label for the function call without hash information (hence not necessarily unique).
+                If ``uid`` is used instead of ``label``, this is the same as the filename.
             sub_dir : :class:`cdxcore.subdir.SubDir`
                 The  directory where ``filename`` is located.
             arguments : Mapping | None
@@ -4252,7 +4303,7 @@ class _CacheWrapper(object):
                     
                 return_cache_uid : bool, default ``False``
                     If ``True``, then this function returns not only the result
-                    of ``F``, the tuple ``unique_id, result``. This is a thread-safe
+                    of ``F``, but a tuple ``unique_id, result``. This is a thread-safe
                     method of obtaining a ``unique_id`` for a given function call.
                     
                 cache_generate_only : bool, default ``False``
@@ -4290,11 +4341,11 @@ class _CacheWrapper(object):
             execute.cache_info.label      = label
             execute.cache_info.filename   = filename # this is the unique ID for this call
             execute.cache_info.unique_id  = unique_id 
-            execute.cache_info.path       = sub_dir.path
+            execute.cache_info.sub_dir    = sub_dir
             
             if self.cache_controller.keep_last_arguments:
                 arguments      = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
-                info_arguments = OrderedDict()
+                info_arguments = dict()
                 for argname, argvalue in arguments.items():
                     info_arguments[argname] = str(argvalue)[:100]
                 execute.cache_info.arguments = info_arguments

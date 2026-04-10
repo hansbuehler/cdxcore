@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Basic
 `Black & Scholes <https://en.wikipedia.org/wiki/Black%E2%80%93Scholes_model>`__ pricing routines.

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Basic utilities for Python such as type management, formatting, some trivial timers.
 
@@ -12,6 +10,7 @@ Import
 Documentation
 -------------
 """
+from __future__ import annotations
 
 import datetime as datetime
 import types as types

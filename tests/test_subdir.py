@@ -460,15 +460,22 @@ class Test2(unittest.TestCase):
         with self.assertRaises(CacheMustExistError):
             _ = f(B(22), override_cache_mode="cacheonly")  # can't read
         
-        # laberl
-        @sub.cache("1.0", label=lambda x: f"f({x})")
+        # label
+        @sub.cache("1.0", label=lambda x: f"dir/f({x})")
         def f(x):
             return x
         
         _ = f(1)
         self.assertEqual( f.cache_info.filename[:5], "f(1) " )
         uid, _ = f(1, return_cache_uid=True)
-        self.assertEqual( uid[:5], "f(1) " )
+        self.assertEqual( uid, "dir/f(1) c64e9c51" )
+        self.assertEqual( f.cache_info.unique_id, "dir/f(1) c64e9c51" )
+        self.assertEqual( f.cache_info.filename, "f(1) c64e9c51" )
+        ffn = "subdir_cache_test/dir/f(1) c64e9c51.pck"
+        lffn = len(ffn)
+        self.assertEqual( f.cache_info.full_file_name[-lffn:], ffn )
+        self.assertEqual( f.cache_info.path[-len("/subdir_cache_test/dir/"):], "/subdir_cache_test/dir/" )
+        self.assertEqual( f.cache_info.sub_dir.fmt, SubDir.PICKLE )
         
         @sub.cache("1.0", uid=lambda x: f"f({x})")
         def f(x):
@@ -797,8 +804,6 @@ class Test2(unittest.TestCase):
 
             sub.write("test",x)
             r = sub.read("test", raise_on_error=True)
-            print(x)
-            print(r)
             self.assertTrue( equal( x, r ))
 
             sub.write("test", x, version="0.1")        

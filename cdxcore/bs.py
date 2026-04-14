@@ -29,7 +29,6 @@ Documentation
 """
 
 from __future__ import annotations
-import sys
 
 from .pretty import PrettyValueObject
 from .verbose import Context   # is now a local include
@@ -38,7 +37,7 @@ from .util import fmt_digits
 
 import math as math
 import warnings as warnings
-from enum import IntFlag, auto
+from enum import IntFlag, auto, Enum
 import numpy as np
 
 # Optional dependencies
@@ -107,7 +106,8 @@ class BS(object):
                   sqrtT : np.ndarray|float=1., 
                   what : int = PRICE, 
                   is_call : np.ndarray|bool = True, *, 
-                  logK : np.ndarray|float|None = None ) -> PrettyValueObject|np.ndarray|float:
+                  logK : np.ndarray|float|None = None, 
+                  eps : float | None = None ) -> PrettyValueObject|np.ndarray|float:
         r"""
         Compute Black Scholes call option prices, and greeks in drift-less price domain efficiently.
         
@@ -164,6 +164,13 @@ class BS(object):
         logK : np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
             The function will mask this array where ``k==0``, hence ``logK`` can be left ``NaN`` in those locations.
+
+        eps : float | None, default ``None``
+            An optional precision tolerance for the internal checks. If not provided, the default is ``bs._eps`` (1E-8).
+            Note that the function will cap/floor the values of prices or greeks with the respective bounds even if the
+            validity test passed. Hence, if ``eps`` 
+            is set to a large number, this will lead to floored/capped outputs. Note, however, that some bounds such
+            as the maximum value of a call of spot are not tight.
 
         Returns
         -------
@@ -250,33 +257,34 @@ class BS(object):
                     gamma = None
                     theta = None
 
+            eps = self._eps if eps is None else eps
             if not C is None:
                 assert np.isfinite(C), "Infinite C"
                 I = max(0.,1-k)
-                if not (C <= 1.+self._eps and C >= I-self._eps): raise FloatingPointError("Internal C bound error", C, 1., I)
+                if not (C <= 1.+eps and C >= I-eps): raise FloatingPointError("Internal C bound error", C, 1., I)
                 C= min(1.,max(C,I))
             if not delta is None:
                 assert np.isfinite(delta), "Infinite delta"            
-                if not (delta >= -self._eps and delta <= 1.+self._eps): raise FloatingPointError("Internal Delta bound error", delta, 0., 1.)
+                if not (delta >= -eps and delta <= 1.+eps): raise FloatingPointError("Internal Delta bound error", delta, 0., 1.)
                 delta = min(1.,max(delta,0.))
             if not dk is None:
                 assert np.isfinite(dk), "Infinite dk"
-                if not (dk <= self._eps and dk >= -1.-self._eps): raise FloatingPointError("Internal dk bound error", dk, -1., 0.)
+                if not (dk <= eps and dk >= -1.-eps): raise FloatingPointError("Internal dk bound error", dk, -1., 0.)
                 dk = min(0.,max(dk,-1.))
             if not vega is None:
                 assert np.isfinite(vega), "Infinite vega"
                 max_vega = sqrtT * _inv_sqrt_2pi
-                if not (vega >= -self._eps and vega <= max_vega+self._eps): raise FloatingPointError("Internal Vega bound error", vega, 0., max_vega)
+                if not (vega >= -eps and vega <= max_vega+eps): raise FloatingPointError("Internal Vega bound error", vega, 0., max_vega)
                 vega = min(max_vega, max(vega,0.))
             if not gamma is None:
                 assert np.isfinite(gamma), "Infinite gamma"
                 max_gamma = _inv_sqrt_2pi / vf
-                if not (gamma >= -self._eps and gamma <= max_gamma+self._eps): raise FloatingPointError("Internal Gamma bound error", gamma, 0., max_gamma)
+                if not (gamma >= -eps and gamma <= max_gamma+eps): raise FloatingPointError("Internal Gamma bound error", gamma, 0., max_gamma)
                 gamma = min(max_gamma, max(gamma,0.))  
             if not theta is None:
                 assert np.isfinite(theta), "Infinite theta"
                 max_theta = 0.5 * vol * _inv_sqrt_2pi / sqrtT
-                if not (theta >= -self._eps and theta <= max_theta+self._eps): raise FloatingPointError("Internal Theta bound error", theta, 0., max_theta)
+                if not (theta >= -eps and theta <= max_theta+eps): raise FloatingPointError("Internal Theta bound error", theta, 0., max_theta)
                 theta = min(max_theta, max(theta,0.))
 
         else:
@@ -295,7 +303,7 @@ class BS(object):
                 _z    = vega if not vega is None else gamma 
                 theta = ( np.zeros_like(k) if _z is None else _z ) if (what & BS.THETA) else None
                 if need_logK and logK is None:
-                   logK  = np.log( np.where( k==0., f1, k ) )
+                    logK  = np.log( np.where( k==0., f1, k ) )
                 del _z
             else:
                 # some options are intrinsic
@@ -326,33 +334,52 @@ class BS(object):
                     gamma = None
                     theta = None
 
+            eps = self._eps if eps is None else eps
             if not C is None:
                 assert np.all(np.isfinite(C)), "Infinite C"
                 I = np.maximum(1.-k,0.)
-                if not (np.all(C-self._eps <= 1.) and np.all(C+self._eps >= I)): raise FloatingPointError(f"Internal C bound error: #undershoot: {np.sum(C < I-self._eps)}, #overshoot: {np.sum(C > 1.+self._eps)}")
+                if not np.all(C-eps <= 1.):
+                    raise FloatingPointError(f"Internal C bound error: #overshoot: {np.sum(C > 1.+eps)} by {np.min(C - 1.)}")
+                if not np.all(C+eps >= I):
+                    raise FloatingPointError(f"Internal C bound error: #undershoot: {np.sum(C < I-eps)}, by {np.max(I - C)}")
                 C = np.minimum(1.,np.maximum(C,I))
             if not delta is None:
                 assert np.all(np.isfinite(delta)), "Infinite delta"
-                if not (np.all(delta >= -self._eps) and np.all(delta <= 1.+self._eps)): raise FloatingPointError(f"Internal Delta bound error: #undershoot: {np.sum(delta < -self._eps)}, #overshoot: {np.sum(delta > 1.+self._eps)}")
+                if not np.all(delta >= -eps):
+                    raise FloatingPointError(f"Internal Delta bound error: #undershoot: {np.sum(delta < -eps)} by {np.max(-eps - delta)}")
+                if not np.all(delta <= 1.+eps):
+                    raise FloatingPointError(f"Internal Delta bound error: #overshoot: {np.sum(delta > 1.+eps)} by {np.max(delta - (1.+eps))}")
                 delta = np.minimum(1.,np.maximum(delta,0.))
             if not dk is None:
                 assert np.all(np.isfinite(dk)), "Infinite dk"
-                if not (np.all(dk <= self._eps) and np.all(dk >= -1.-self._eps)): raise FloatingPointError(f"Internal dk bound error: #undershoot: {np.sum(dk < -1.-self._eps)}, #overshoot: {np.sum(dk > self._eps)}")
+                if not np.all(dk <= eps):
+                    raise FloatingPointError(f"Internal dk bound error: #undershoot: {np.sum(dk < -1.-eps)} by {np.max(-eps - dk)}")
+                if not np.all(dk >= -1.-eps):
+                    raise FloatingPointError(f"Internal dk bound error: #overshoot: {np.sum(dk > eps)} by {np.max(dk - eps)}")
                 dk = np.minimum(0.,np.maximum(dk,-1.))
             if not vega is None:
                 assert np.all(np.isfinite(vega)), "Infinite vega"
                 max_vega = sqrtT * _inv_sqrt_2pi
-                if not (np.all(vega >= -self._eps) and np.all(vega <= max_vega+self._eps)): raise FloatingPointError(f"Internal Vega bound error: #undershoot: {np.sum(vega < -self._eps)}, #overshoot: {np.sum(vega > max_vega+self._eps)}")
+                if not np.all(vega >= -eps):
+                    raise FloatingPointError(f"Internal Vega bound error: #undershoot: {np.sum(vega < -eps)} by {np.max(-eps - vega)}")
+                if not np.all(vega <= max_vega+eps):
+                    raise FloatingPointError(f"Internal Vega bound error: #overshoot: {np.sum(vega > max_vega+eps)} by {np.max(vega - (max_vega+eps))}")
                 vega = np.minimum(max_vega, np.maximum(vega,0.))
             if not gamma is None:
                 assert np.all(np.isfinite(gamma)), "Infinite gamma"
                 max_gamma = _inv_sqrt_2pi / vf
-                if not (np.all(gamma >= -self._eps) and np.all(gamma <= max_gamma+self._eps)): raise FloatingPointError(f"Internal Gamma bound error: #undershoot: {np.sum(gamma < -self._eps)}, #overshoot: {np.sum(gamma > max_gamma+self._eps)}")
+                if not np.all(gamma >= -eps):
+                    raise FloatingPointError(f"Internal Gamma bound error: #undershoot: {np.sum(gamma < -eps)} by {np.max(-eps - gamma)}")
+                if not np.all(gamma <= max_gamma+eps):
+                    raise FloatingPointError(f"Internal Gamma bound error: #overshoot: {np.sum(gamma > max_gamma+eps)} by {np.max(gamma - (max_gamma+eps))}")
                 gamma = np.minimum(max_gamma, np.maximum(gamma,0.))
             if not theta is None:
                 assert np.all(np.isfinite(theta)), "Infinite theta"
                 max_theta = 0.5 * vol * _inv_sqrt_2pi / sqrtT
-                if not (np.all(theta >= -self._eps) and np.all(theta <= max_theta+self._eps)): raise FloatingPointError(f"Internal Theta bound error: #undershoot: {np.sum(theta < -self._eps)}, #overshoot: {np.sum(theta > max_theta+self._eps)}")
+                if not np.all(theta >= -eps):
+                    raise FloatingPointError(f"Internal Theta bound error: #undershoot: {np.sum(theta < -eps)} by {np.max(-eps - theta)}")
+                if not np.all(theta <= max_theta+eps):
+                    raise FloatingPointError(f"Internal Theta bound error: #overshoot: {np.sum(theta > max_theta+eps)} by {np.max(theta - (max_theta+eps))}")
                 theta = np.minimum(max_theta, np.maximum(theta,0.))
 
         assert not (what & BS.PRICE) or not C is None
@@ -407,7 +434,7 @@ class BS(object):
         assert len(ret) > 1, "Should have returned single item earlier"
         return ret
 
-    def price( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
+    def price( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
         r"""
         Compute Black Scholes option prices in drift-less price domain.
         
@@ -427,15 +454,18 @@ class BS(object):
 
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
+
+        eps : float | None, default ``None``
+            An optional precision tolerance for internal price validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
         Returns
         -------
         price : np.ndarray
             Black Scholes prices
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.PRICE )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.PRICE, eps=eps )
 
-    def delta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
+    def delta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
         r"""
         Compute Black Scholes option deltas in drift-less price domain.
         
@@ -455,15 +485,18 @@ class BS(object):
 
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
-                
+
+        eps : float | None, default ``None``
+            An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
+                             
         Returns
         -------
         delta : np.ndarray
             Black Scholes deltas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DELTA )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DELTA, eps=eps )
 
-    def dk( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
+    def dk( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
         r"""
         Compute Black Scholes dk (derivative in k) in drift-less price domain.
         
@@ -483,15 +516,18 @@ class BS(object):
 
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
+
+        eps : float | None, default ``None``
+            An optional precision tolerance for internal price validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
         Returns
         -------
         dk : np.ndarray
             Black Scholes dk (derivative in k)
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DK )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DK, eps=eps )
 
-    def gamma( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
+    def gamma( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
         r"""
         Compute Black Scholes option gamma in drift-less price domain.
         
@@ -511,15 +547,18 @@ class BS(object):
 
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
+
+        eps : float | None, default ``None``
+            An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
         Returns
         -------
         gamma : np.ndarray
             Black Scholes gammas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.GAMMA )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.GAMMA, eps=eps )
 
-    def vega( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None ):
+    def vega( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
         r"""
         Compute Black Scholes option vega in drift-less price domain.
         
@@ -539,15 +578,18 @@ class BS(object):
 
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
+
+        eps : float | None, default ``None``
+            An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
         Returns
         -------
         vega : np.ndarray
             Black Scholes vegas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.VEGA )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.VEGA, eps=eps )
 
-    def theta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True,*,  logK : np.ndarray|float|None = None ):
+    def theta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True,*,  logK : np.ndarray|float|None = None, eps : float|None = None ):
         r"""
         Compute Black Scholes option theta in drift-less price domain.
         
@@ -567,13 +609,16 @@ class BS(object):
 
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
+
+        eps : float | None, default ``None``
+            An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
         Returns
         -------
         theta : np.ndarray
             Black Scholes thetas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.THETA )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.THETA, eps=eps )
 
     def implied(
         self,
@@ -1010,9 +1055,3 @@ or::
     gamma = bs.gamma( k, vol, sqrtT, is_call )
 """
     
-
-
-
-
-
-

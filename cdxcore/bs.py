@@ -832,8 +832,8 @@ class BS(object):
         del err_min, err_max, upper
 
         logK = np.log( np.where( k==0., f1, k ) )
-        price_min = self.price(k=k, sqrtT=sqrtT, vol=vol_min, is_call=is_call, logK=logK)
-        price_max = self.price(k=k, sqrtT=sqrtT, vol=vol_max, is_call=is_call, logK=logK)
+        price_min = self.price(k=k, sqrtT=sqrtT, vol=vol_min, is_call=is_call, logK=logK, eps=eps)
+        price_max = self.price(k=k, sqrtT=sqrtT, vol=vol_max, is_call=is_call, logK=logK, eps=eps)
         assert price_min.shape == prices.shape
         assert price_max.shape == prices.shape
 

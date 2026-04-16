@@ -4367,7 +4367,8 @@ class _CacheWrapper(object):
                 sub_dir.delete( filename )
 
             elif cache_mode.read:
-                if cache_generate_only and sub_dir.is_version( filename, version=idversion, delete_wrong_version=cache_mode.del_incomp ):
+                rex =  sub_dir.exists(filename) #doing this here for cache_mode.must_exist because otherwise we cannot determine whether the version was correct or the file did not exist if del_incomp is true
+                if rex and cache_generate_only and sub_dir.is_version( filename, version=idversion, delete_wrong_version=cache_mode.del_incomp ):
                     execute.cache_info.last_cached = True
                     if not self.debug_verbose is None:
                         self.debug_verbose.write(f"cache({self._name}): confirmed for '{label}' cache '{sub_dir.full_file_name(filename)}' exists and has version '{idversion}'.")
@@ -4379,12 +4380,22 @@ class _CacheWrapper(object):
                 class Tag:
                     pass
                 tag = Tag()
-                r = sub_dir.read( filename, tag, version=idversion, delete_wrong_version=cache_mode.del_incomp )
+                r = sub_dir.read( filename, tag, version=idversion, delete_wrong_version=cache_mode.del_incomp ) if rex else tag
                         
                 if r is tag:
                     if cache_mode.must_exist:
                         ffn = sub_dir.full_file_name(filename)
-                        raise CacheMustExistError( ffn, f"'{self._name}': failed to read cache '{unique_id}' for '{label}'.")
+                        if not rex:
+                            reason = "File does not exist."
+                        elif not sub_dir.is_version(filename, version=idversion, delete_wrong_version=False):
+                            reason = "Version mismatch."
+                        else:
+                            reason = "Unknown; contact the authors."
+                            try:
+                                _ = sub_dir.read( filename, tag, version=idversion, delete_wrong_version=False, raise_error=True )
+                            except Exception as e:
+                                reason = f"Failure to read file: {e}."
+                        raise CacheMustExistError( ffn, f"'{self._name}': failed to read cache '{unique_id}' for '{label}': {reason}")
                     
                 else:
                     if not track_cached_files is None:
@@ -4400,6 +4411,7 @@ class _CacheWrapper(object):
                     if return_cache_uid:
                         return unique_id, r
                     return r
+                del rex
             else:
                 verify_inp( not cache_generate_only, lambda : f"'{self._name}': cannot use 'cache_generate_only' for '{label}' with cache mode {cache_mode}: must allow reading.")
 

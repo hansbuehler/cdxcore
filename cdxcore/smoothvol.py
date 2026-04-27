@@ -45,7 +45,7 @@ def focus_line(left : float,
             Number of points; must be at least 3.
 
         concentration : float, default ``0.9``
-            How much concentration: maximum is ``1`` while ``0`` give a linear distibution of points.
+            How much concentration: maximum is ``1`` while ``0`` gives a linear distibution of points.
 
         focus : float|None, default ``None``
             Focus point. If not provided, the mid-point is used.

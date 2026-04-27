@@ -936,7 +936,7 @@ class BS(object):
             while True:
                 # check convergence
                 # -----------------
-                fits[work] = self.price( k=k[work], sqrtT=IX(sqrtT, work), vol=vols[work], is_call=IX(is_call, work), logK=IX(logK, work) )
+                fits[work] = self.price( k=k[work], sqrtT=IX(sqrtT, work), vol=vols[work], is_call=IX(is_call, work), logK=IX(logK, work), eps=eps )
                 done = (np.abs(fits - prices) < price_tol) & work
                 work &= ~done
                 if not np.any(work):
@@ -967,7 +967,7 @@ class BS(object):
                 # =>
                 # x ~ ( prices(x) - prices(x0) ) / prices'(x0) + x0
 
-                test_vega = self.vega( k=k[work], sqrtT=IX(sqrtT, work), vol=vols[work], logK=IX(logK, work) )
+                test_vega = self.vega( k=k[work], sqrtT=IX(sqrtT, work), vol=vols[work], logK=IX(logK, work), eps=eps )
                 newton_step = (prices[work] - fits[work]) / np.maximum( test_vega, min_vega )
                 new_vols = vols[work] + newton_step
 
@@ -992,7 +992,7 @@ class BS(object):
                         else None
                     )
                     err2 = (
-                        f"{sum(err2)} cases where a vega step at the current lower vol would take vol even lower"
+                        f"{sum(err2)} cases where a vega step at the current upper vol would take vol even higher"
                         if sum(err2) > 0
                         else None
                     )

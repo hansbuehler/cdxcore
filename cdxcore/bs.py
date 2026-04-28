@@ -39,6 +39,7 @@ import math as math
 import warnings as warnings
 from enum import IntFlag, auto, Enum
 import numpy as np
+from collections.abc import Mapping
 
 # Optional dependencies
 try:
@@ -433,6 +434,58 @@ class BS(object):
             ret.logK = logK
         assert len(ret) > 1, "Should have returned single item earlier"
         return ret
+    
+    @staticmethod
+    def pure_to_cash( pure : Mapping, *, fwd : float, df : float ) -> PrettyValueObject:
+        """
+        Converts dictionary of ``pure`` price and greeks into market price and greeks.
+
+        Assume ``Cp(T,k) = E[(X_T-k)^+]`` where ``X`` is a pure log-normal martingale.
+        Let ``C(T,K) := DF F Cp(T, K/F)`` be the market call price. 
+
+        Then:
+        ```python
+        Delta     = dC/dK = DF Delta^p
+        Gamma     = d^2C/dK^2 = DF Gamma^p / F
+        Vega      = dC/dsigma = DF F Vega^p
+        Opt_Theta = dC/dt = DF F Theta^p (this is optionality theta, excluding curve and carry)
+        DK        = dC/dF = DF DK^p
+        ```
+        
+        Note that this function computes "optionality theta" as the decay due to loss of optionality,
+        and excludes the effect on a change in discount factor or forward.
+        
+        Parameters
+        ----------
+        pure : ``Mapping``
+            A dictionary containing any of the greeks above.
+        fwd : float
+            Forward price.
+        df : float
+            Discount factor.
+
+        Returns
+        -------
+        mkt : :class:`cdxcore.pretty.PrettyValueObject`
+            A dictionary with the same inputs as ``pure``; if ``theta`` was present in pure, then
+            this object will contain ``opt_theta``.
+        """        
+        verify_inp( fwd > 0., lambda : f"'fwd' must be positive, found {fwd}" )
+        verify_inp( df > 0., lambda : f"'df' must be positive, found {df}" )
+        mkt = PrettyValueObject()
+        if "price" in pure:
+            mkt.price = pure['price'] * df * fwd
+        if "delta" in pure:
+            mkt.delta = pure['delta'] * df
+        if "dk" in pure:
+            mkt.dk = pure['dk'] * df
+        if "gamma" in pure:
+            mkt.gamma = pure['gamma'] * df / fwd
+        if "vega" in pure:
+            mkt.vega = pure['vega'] * df * fwd
+        if "theta" in pure:
+            mkt.opt_theta = pure['theta'] * df * fwd
+        return mkt
 
     def price( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
         r"""

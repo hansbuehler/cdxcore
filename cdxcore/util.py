@@ -567,7 +567,9 @@ def fmt_datetime(dt        : datetime.datetime|datetime.date|datetime.time, *,
         String.
     """
     if not isinstance(dt, datetime.datetime):
-        if isinstance(dt, datetime.date):
+        if isinstance(dt, np.datetime64):
+            dt = dt.astype("datetime64[ms]").astype(datetime.datetime)
+        elif isinstance(dt, datetime.date):
             return fmt_date(dt)
         else:
             assert isinstance(dt, datetime.time), "'dt' must be datetime.datetime, datetime.date, or datetime.time. Found %s" % type(dt)
@@ -606,6 +608,8 @@ def fmt_date(dt : datetime.date) -> str:
     """
     if isinstance(dt, datetime.datetime):
         dt = dt.date()
+    elif isinstance(dt, np.datetime64):
+        dt = dt.astype("datetime64[D]").astype(datetime.date)
     assert isinstance(dt, datetime.date), "'dt' must be :class:`datetime.date`. Found %s" % type(dt)
     return f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
 

@@ -184,6 +184,10 @@ class Test(unittest.TestCase):
         self.assertEqual(fmt_datetime(lots3,ignore_ms=True,ignore_tz=False), "1974-03-17 16:02:03")
         self.assertEqual(fmt_datetime(lots3.date(),ignore_tz=False), "1974-03-17")
         self.assertEqual(fmt_datetime(lots3.timetz(),ignore_tz=False), "16:02:03") # timezone for time's is not supported
+        np_ns = np.datetime64("1974-03-17T16:02:03.123456789")
+        self.assertEqual(fmt_datetime(np_ns), "1974-03-17 16:02:03,123000")
+        self.assertEqual(fmt_datetime(np_ns, ignore_ms=True), "1974-03-17 16:02:03")
+        self.assertEqual(fmt_date(np_ns), "1974-03-17")
 
         # fmt_date
         self.assertEqual(fmt_date(plain), "1974-03-17" )

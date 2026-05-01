@@ -16,7 +16,7 @@ import unittest as unittest
 Imports
 """
 globals()["IS_DYNAPLOT_TEST_RUN"] = True
-from cdxcore.dynaplot import m_o_m
+from cdxcore.dynaplot import m_o_m, quantile_m_o_m
 import numpy as np
 
 class Test(unittest.TestCase):
@@ -31,6 +31,29 @@ class Test(unittest.TestCase):
         r = tuple( int(ri*100) for ri in r)
         
         self.assertEqual( r, (-288, 314))
+
+    def test_m_o_m(self):
+        self.assertEqual(m_o_m(None, None), (None, None))
+        self.assertEqual(m_o_m([1, 2], np.array([3, 4]), buf=0.0), (1.0, 4.0))
+        self.assertEqual(m_o_m([1, 2], np.array([3, 4]), pos_floor=0.8, buf=0.5), (0.8, 5.5))
+
+    def test_quantile_m_o_m(self):
+        x = np.array([0.0, 1.0, 2.0, 3.0])
+        y = np.array([4.0, 5.0])
+
+        self.assertEqual(quantile_m_o_m(x, y, lo=0.0, hi=1.0, buf=0.0), m_o_m(x, y, buf=0.0))
+        self.assertEqual(quantile_m_o_m(None, None), (None, None))
+
+        qlo, qhi = quantile_m_o_m(x, y, lo=0.25, hi=0.75, buf=0.0)
+        self.assertEqual((qlo, qhi), (1.0, 5.0))
+
+        qlo, qhi = quantile_m_o_m(x, y, lo=0.25, hi=0.75, buf=0.1)
+        self.assertAlmostEqual(qlo, 0.6)
+        self.assertAlmostEqual(qhi, 5.4)
+
+        qlo, qhi = quantile_m_o_m(x, y, lo=0.25, hi=0.75, pos_floor=0.5, buf=0.2)
+        self.assertAlmostEqual(qlo, 0.5)
+        self.assertAlmostEqual(qhi, 5.8)
         
         def test_animated_line_plot_with_store(self):
             from cdxcore.dynaplot import figure

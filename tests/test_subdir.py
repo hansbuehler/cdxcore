@@ -429,6 +429,7 @@ class Test2(unittest.TestCase):
         _ = f(B(1), override_cache_mode="clear")
         self.assertFalse( f.cache_info.last_cached )
 
+
         # same B object each time -> no caching
         _ = f(B(1))
         _ = f(B(1))
@@ -459,7 +460,71 @@ class Test2(unittest.TestCase):
         _ = f(B(22), override_cache_mode="clear")  # no cache left after this
         with self.assertRaises(CacheMustExistError):
             _ = f(B(22), override_cache_mode="cacheonly")  # can't read
+
+        # passing on override cache mode
+
+        @sub.cache("1.0")
+        def foc(x, *, override_cache_mode=None):
+            return (x,override_cache_mode)
+
+        _ = foc(1) # caches None
+        self.assertEqual(_, (1, None) )
+        _ = foc(1, override_cache_mode="off")
+        self.assertEqual(_, (1, CacheMode.OFF) )
+        _ = foc(1, override_cache_mode="on")
+        self.assertEqual(_, (1, None) )  # this is because the last cached call returned (1,None)
+        sub.delete_everything()
+
+        @sub.cache("1.0")
+        def foc(x):
+            return (x, foc.cache_info.override_cache_mode)
+        _ = foc(1) # caches None
+        self.assertEqual(_, (1, None) )
+        _ = foc(1, override_cache_mode="off")
+        self.assertEqual(_, (1, CacheMode.OFF) )
+        _ = foc(1, override_cache_mode="on")
+        self.assertEqual(_, (1, None) )  # this is because the last cached call returned (1,None)
+        sub.delete_everything()
+
+        @sub.cache("1.0")
+        def f(x):
+            return x*x
+
+        @sub.cache("1.0", dependencies=[f])
+        def g(x, *, override_cache_mode=None):
+            y = f(x, override_cache_mode=override_cache_mode)  # pass on override_cache_mode to 'f'
+            return y**2
         
+        _ = g(2)                                   # generates caches for 'f' and 'g'
+        self.assertFalse( g.cache_info.last_cached )
+        self.assertFalse( f.cache_info.last_cached )
+        _ = g(2)                                   # reads cache 
+        self.assertTrue( g.cache_info.last_cached )
+        _ = f(2)                                   # reads cache
+        self.assertTrue( f.cache_info.last_cached )
+
+        _ = g(2, override_cache_mode="off")        # ignores caches for 'f' and 'g'
+        self.assertFalse( g.cache_info.last_cached )
+        self.assertFalse( f.cache_info.last_cached )
+
+        sub.delete_everything()
+        with self.assertRaises(CacheMustExistError):
+            _ = g(2, override_cache_mode="cacheonly")  # ignores caches for 'f' and 'g' -> fails as there are no caches
+
+        # passing on cache_generate_only
+
+        @sub.cache("1.0")
+        def fcg(x, *, cache_generate_only=False):
+            return (x,not cache_generate_only)
+
+        _ = fcg(1) # caches None        
+        self.assertEqual(_, (1, True) )
+        _ = fcg(1, cache_generate_only=True)
+        self.assertEqual(_, False ) # returns False since a cache was not created
+        _ = fcg(2, cache_generate_only=True)
+        self.assertEqual(_, True ) # returns True since a cache was created
+        sub.delete_everything()
+
         # label
         @sub.cache("1.0", label=lambda x: f"dir/f({x})")
         def f(x):
@@ -476,7 +541,8 @@ class Test2(unittest.TestCase):
         self.assertEqual( f.cache_info.full_file_name[-lffn:], ffn )
         self.assertEqual( f.cache_info.path[-len("/subdir_cache_test/dir/"):], "/subdir_cache_test/dir/" )
         self.assertEqual( f.cache_info.sub_dir.fmt, SubDir.PICKLE )
-        
+        sub.delete_everything()
+       
         @sub.cache("1.0", uid=lambda x: f"f({x})")
         def f(x):
             return x
@@ -485,7 +551,6 @@ class Test2(unittest.TestCase):
         self.assertEqual( f.cache_info.filename, "f(1)" )
         uid, _ = f(1, return_cache_uid=True)
         self.assertEqual( uid, "f(1)" )
-        
         
         # test member caching
         
@@ -496,6 +561,7 @@ class Test2(unittest.TestCase):
         self.assertTrue( c.f.cache_info.last_cached )
         _ = c.f(2)
         self.assertFalse( c.f.cache_info.last_cached )
+        sub.delete_everything()
         
         # test versioning
         
@@ -530,6 +596,7 @@ class Test2(unittest.TestCase):
         self.assertEqual( faa.cache_info.version, "0.1" )
         _ = faa(y=2)  
         self.assertTrue( faa.cache_info.last_cached )
+        sub.delete_everything()
                 
         # funcname
 

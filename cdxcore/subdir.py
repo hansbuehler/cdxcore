@@ -3652,10 +3652,39 @@ class SubDir(object):
                 assert x2 == 4
 
         Using ``override_cache_mode="off"`` only affects the top level function. If ``f`` calls another cached function that function
-        will use its cache.
-        You can set a global :class:`CacheMode` for all functions based on the same :class:`CacheController` by setting its ``cache_mode``.
+        will use its cache. To implement advanced ``override_cache_mode`` handling, the function ``f`` may itself have a ``override_cache_mode``
+        function parameter. It can then pass it on as required.
 
-        Your central file could look like this:
+        Here is an example::
+
+            from cdxcore.subdir import SubDir
+            cache = SubDir("!/cache")
+            
+            @cache.cache("1.0")
+            def f(x):
+                return x*x
+
+            @cache.cache("1.0", dependencies=[f])
+            def g(x, *, override_cache_mode=None):
+                y = f(x, override_cache_mode=override_cache_mode)  # pass on override_cache_mode to 'f'
+                return y**2
+            
+            _ = g(2)                                   # generates caches for 'f' and 'g'
+            _ = g(2)                                   # reads cache 
+            assert f.cache_info.last_cached
+            assert g.cache_info.last_cached
+
+            _ = g(2, override_cache_mode="off")        # ignores caches for 'f' and 'g'
+            assert not f.cache_info.last_cached
+            assert not g.cache_info.last_cached
+
+            _ = g(2, override_cache_mode="cacheonly")  # ignores caches for 'f' and 'g' -> fails as there are no caches
+                
+
+
+
+        Global behaviour can be controlled via :class:`CacheController` ``cache_mode``. For example,
+        your central file could look like this:
 
         .. code-block:: python
            :emphasize-lines: 5
@@ -3992,6 +4021,11 @@ class CacheInfo(PrettyObject):
             return x*x
         uid, result = f(1, return_cache_uid=True)
         print(uid, ":", result) # --> f(1) c64e9c51 : 1
+
+    **This functionality is not thread-safe**
+
+    Note that the data contained in this object is not thread-safe. 
+    Use alternatives to obtain thread-safe information.
     """
     def __init__(self, name: str, subdir : SubDir, idversion: str, keep_last_arguments : bool ) -> None:
         """
@@ -4004,6 +4038,8 @@ class CacheInfo(PrettyObject):
         self.version     : str = idversion             #: (hash) version used. This is equal to ``F.version.unique_id64``.
         self.last_cached : bool = None                 #: Whether the last function call restored data from disk; ``None`` if no function call was made yet.
         self.sub_dir     : SubDir = None               #: Sub-directory where the file was stored (this can differ from the original sub-directory of the function label contains directory information).
+        self.override_cache_mode : CacheMode|None = None #: Last ``override_cache_mode`` used; ``None`` otherwise.
+        self.cache_generate_only : bool = None        #: Value of ``cache_generate_only`` during the last cached function call. 
         
         if keep_last_arguments:             
             self.last_arguments : dict = None          #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` when the :class:`cdxcore.subdir.CacheController` was created.
@@ -4019,7 +4055,13 @@ class CacheInfo(PrettyObject):
         return self.sub_dir.full_file_name(self.filename) if not self.filename is None and not self.sub_dir is None else None
 
 class _CacheWrapper(object):
-    
+
+    RESERVED_FUNCTION_ARGUMENTS = { 
+        "track_cached_files",
+        "return_cache_uid",
+    }
+    """ These arguments cannot be used by cached functions """
+
     def __init__(self,  F                    : Callable,  
                         subdir               : SubDir|str, *,
                         version              : str|None = None,
@@ -4093,7 +4135,8 @@ class _CacheWrapper(object):
                                                      auto_class=bool(version_auto_class),
                                                      allow_default=False )
         self._signature  = inspect.signature(F)  
-
+        self._f_has_override_cache_mode = "override_cache_mode" in self._signature.parameters
+        self._f_has_cache_generate_only = "cache_generate_only" in self._signature.parameters
 
         # uid/label
         # ----------
@@ -4110,7 +4153,15 @@ class _CacheWrapper(object):
         # -------
 
         if not self.debug_verbose is None:
-            self.debug_verbose.write(f"cache({self._name}): function registered for caching into '{self._subdir.path}'.")
+            param_str = ""
+            if self._f_has_override_cache_mode:
+                param_str += "override_cache_mode, "
+            if self._f_has_cache_generate_only:
+                param_str += "cache_generate_only, "
+            if len(param_str) > 0:
+                param_str = f" (with explicit {param_str[:-2]})"
+
+            self.debug_verbose.write(f"cache({self._name}){param_str}: function registered for caching into '{self._subdir.path}'.")
 
     @property
     def version(self) -> Version:
@@ -4356,6 +4407,10 @@ class _CacheWrapper(object):
                     Changes the caching mode for this function call.
                     For example you can force re-computation by passing ``update``.
     
+                    Note that the function being wrapped may have a parameter ``override_cache_mode`` itself.
+                    This allows the function understand the cache
+                    mode and, for example, pass it on for cached functions it calls itself.
+
                 track_cached_files : :class:`cdxcore.subdir.CacheTracker` | None, default ``None
                     Allows tracking all cached files - for example for mass deletion.
                     
@@ -4379,6 +4434,9 @@ class _CacheWrapper(object):
                     
                     Under the hood this function calls :meth:`cdxcore.subdir.SubDir.is_version`
                     which is a fast operation even for large files.
+
+                    Note that the function being wrapped may have a parameter ``cache_generate_only`` itself.
+                    This can be used by the function to reduce overhead in case ``cache_generate_only`` is True.
                     
             Returns
             -------
@@ -4415,9 +4473,23 @@ class _CacheWrapper(object):
             # determine version, cache mode
             # -----------------------------
     
-            cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else self.cache_mode
+            override_cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else None
+            cache_mode          = override_cache_mode if not override_cache_mode is None else self.cache_mode
+
+            # allow functions to understand caching
+            # -------------------------------------
+
+            if self._f_has_override_cache_mode or self._f_has_cache_generate_only:
+                kwargs = dict(kwargs)
+                if self._f_has_override_cache_mode:
+                    kwargs["override_cache_mode"] = override_cache_mode
+                if self._f_has_cache_generate_only:
+                    kwargs["cache_generate_only"] = cache_generate_only
+
+            execute.cache_info.override_cache_mode = override_cache_mode
+            execute.cache_info.cache_generate_only = cache_generate_only
             del override_cache_mode
-    
+
             # execute caching
             # ---------------
 

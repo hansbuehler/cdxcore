@@ -523,8 +523,8 @@ class CacheMode(object):
                                    )
                 if not r is None:
                     return r
-                if cache_mode.must_exist:
-                    raise CacheMustExistError(filename, "Cannot read cached file {filename}.")
+            if cache_mode.must_exist:
+                raise CacheMustExistError(filename, "Cannot read cached file {filename}.")
             
             r = f(...) # compute result
             
@@ -537,8 +537,8 @@ class CacheMode(object):
     
             return r
 
-    See :func:`cdxcore.subdir.SubDir.cache` for a comprehensive
-    implementation.
+    The caching wrapper :func:`cdxcore.subdir.SubDir.cache` is an example of a comprehensive implementation of
+    those semantics. The above code is a simplified version of the actual implementation.
 
     Parameters
     ----------
@@ -3231,8 +3231,8 @@ class SubDir(object):
             _ = f(1,2)    # restore result from cache
             _ = f(2,2)    # different parameters: compute and store result
             
-        Returns:
-
+        This will generate the following output:
+            
         .. code-block:: python
             
             00: cache(f@__main__): function registered for caching into 'C:/Users/hans/AppData/Local/Temp/.cache/'.
@@ -3358,7 +3358,7 @@ class SubDir(object):
                 return x*y
             h2(1,1)
             
-        yields::
+        which yields::
             
             00: cache(h2@__main__): function registered for caching into 'C:/Users/hans/AppData/Local/Temp/.cache/'.
             00: cache(h2@__main__): called 'h2(1,1)' version 'version 0.1' and wrote result into 'C:/Users/hans/AppData/Local/Temp/.cache/h2(1,1).pck'.            
@@ -3385,7 +3385,7 @@ class SubDir(object):
             print("path:", f.cache_info.path)
             print("sub_dir:", f.cache_info.sub_dir)
 
-        Returns::
+        Example output::
 
             unique_id: dir/f(1) c64e9c51
             filename: f(1) c64e9c51
@@ -3476,22 +3476,23 @@ class SubDir(object):
 
         **Numpy/Pandas/Polars (as outputs)**
 
-        The ``@cache`` keyword will cache the data returned by the wrapped functions using the format of the ``SubDir`` which is :attr:`cdxcore.subdir.Format.PICKLE` format by default.
-        It therefore works in nearly all cases but it is very inefficient if numpy-type data in dictionaries or data frames is returned.
-        For such cases it is recommended to return a compact data format.
-        The following formats are supported:
+        The ``@cache`` keyword will cache the data returned by the wrapped functions using the format of the ``SubDir``. This is :attr:`cdxcore.subdir.Format.PICKLE` by default.
+        It therefore works in nearly all cases but it is pretty inefficient for large and/or numpy-type data in dictionaries, or data frames.
+        For such cases it is recommended change the format of the ``SubDir``:
 
         * ``PANDAS_PARQUET``: uses :func:`pandas.DataFrame.to_parquet` and :func:`pandas.read_parquet` to write and read pandas data frames. Version data is stored in the parquet file metadata.
         * ``POLARS_PARQUET``: uses :func:`polars.DataFrame.write_parquet` and :func:`polars.read_parquet` to write and read polars data frames. Version data is stored in the parquet file metadata.
-        * ``PYTREE_HDF5``: uses :func:`h5py.File` to write and read dictionaries of data, which can include numpy arrays. Note that HDF5 does not support a wide range of data formats, for example
-          dictionary keys must be strings (e.g. cannot have dates). ``SubDir`` has some functionality to support dates, datetimes etc as members but you may still experience restrictions.
+        * ``PYTREE_HDF5``: uses :func:`h5py.File` to write and read dictionaries of data, which can include numpy arrays. Note that HDF5 does not support many of data types/formats, for example
+          dictionary keys must be strings (e.g. dates or integers are not supported). ``SubDir`` has some functionality to support dates and datetimes as members
+          but noy yet as dictionary keys. You may still experience other limitations.
 
-          However, HDF5 is the fastest format if raw i/o is the focus.
+          *However, HDF5 is the fastest format if raw i/o is the focus.*
 
         Here is an example which modifies the returned format in place. This is the most transparent way to
         change the format unless it is uniform across a project::
         
             from cdxcore.subdir import SubDir
+            import numpy as np
             cache   = SubDir("!/.cache")
 
             @cache(fmt=SubDir.PYTREE_HDF5).cache("0.1")
@@ -3504,7 +3505,14 @@ class SubDir(object):
 
         You can cache member functions like any other function.
         Note that :dec:`cdxcore.version.version` information are by default inherited, i.e. member functions will be dependent on the version of their 
-        defining class, and class versions will be dependent on their base classes' versions:
+        defining class, and class versions will be dependent on their base classes' versions.
+
+        The ``self`` argument of a cached member function is treated like any other argument, which means it will be used to determine a
+        function call unique ID unless it is excluded. Note that the hashing implemented in :class:`cdxcore.uniquehash.UniqueHash` will hash
+        an object via its ``__dict__`` or ``__slot__`` members, which means that changes to these members will be reflected in the unique call ID of the member function,
+        which is the expected behaviour.
+
+        The below example illustates this:
             
         .. code-block:: python
 
@@ -3533,9 +3541,12 @@ class SubDir(object):
         **WARNING:**
 
         :class:`cdxcore.uniquehash.UniqueHash` does *not* by default process members of objects or dictionaries
-        which start with a "_". This behaviour can be changed using :class:`cdxcore.subdir.CacheController`.
-        For reasonably complex objects it is recommended to implement for your objects 
-        the a custom hashing function::
+        which start with a "_". That means that changes to protected or private members will *not*
+        be detected by the unique ID computation by default.
+         
+        This behaviour can be changed using :class:`cdxcore.subdir.CacheController`.
+
+        For reasonably complex objects it is recommended to implement a custom hashing function::
         
             __unique_hash__( self, uniqueHash : UniqueHash, debug_trace : DebugTrace  )
 
@@ -3613,18 +3624,21 @@ class SubDir(object):
         accross your project:
 
         .. code-block:: python
-           :emphasize-lines: 4
+           :emphasize-lines: 5
 
+            import os           
             from cdxcore.verbose import Context
             cache_root = VersionedCacheRoot(
                                os.getenv("PROJECT_CACHE_DIR", "!/.cache"),
                                debug_verbose=Context.all    # turn full traing on
                             )
 
-        Writing Tests
-        ^^^^^^^^^^^^^
+        Testing
+        ^^^^^^^
         
-        To test a cached function, turn off caching in your tests using the parameter ``override_cache_mode="off"``::
+        **Testing your Code with Cached Functions**
+
+        To test a cached function during development, you can turn off caching in your tests using the parameter ``override_cache_mode="off"``::
             
             from cdxcore.subdir import SubDir
             cache = SubDir("!/cache")
@@ -3637,10 +3651,29 @@ class SubDir(object):
                 x2 = f(2,override_cache_mode="off")
                 assert x2 == 4
 
-        A different use case is to avoid a functio ``f`` to run and use cached data only. A good example for this is if
-        ``f`` downloads data from a licensed service, which we do not want to do during testing.
-        For this case, you can use the ``"cacheonly"`` mode. However, you will need to set your caching directory
-        to a directory with existing caches.
+        Using ``override_cache_mode="off"`` only affects the top level function. If ``f`` calls another cached function that function
+        will use its cache.
+        You can set a global :class:`CacheMode` for all functions based on the same :class:`CacheController` by setting its ``cache_mode``.
+
+        Your central file could look like this:
+
+        .. code-block:: python
+           :emphasize-lines: 5
+
+            import os           
+            from cdxcore.verbose import Context
+            cache_root = VersionedCacheRoot(
+                               os.getenv("PROJECT_CACHE_DIR", "!/.cache"),
+                               cache_mode=os.getenv("PROJECT_CACHE_MODE", None),
+                               debug_verbose=Context.quiet if os.getenv("PROJECT_CACHE_DEBUG","1") != "1" else Context.all
+                            )
+
+        **Writing Tests for Online Services**
+
+        When writing tests for online data services you usually want to avoid downloading data during testing.
+        In this case, you can set :class:`CacheMode` to ``"cacheonly"``. In this mode, the function will not be executed
+        and only cached data will be used. This is useful if you want to test a function which downloads data from a licensed service,
+        which you do not want to do during testing. Note that in this case you will need to set your caching directory to a directory with existing caches.
 
         Parameters
         ----------
@@ -3698,10 +3731,10 @@ class SubDir(object):
             as the ``uid`` is assumed to be already unique. The string must be a valid file name. 
 
             A ``uid`` can contain directory information separated by ``/`` i.e.
-           ``uid = lambda x, y : f"x/y"`` is a valid pattern. Each sub-directory must be a valid directory. Do not use ``\\`` even under windows.
+            ``uid = lambda x, y : f"x/y"`` is a valid pattern. Each sub-directory must be a valid directory. Do not use ``\\`` even under windows.
             
             Use ``label`` if the id is not unique. You cannot specify both ``uid`` and ``label``.
-            If neither ``uid`` and ``label`` are present, ``name`` will be used (as non-unique ``label``).
+            If neither ``uid`` and ``label`` are present, ``name`` will be used as non-unique ``label``.
         
         name : str | None, default ``None``
             Name of this function which is used either on its own if neither ``label`` not ``uid`` are used,
@@ -3758,7 +3791,7 @@ class SubDir(object):
 
         Returns
         -------
-        Decorated F: Callable
+        Decorated F: ``Callable``
         
             A decorated ``F`` whose ``__call__`` implements the cached call to ``F``.
             

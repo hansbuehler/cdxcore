@@ -136,6 +136,29 @@ def get_calling_function_name(default : str) -> str:
         return default
     return frame.f_code.co_name
 
+def to_date(date: str | datetime.datetime | datetime.date | np.datetime64 | None) -> datetime.date | None:
+    """
+    Convert ``date`` to a :class:`datetime.date`, or ``None`` if ``date`` is ``None``.
+
+    This function converts:
+
+    * ``np.datetime64``
+    * :class:`datetime.datetime`
+    * :class:`datetime.date`
+    * ``str`` assuming it is in isoformat e.g. "2024-01-31"    
+    """
+    if date is None:
+        return date
+    if isinstance(date, np.datetime64):
+        date = date.astype("datetime64[D]").astype(datetime.date)
+    if isinstance(date, datetime.datetime):
+        return date.date()
+    if isinstance(date, datetime.date):
+        return date
+    if isinstance(date, str):
+        return datetime.date.fromisoformat(date)
+    raise ValueError(f"Cannot convert {str(date)[:20]} of type {type(date)} to a datetime.date")
+    
 # =============================================================================
 # python basics
 # =============================================================================

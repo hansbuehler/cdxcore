@@ -1026,8 +1026,7 @@ class BS(object):
 
                 # [27-01-2026 RS] FIX: 
                 # --- Newton-Raphson Oscillation Fallback using Bisection --- #
-                # Use Newtown-Bisection hybrid step to prevent overshoot
-                # c.f. `nbs/tests/test_fit_implied.py` analysis
+                # Use Newtown-Bisection hybrid step to prevent overshoot.
                 # Use bisection when Newton step would jump outside the bracketed interval
                 # This prevents oscillation when vega is very small (e.g., deep ITM puts)
                 use_bisection = (new_vols < vols_min[work]) | (new_vols > vols_max[work])

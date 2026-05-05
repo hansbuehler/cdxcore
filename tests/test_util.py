@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import sys
 sys.setrecursionlimit(100)    
-from cdxcore.util import get_calling_function_name, is_function, is_atomic, is_float, is_filename, qualified_name, get_calling_function_name
+from cdxcore.util import get_calling_function_name, is_function, is_atomic, is_float, is_filename, qualified_name, get_calling_function_name, to_date
 from cdxcore.util import fmt, fmt_seconds, fmt_list, fmt_dict, fmt_big_number, fmt_digits, fmt_big_byte_number, fmt_datetime, fmt_date, fmt_time, fmt_timedelta, fmt_filename, DEF_FILE_NAME_MAP
 from cdxcore.util import CRMan, ActiveFormat, expected_str_fmt_args, TrackTime, DebugTime
 
@@ -850,6 +850,18 @@ class Test(unittest.TestCase):
         fmt_string_old = "Number: %(x)d, Text: %(text)s"
         args_old = expected_str_fmt_args(fmt_string_old)
         self.assertTrue(hasattr(args_old, 'keywords'))
+
+    def test_to_date(self):
+        self.assertEqual(to_date("2024-01-01"), datetime.date(2024, 1, 1))
+        self.assertEqual(to_date(datetime.date(2024, 1, 1)), datetime.date(2024, 1, 1))
+        self.assertEqual(to_date(datetime.datetime(2024, 1, 1, 23, 23, 23 )), datetime.date(2024, 1, 1))
+
+        dt = datetime.datetime(2024, 1, 1, 23, 23, 23 )
+        dt = np.array(dt, dtype='datetime64[ms]').item()
+        self.assertEqual(to_date(dt), datetime.date(2024, 1, 1))
+        dt = datetime.datetime(2024, 1, 1, 23, 23, 23 )
+        dt = np.array(dt, dtype='datetime64[D]').item()
+        self.assertEqual(to_date(dt), datetime.date(2024, 1, 1))
 
 
 def def_test_util_helper_func(x, y):

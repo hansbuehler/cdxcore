@@ -1,4 +1,4 @@
-@echon off
+@echo off
 echo ** PIP: to avoid having to provide a PyPI API key, modify $HOME/.pypirc **
 REM ** PIP follows https://packaging.python.org/tutorials/packaging-projects/ **
 

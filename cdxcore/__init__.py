@@ -5,8 +5,6 @@ Created on June 2022
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 __version__ = "0.1.82"  # auto-updated by setup.py
 
 __all__ = [
@@ -59,25 +57,6 @@ _EXPORTS = {
     "PrettyHierarchy": ("cdxcore.pretty", "PrettyHierarchy"),
     "version": ("cdxcore.version", "version"),
 }
-
-if TYPE_CHECKING:
-    from .config import Config, Float, Int
-    from .jcpool import JCPool
-    from .pretty import PrettyHierarchy, PrettyObject, PrettyValueObject
-    from .subdir import CacheController, CacheMode, SubDir, VersionedCacheRoot
-    from .uniquehash import (
-        NamedUniqueHash,
-        UniqueHash,
-        UniqueLabel,
-        unique_hash8,
-        unique_hash16,
-        unique_hash32,
-        unique_hash48,
-        unique_hash64,
-    )
-    from .util import Timer
-    from .verbose import Context
-    from .version import version
 
 def __getattr__(name):
     try:

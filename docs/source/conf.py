@@ -67,6 +67,9 @@ autodoc_default_options = {
 }
 autodoc_typehints = 'signature'  # types shown in the doc body, like NumPy
 typehints_document_rtype = False
+# Some third-party packages expose guarded type-only imports from ``_typeshed``.
+# It is a stubs helper module, not a runtime dependency, so mock it for autodoc.
+autodoc_mock_imports = ["_typeshed"]
 
 # numpydoc tweaks
 #

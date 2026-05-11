@@ -1006,7 +1006,7 @@ class BS(object):
                 iters += 1
                 res_max_err = np.max(np.abs(fits[work] - prices[work]) / IX(price_tol, work))
                 if tme.interval_test(0.5):
-                    verbose.report(2, lambda: f"\rStep {iters}/{max_iters}: implied vol for {sum(done)} options computed; {sum(work)} options with a maximum error of {res_max_err:.4g} left to do.",end="")
+                    verbose.report(2, lambda: f"\rStep {iters}/{max_iters}: implied vol for {sum(done)} options computed; {sum(work)} options with a maximum relative error of {res_max_err:.4g} left to do.",end="")
                 del done, res_max_err
 
                 # adjust min/max
@@ -1070,7 +1070,7 @@ class BS(object):
         verbose.write(
             lambda: f"\rImplied vol calculation for {total} options finished using {iters}/{max_iters} iterations. "
             + ( f"Failed to converge for {num_failed} options. " if num_failed > 0 else "Converged for all options. " )
-            + f"Max error {max_err:.3f}, L1 error {l1_err:.3f}, L2 error {l2_err:.3f}. "
+            + f"Max error {max_err:.3g}, L1 error {l1_err:.3g}, L2 error {l2_err:.3g}. "
             + f"This took {tme}. "
         )
 

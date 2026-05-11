@@ -26,7 +26,7 @@ Documentation can be found here: <https://quantitative-research.de/docs/cdxcore>
   animated updates for graphs (e.g. during training runs), and allows generation of plot layouts without knowing upfront
   the number of plots (e.g. for plotting a list of features).
 
-  ![Aninmated 3D plot](https://quantitative-research.de/docs/cdxcore/_static/dynaplot3D.gif)
+  ![Animated 3D plot](https://quantitative-research.de/docs/cdxcore/_static/dynaplot3D.gif)
   
 - [`cdxcore.config`](https://quantitative-research.de/docs/cdxcore/api/generated/cdxcore.config.html) allows **robust management of configurations**. It automates help, validation checking,
   and detects misspelled configuration arguments.
@@ -62,7 +62,7 @@ Documentation can be found here: <https://quantitative-research.de/docs/cdxcore>
   data   = subdir.read("data")
   ```
 
--  **Caching:** ``SubDir`` supports code-versioned file i/o which is used by [`@cdxcore.subdir.SubDir.cache`](file:///C:/Users/hans/OneDrive/Python3/packages/cdxcore/docs/build/html/api/generated/cdxcore.subdir.html#cdxcore.subdir.SubDir.cache)
+-  **Caching:** ``SubDir`` supports code-versioned file i/o which is used by [`@cdxcore.subdir.SubDir.cache`](https://quantitative-research.de/docs/cdxcore/api/generated/cdxcore.subdir.html#cdxcore.subdir.SubDir.cache)
   for an efficient code-versioned caching protocol for functions and objects:
 
   ```python
@@ -81,7 +81,7 @@ Documentation can be found here: <https://quantitative-research.de/docs/cdxcore>
 - **Code versioning** is implemented in [`cdxcore.version`](https://quantitative-research.de/docs/cdxcore/api/generated/cdxcore.version.html):
 
   ```python
-  from cdxbasics.version import version
+  from cdxcore.version import version
 
   @version("0.0.1")
   def f(x):
@@ -108,7 +108,7 @@ Documentation can be found here: <https://quantitative-research.de/docs/cdxcore>
   This is for users who prefer attribute ``.`` notation over item access when building structured output.
 
   ```python
-  from cdxbasics.prettydict import PrettyObject
+  from cdxcore.pretty import PrettyObject
   pdct = PrettyObject(z=1)
 
   pdct.num_samples = 1000

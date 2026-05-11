@@ -184,7 +184,7 @@ class UniqueHash( object ):
     Since Python 3.6 `dictionaries preserve the order <https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-compactdict>`__
     in which they were constructed.
     However, Python semantics remain otherwise order-invariant, i.e. ``{'x':1, 'y':2}`` tests equal to ``{'y':2',x':1}``.
-    For this reasom the default behaviour here for dictonaries is to sort them before hasing their content. This also applies
+    For this reason the default behaviour here for dictionaries is to sort them before hashing their content. This also applies
     to objects processed via their ``__dict__``.
 
     This can be turned off by setting `sort_dicts` to ``False``.

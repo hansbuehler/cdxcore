@@ -141,7 +141,7 @@ This is a short cut for::
     r.x.c = 3
 
 However, runtime semantics can be confusing as :class:`cdxcore.pretty.PrettyHierarchy` creates objects
-on the fly if an attrbute is not known. Hence typos can generate confusing error messages: 
+on the fly if an attribute is not known. Hence typos can generate confusing error messages: 
 assume we have some code that creates a :class:`cdxcore.pretty.PrettyHierarchy`::
     
     data = PrettyHierarchy()
@@ -572,7 +572,7 @@ class PrettyObject(MutableMapping):
         """
         Equivalent to :meth:`dict.update`. 
         
-        Note that functon assignments are handled in normal dictionary
+        Note that function assignments are handled in normal dictionary
         fashion - in particular, bound functions will *not* become
         magically unbound.
         """
@@ -813,14 +813,14 @@ class PrettyHierarchy( PrettyObject ):
         assert set(r) == {'A','a','b'} # all above created entries.
         
     Runtime semantics can be confusing as :class:`cdxcore.pretty.PrettyHierarchy` creates objects
-    on the fly if an attrbute is not known. Hence typos can generate confusing error messages: 
+    on the fly if an attribute is not known. Hence typos can generate confusing error messages: 
     assume we have some code that creates a :class:`cdxcore.pretty.PrettyHierarchy`::
         
         data = PrettyHierarchy()
         data = ...
         data.center = compute_centre()
         
-    Somewhere else we then access ``data.centre`` innstead of ``data.center``, a typo::
+    Somewhere else we then access ``data.centre`` instead of ``data.center``, a typo::
         
         np.sum( data.centre )
         

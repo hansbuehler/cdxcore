@@ -662,7 +662,7 @@ class Context(object):
             from cdxcore.verbose import Context
             def f( verbose : Context = Context.quiet ):
                 # ...
-                verbose.write("'f'' usuing a sub-context.")
+                verbose.write("'f'' using a sub-context.")
             verbose = Context.all
             verbose.write("Main")
             f( verbose=verbose(1) )   # create sub-context
@@ -672,7 +672,7 @@ class Context(object):
         .. code-block:: python
         
             00: Main
-            01:   'f'' usuing a sub-context.
+            01:   'f'' using a sub-context.
 
         Parameters
         ----------

@@ -26,3 +26,8 @@ Homepage = "https://github.com/hansbuehler/cdxcore"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["cdxcore*"]
+exclude = ["tests*", "notebooks*", "tmp*", "up*"]
+
+[tool.setuptools.package-data]
+cdxcore = ["py.typed", "*.pyi"]

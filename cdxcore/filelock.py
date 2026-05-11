@@ -461,7 +461,7 @@ def AcquireLock(filename, * ,
                 timeout_retry   : int|None = None,
                 verbose         : Context = Context.quiet ) -> FileLock:
         """
-        Aquires a filelock indentified by `filename`. Raises an exception of this was not successful.
+        Acquires a filelock identified by `filename`. Raises an exception if this was not successful.
         This function is a short cut for FileLock(..., acquire=True ) to be used in context blocks:
             
         with AcquireLock( "!/my.lock" ):

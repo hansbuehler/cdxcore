@@ -29,7 +29,7 @@ from typing import Iterator, Any
 from prettytable import PrettyTable
 
 # =============================================================================
-# basic indentification short cuts
+# basic identification short cuts
 # =============================================================================
 
 __types_functions = None
@@ -94,7 +94,7 @@ def is_atomic( o: object ) -> bool:
     Whether an element is atomic.
     
     Returns ``True`` if ``o`` is a
-    ``string``, ``int``, ``float``, :class:`datedatime.date`, ``bool``, 
+    ``string``, ``int``, ``float``, :class:`datetime.date`, ``bool``, 
     or a :class:`numpy.generic`
     """
     if type(o) in [str,int,bool,float,datetime.date]:
@@ -204,7 +204,7 @@ def getsizeof(obj : Any) -> int:
     Approximates the size of an object.
     
     In addition to calling :func:`sys.getsizeof` this function
-    also iterates embedded containers, numpy arrays, and panda dataframes.
+    also iterates embedded containers, numpy arrays, and pandas DataFrames.
     :meta private: 
     """
     return _get_recursive_size(obj,None)    
@@ -1718,7 +1718,7 @@ class CRMan(object):
     following "\\r"
     accordingly.
                                                          
-    *This functionality does not quite work accross all terminal types which were tested. Main focus is to make
+    *This functionality does not quite work across all terminal types which were tested. Main focus is to make
     it work for Jupyer for now. Any feedback on
     how to make this more generically operational is welcome.*
     

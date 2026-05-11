@@ -248,7 +248,7 @@ Color Management
 Use :func:`cdxcore.dynaplot.color_css4`, :func:`cdxcore.dynaplot.color_base`, :func:`cdxcore.dynaplot.color_tableau`, :func:`cdxcore.dynaplot.color_xkcd` 
 to return an *i* th element of the respective `matplotlib color
 table <https://matplotlib.org/stable/gallery/color/named_colors.html>`__.
-This simplifies using consistent colors accross different plots or when re-creating plots during an animation.
+This simplifies using consistent colors across different plots or when re-creating plots during an animation.
     
 Example of using the same colors by order in two plots::
 

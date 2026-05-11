@@ -17,7 +17,7 @@ python -m pip install -qq -U pip pytest twine build --no-input
 REM ** cdxcore local install **
 :: pip uninstall -qq cdxcore --no-input creates a wired error message
 @echo on
-pip install -q U -e . --no-input
+pip install -q -U -e . --no-input
 @echo off
 
 REM ** Flake and test **

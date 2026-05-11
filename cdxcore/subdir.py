@@ -235,7 +235,7 @@ to the
 target file name, 
 current time, process and thread ID, as well as the machines's UUID. 
 This is done to reduce collisions between processes/machines accessing the same files,
-potentially accross a network.
+potentially across a network.
 It does not remove collision risk entirely, though.
 
 Filenames
@@ -690,7 +690,7 @@ class CacheController( object ):
     ----------
     exclude_arg_types : list[type | str], optional
         List of types or names of types to exclude from producing unique ids from function arguments.
-        Strings are compated to ``type(arg).__name__``.
+        Strings are compared to ``type(arg).__name__``.
 
         Defaults to ``[Context]``.
         
@@ -3268,7 +3268,7 @@ class SubDir(object):
                 def output( cond, message ):
                     print(message)
             
-            ctrl    = CacheController(exclude_arg_types=[Debugger])   # <- exclude 'Debugger' parameters from hasing
+            ctrl    = CacheController(exclude_arg_types=[Debugger])   # <- exclude 'Debugger' parameters from hashing
             cache   = SubDir("!/.cache", cache_controller=ctrl )
 
             @cache.cache("0.1", dependencies=[f])
@@ -3590,7 +3590,7 @@ class SubDir(object):
         
         The idea is to have a central file, ``cache.py`` which contains the central root for caching.
         We recommend using an environment variable to be able to control the location of this directory
-        out side the code. Here is an example with an environment variable ``PROJECT_CACHE_DIR``::
+        outside the code. Here is an example with an environment variable ``PROJECT_CACHE_DIR``::
             
             # file cache.py
             
@@ -3621,7 +3621,7 @@ class SubDir(object):
             # ...
             
         In case you have issues with caching you can use the central root directory to turn on tracing 
-        accross your project:
+        across your project:
 
         .. code-block:: python
            :emphasize-lines: 5
@@ -3630,7 +3630,7 @@ class SubDir(object):
             from cdxcore.verbose import Context
             cache_root = VersionedCacheRoot(
                                os.getenv("PROJECT_CACHE_DIR", "!/.cache"),
-                               debug_verbose=Context.all    # turn full traing on
+                               debug_verbose=Context.all    # turn full tracing on
                             )
 
         Testing
@@ -3710,7 +3710,7 @@ class SubDir(object):
             Version of the function.
             
             * If ``None`` then a common ``F`` must be decorated manually 
-              ith :dec:`cdxcore.version.version`.
+              with :dec:`cdxcore.version.version`.
             * If set, the function ``F`` is automatically first decorated
               with :dec:`cdxcore.version.version` for you.
             
@@ -3782,13 +3782,13 @@ class SubDir(object):
             
         exclude_arg_types : list[type | str] | None, default ``None``
             List of parameter types or names of type to exclude from generating an unique ID. Examples of such non-functional arguments
-            are workflow controls (debugging) and i/o elements. Strings are compated to ``type(arg).__name__``.
+            are workflow controls (debugging) and i/o elements. Strings are compared to ``type(arg).__name__``.
 
         in_sub_dir : str | Callable | None, default ``None``
             Allows specifying a sub-directory for the cached files, using the same formatting logic as for ``label``.
             
         version_auto_class : bool, default ``True``
-            Whether to automaticallty add version dependencies on base classes or, for member functions, on containing
+            Whether to automatically add version dependencies on base classes or, for member functions, on containing
             classes. This is the ``auto_class`` parameter for :dec:`cdxcore.version.version`.
             
         name_of_func_name_arg : str, default ``"func_name"``

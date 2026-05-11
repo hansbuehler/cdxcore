@@ -110,7 +110,7 @@ Member functions are automatically dependent on their defining class::
     print("full version", g.version.full )           # -> full version 0.0.1 { f: 0.0.2 { h: 0.3.0 }, A.h: 0.4.1 }
     print("full version ID",g.version.unique_id48 )  # -> full version ID 0.0.1 { f: 0.0.2 { h: 0.3.0 }, A.h: 0.4.1 }
     print("full version ID",g.version.unique_id32 )  # -> full version ID 0.0.1 { f: 0.0.2 { h: 0.3.0 }, A.h: 0.4.1 }
-    print("depedencies",g.version.dependencies )     # -> depedencies ('0.0.1', {'f': ('0.0.2', {'h': '0.3.0'}), 'A.h': '0.4.1'})
+    print("dependencies",g.version.dependencies )     # -> dependencies ('0.0.1', {'f': ('0.0.2', {'h': '0.3.0'}), 'A.h': '0.4.1'})
 
 Decorated Function Information
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -190,7 +190,7 @@ class Version(object):
     **Dependency Resolution**
     
     Dependency resolution is lazy to allow creating dependencies on Python elements which are defined later / elsewhere.
-    If an error occurs during dependency resoution an exception of type :class:`cdxcore.version.VersionDefinitionError` is raised.    
+    If an error occurs during dependency resolution an exception of type :class:`cdxcore.version.VersionDefinitionError` is raised.    
     
     Parameters
     ----------
@@ -352,7 +352,7 @@ class Version(object):
                 return f(x*2,z)+a.h(z)
             
             g(1,2)
-            print("depedencies",g.version.dependencies )     # -> depedencies ('0.0.1', {'f': ('0.0.2', {'h': '0.3.0'}), 'A.h': '0.4.1'})
+            print("dependencies",g.version.dependencies )     # -> dependencies ('0.0.1', {'f': ('0.0.2', {'h': '0.3.0'}), 'A.h': '0.4.1'})
         """
         self._resolve_dependencies()
         return self._dependencies
@@ -420,7 +420,7 @@ class Version(object):
             recursive = set()
         recursive.add(local_context)
 
-        # collect full qualified dependencies resursively
+        # collect full qualified dependencies recursively
         version_dependencies = dict()
         
         if self._auto_class and not self._class is None:
@@ -458,7 +458,7 @@ class Version(object):
 
                 # get function
                 dep  = source.get(hierarchy[-1], None)
-                ext  = "" if hierarchy[-1]==str_dep else ". (This is part of resoling dependency on '%s')" % str_dep
+                ext  = "" if hierarchy[-1]==str_dep else ". (This is part of resolving dependency on '%s')" % str_dep
                 if dep is None:
                     raise VersionDefinitionError( err_context(), f"Cannot find '{hierarchy[-1]}' in '{src_name}'; known names: {fmt_list((source.keys()))}{ext}" )
 
@@ -552,7 +552,7 @@ def version( version              : str = "0.0.1" ,
         print("version", g.version.input)                # -> version 0.0.1
         print("full version", g.version.full )           # -> full version 0.0.1 { f: 0.0.2 { h: 0.3.0 }, A.h: 0.4.1 }
         print("full version ID",g.version.unique_id48 )  # -> full version ID 0.0.1 { f: 0.0.2 { h: 0.3.0 }, A.h: 0.4.1 }
-        print("depedencies",g.version.dependencies )     # -> depedencies ('0.0.1', {'f': ('0.0.2', {'h': '0.3.0'}), 'A.h': '0.4.1'})    
+        print("dependencies",g.version.dependencies )     # -> dependencies ('0.0.1', {'f': ('0.0.2', {'h': '0.3.0'}), 'A.h': '0.4.1'})    
 
     Example for classes::
         

@@ -227,7 +227,7 @@ def _parallel(pool : joblib_Parallel|_NoPool, jobs : Iterable) -> Iterable:
     Returns
     -------
         An iterator which yields results as soon as they are available.   
-        If 'jobs' is a dictionary, then the resutling iterator will generate tuples with the first
+        If 'jobs' is a dictionary, then the resulting iterator will generate tuples with the first
         element equal to the dictionary key of the respective function job.
     """
     jobs = jobs if not isinstance(jobs, Mapping) else _DictIterator(jobs,merge_tuple=True)
@@ -290,7 +290,7 @@ class JCPool( object ):
     progress updates. For this purpose, :class:`cdxcore.verbose.Context` 
     will send output messages via a :class:`multiprocessing.Queue`
     to the main process
-    where a sepeate thread prints these messages out.
+    where a separate thread prints these messages out.
     
     Using a fixed central pool object in  your code base
     avoids relaunching processes.
@@ -419,11 +419,11 @@ class JCPool( object ):
     
     ``JCPool`` uses the `loky <https://loky.readthedocs.io/en/stable/index.html>'__ backend by default.
     Loky `tries to avoid memory leaks by monitoring the current processes' memory allocation 
-    and kills the process if it thinks it accidentially allocates too much memory <https://loky.readthedocs.io/en/stable/API.html#protection-against-memory-leaks>`__.
+    and kills the process if it thinks it accidentally allocates too much memory <https://loky.readthedocs.io/en/stable/API.html#protection-against-memory-leaks>`__.
                                                                                    
     This monitoring consists of two components:
     
-    * After a first initial period (the first task, usually), Loky assess the intial memory used by the process uing :mod:`psutil`.
+    * After a first initial period (the first task, usually), Loky assess the initial memory used by the process using :mod:`psutil`.
     * Before each subsequent task, if a minimum time period has passed (a second by default) it:
       1. Checks whether the process allocated more than this number + 300MB by default.
       2. If that happens, Loky will call :func:`gc.collect` (a very expensive operation)
@@ -447,9 +447,9 @@ class JCPool( object ):
         
     * **Turn off**: set ``mem_leak_enforce`` to ``False`` to turn off memory checking.
       *However* in this case Loky will still regularly call :func:`gc.collect`, by default if a second or more has passed after the last task.
-      You can chnage that delay by using ``mem_leak_timer``.
-    * **Modify**: set tjhe memory threshold to a bigger number than 300MB by using ``mem_leak_max_memory``; this can be a float representing the percentage
-      of total physical memory. You can chnage the delay of checking vs the new threshold by using ``mem_leak_timer``.
+      You can change that delay by using ``mem_leak_timer``.
+    * **Modify**: set the memory threshold to a bigger number than 300MB by using ``mem_leak_max_memory``; this can be a float representing the percentage
+      of total physical memory. You can change the delay of checking vs the new threshold by using ``mem_leak_timer``.
     
     Parameters
     ----------
@@ -463,14 +463,14 @@ class JCPool( object ):
             For example, a ``num_workers`` of ``-2`` will use as many jobs as CPUs are present less one.
             If ``num_workers`` is negative, the effective number of workers will be at least ``1``.
             
-            For debugging can set the number of workes to zero to bypass ``joblib`` entirely.
+            For debugging can set the number of workers to zero to bypass ``joblib`` entirely.
             
             Default is ``1``.
         
         threading : bool, default ``False``
         
             If ``False``, the default, then the pool will act as a ``"loky"`` multi-process pool with the associated overhead
-            of managing data accross processes.
+            of managing data across processes.
             
             If ``True``, then the pool is a ``"threading"`` pool. This helps for functions whose code releases
             Python's `global interpreter lock <https://wiki.python.org/moin/GlobalInterpreterLock>`__, for example
@@ -505,7 +505,7 @@ class JCPool( object ):
             See the section on "Loky Memory Leak Detection" above for background.
 
             * If ``mem_leak_max_memory`` is an ``int`` it specifies the amount of memory in bytes a process may allocate before it is killed. It must be above :attr:`cdxcore.jcpool.JCPool.MIN_MAX_MEMORY`.
-            * If ````mem_leak_max_memory`` is a ``float`` it specified the amount of memory a process may allocated as percentage of total avaible physical memory.
+            * If ````mem_leak_max_memory`` is a ``float`` it specifies the amount of memory a process may allocate as percentage of total available physical memory.
               This will be floored by attr:`cdxcore.jcpool.JCPool.MIN_MAX_MEMORY`.
             
             The default :attr:`cdxcore.jcpool.JCPool.DEFAULT_MEM_LEAK_MAX_MEMORY` is typically 300MB.
@@ -605,7 +605,7 @@ class JCPool( object ):
         return self._tmp_dir.path if not self._tmp_dir is None else None
     @property
     def is_threading(self) -> bool:
-        """ Whether we are threading or mulit-processing. """
+        """ Whether we are threading or multi-processing. """
         return self._threading
     @property
     def is_no_pool(self) -> bool:
@@ -648,14 +648,14 @@ class JCPool( object ):
         if not self._tmp_dir is None:
             dir_name = self._tmp_dir.path
             self._tmp_dir.delete_everything(keep_directory=False)
-            self._verbose.write(f"Deleted temporary directoru {dir_name}.")
+            self._verbose.write(f"Deleted temporary directory {dir_name}.")
 
     def context( self, verbose : Context, verbose_interval : float = None ):
         """
         Parallel processing ``Context`` object.
         
         This function returns a :class:`cdxcore.verbose.Context` object whose ``channel`` is a queue towards a utility thread
-        which will outout all messages to ``verbose``.
+        which will output all messages to ``verbose``.
         As a result a worker process is able to use ``verbose`` as if it were in-process
         
         A standard usage pattern is:
@@ -701,7 +701,7 @@ class JCPool( object ):
         """
         Decorate a function for parallel execution.
         
-        This decorate adds minor synthatical sugar on top of :func:`joblib.delayed`
+        This decorator adds minor syntactical sugar on top of :func:`joblib.delayed`
         (which in turn is discussed `here <https://joblib.readthedocs.io/en/latest/parallel.html#parallel>`__).
 
         When called, this decorator checks that no :class:`cdxcore.verbose.Context`
@@ -766,7 +766,7 @@ class JCPool( object ):
         -------
             parallel : Iterator
                 An iterator which yields results as soon as they are available.   
-                If ``jobs`` is a :class:`Mapping`, then the resutling iterator will generate tuples with the first
+                If ``jobs`` is a :class:`Mapping`, then the resulting iterator will generate tuples with the first
                 element equal to the mapping key of the respective function job. This function will *not*
                 return a dictionary. See the example described in :mod:`cdxcore.jcpool` in section "Dict".
         """
@@ -800,7 +800,7 @@ class JCPool( object ):
         -------
             parallel : Iterator
                 An iterator which yields results as soon as they are available.   
-                If ``jobs`` is a :class:`Mapping`, then the resutling iterator will generate tuples with the first
+                If ``jobs`` is a :class:`Mapping`, then the resulting iterator will generate tuples with the first
                 element equal to the mapping key of the respective function job. This function will *not*
                 return a dictionary. See the example described in :mod:`cdxcore.jcpool` in section "Dict".
         """

@@ -551,7 +551,21 @@ class Test(unittest.TestCase):
         config.mark_done()
         config.done()
 
-        
+    def test_config_equality(self):
+        """Test Config equality and mutability semantics"""
+
+        config1 = Config(a=1, config_name="test")
+        config2 = Config(a=1, config_name="test")
+        config3 = Config(a=2, config_name="test")
+
+        self.assertEqual(config1, config2)
+        self.assertFalse(config1 != config2)
+        self.assertNotEqual(config1, config3)
+        self.assertTrue(config1 != config3)
+        with self.assertRaises(TypeError):
+            hash(config1)
+
+
 if __name__ == '__main__':
     unittest.main()
 

@@ -1,6 +1,6 @@
 """
 Tooling for setting up program-wide configuration hierachies.
-Aimed at machine learning programs to ensure consistency of code accross experimentation.
+Aimed at machine learning programs to ensure consistency of code across experimentation.
 
 Overview
 --------
@@ -996,7 +996,7 @@ class Config(OrderedDict):
         if not record:
             return value
         # record?
-        record_key    = self.record_key( key ) # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
+        record_key    = self.record_key( key ) # using a fully qualified keys allows 'recorders' to be shared across copy()'d configs.
         help          = str(help) if not help is None and len(help) > 0 else ""
         help          = help[:-1] if help[-1:] == "." else help  # remove trailing '.'
         help_default  = str(help_default) if not help_default is None else ""
@@ -1138,7 +1138,7 @@ class Config(OrderedDict):
                 If the key was not previously read successfully.
         """
         verify( key.find('.') == -1 , "Error using Config '{name}': key name cannot contain '.'; found '{key}", name=self.config_name, key=key, exception=ValueError )
-        record_key    = self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
+        record_key    = self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared across copy()'d configs.
         record        = self._recorder.get(record_key, None)
         if record is None:
             raise KeyError(key)
@@ -1720,7 +1720,7 @@ class Config(OrderedDict):
 
         It has the form ``config1.config['entry']``.
         """
-        return self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
+        return self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared across copy()'d configs.
 
     # magic
     # -----
@@ -1855,15 +1855,10 @@ class Config(OrderedDict):
         return OrderedDict.__eq__(self, other)
 
     def __ne__(self, other):
-        """ Equality operator comparing 'name' and standard dictionary content """        
-        if type(self).__name__ == type(other).__name__:  # allow comparison betweenn different imports
-            return False
-        if self._name == other._name:
-            return False
-        return OrderedDict.__neq__(self, other)
+        """ Inequality operator comparing 'name' and standard dictionary content """
+        return not self.__eq__(other)
 
-    def __hash__(self):
-        return hash(self._name) ^ OrderedDict.__hash__(self)
+    __hash__ = None
         
 to_config = Config.to_config
 config_kwargs = Config.config_kwargs

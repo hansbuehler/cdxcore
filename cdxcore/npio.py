@@ -21,13 +21,13 @@ the data being read::
     
 **Continguous Arrays**
 
-By default functions in this module assume that data is laid out linearly in memory, also called "c-continguous".
-This allows writing a continuous block of data to disk, or reading it back. If an array is not "continguous"
+By default functions in this module assume that data is laid out linearly in memory, also called "C-contiguous".
+This allows writing a continuous block of data to disk, or reading it back. If an array is not "contiguous"
 by default, an exception will be raised unless an intermediary copy buffer size is set with ``cont_block_size_mb``::
 
     array = np.zeros((4,4), dtype=np.int8)
     x = array[:,1]
-    assert not x.data.contiguous  # not continguous
+    assert not x.data.contiguous  # not contiguous
     to_file( file, x, cont_block_size_mb=100 )
 
 **Shared Memory**
@@ -221,7 +221,7 @@ def to_file(file               : str|int,
     This function will work for unbuffered files exceeding 2GB which is the usual unbuffered :func:`write` `limitation on Linux <https://www.man7.org/linux/man-pages/man2/write.2.html#NOTES>`__.
     This function will only work with the dtypes contained in :data:`cdxcore.npio._DTYPE_TO_CODE`.
     
-    By default this function does not write non-continguous arrays (those not laid out linearly in memory). Use ``cont_block_size_mb``
+    By default this function does not write non-contiguous arrays (those not laid out linearly in memory). Use ``cont_block_size_mb``
     to enable an intermediary buffer to do so.
 
     **Shared Memory**
@@ -242,7 +242,7 @@ def to_file(file               : str|int,
             buffering. The default, ``-1``, is the default.
             
         cont_block_size_mb : int | None, default ``None``
-            By default this function does not write non-continguous arrays (those not laid out linearly in memory).
+            By default this function does not write non-contiguous arrays (those not laid out linearly in memory).
             Use ``cont_block_size_mb``
             to enable an intermediary buffer of size ``cont_block_size_mb`` to do so.
             
@@ -253,8 +253,8 @@ def to_file(file               : str|int,
         Value error : :class:`ValueError`
             In case an array is passed whose dtype is not contained in :data:`cdxcore.npio._DTYPE_TO_CODE`,
             which has more than 32k dimensions, or which has an indivudual dimension longer than 2bn lines. 
-        Not continguous : :class:`RuntimeError`
-            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None``, its default.
+        Not contiguous : :class:`RuntimeError`
+            Raised if ``array`` is not contiguous and ``cont_block_size_mb`` is ``None``, its default.
     """
     if isinstance(file, str):
         with open( file, "wb", buffering=buffering ) as f:
@@ -355,7 +355,7 @@ def read_from_file( file               : str|int,
     See :func:`cdxcore.npio.read_into` and :func:`cdxcore.npio.from_file` for more convenient interfaces
     for each use case.
     
-    By default this function does not read into non-continguous arrays. Use ``cont_block_size_mb``
+    By default this function does not read into non-contiguous arrays. Use ``cont_block_size_mb``
     to enable an intermediary buffer to do so.
     
     Parameters
@@ -385,9 +385,9 @@ def read_from_file( file               : str|int,
             If not ``None``, check that the array has the specified shape.
             
         cont_block_size_mb : int | None, default ``None``
-            By default this function does not read into arrays which are not c-continguous (linear in memory). Use this
+            By default this function does not read into arrays which are not C-contiguous (linear in memory). Use this
             parameter to allocate an intermediary buffer of ``cont_block_size_mb`` mega bytes to read into 
-            non-continguous arrays.
+            non-contiguous arrays.
         
     Returns
     -------
@@ -401,8 +401,8 @@ def read_from_file( file               : str|int,
         I/O error : :class:`IOError`
             In case the function failed to match the desired ``validate_dtype`` or ``validate_shape``,
             or if it does not match the geometry of ``target`` if provided as a numpy array.
-        Not continguous : :class:`RuntimeError`
-            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None``, its default.
+        Not contiguous : :class:`RuntimeError`
+            Raised if ``array`` is not contiguous and ``cont_block_size_mb`` is ``None``, its default.
     """
     if isinstance(file, str):
         with open( file, "rb", buffering=buffering ) as f:
@@ -498,9 +498,9 @@ def read_into( file, array : np.ndarray, *, read_only : bool = False, buffering 
             buffering. The default, ``-1``, is the default.
 
         cont_block_size_mb : int | None, default ``None``
-            By default this function does not read into arrays which are not c-continguous (linear in memory). Use this
+            By default this function does not read into arrays which are not C-contiguous (linear in memory). Use this
             parameter to allocate an intermediary buffer of ``cont_block_size_mb`` mega bytes to read into 
-            non-continguous arrays.
+            non-contiguous arrays.
         
     Returns
     -------
@@ -514,8 +514,8 @@ def read_into( file, array : np.ndarray, *, read_only : bool = False, buffering 
         I/O error : :class:`IOError`
             In case the function failed to match the desired ``validate_dtype`` or ``validate_shape``,
             or if it does not match the geometry of ``target``.
-        Not continguous : :class:`RuntimeError`
-            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None`` (its default).
+        Not contiguous : :class:`RuntimeError`
+            Raised if ``array`` is not contiguous and ``cont_block_size_mb`` is ``None`` (its default).
     """
     return read_from_file( file, target = array, read_only=read_only, buffering=buffering, cont_block_size_mb=cont_block_size_mb )
 
@@ -546,9 +546,9 @@ def from_file( file, *, validate_dtype = None, validate_shape = None, read_only 
             buffering. The default, ``-1``, is the default.
 
         cont_block_size_mb : int | None, default ``None``
-            By default this function does not read into arrays which are not c-continguous (linear in memory). Use this
+            By default this function does not read into arrays which are not C-contiguous (linear in memory). Use this
             parameter to allocate an intermediary buffer of ``cont_block_size_mb`` mega bytes to read into 
-            non-continguous arrays.
+            non-contiguous arrays.
 
     Returns
     -------
@@ -561,8 +561,8 @@ def from_file( file, *, validate_dtype = None, validate_shape = None, read_only 
             In case the function failed to read the whole file.
         I/O error : :class:`IOError`
             In case the function failed to match the desired ``validate_dtype`` or ``validate_shape``.
-        Not continguous : :class:`RuntimeError`
-            Raised if ``array`` is not continguous and ``cont_block_size_mb`` is ``None`` (its default).
+        Not contiguous : :class:`RuntimeError`
+            Raised if ``array`` is not contiguous and ``cont_block_size_mb`` is ``None`` (its default).
     """
     return read_from_file(
                          file,

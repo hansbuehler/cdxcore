@@ -77,7 +77,7 @@ Main Functionality
 
   .. code-block:: python
 
-    from cdxbasics.version import version
+    from cdxcore.version import version
 
     @version("0.0.1")
     def f(x):
@@ -104,7 +104,7 @@ Main Functionality
 
   .. code-block:: python
 
-    from cdxbasics.prettydict import PrettyObject
+    from cdxcore.pretty import PrettyObject
     pdct = PrettyObject(z=1)
     
     pdct.num_samples = 1000

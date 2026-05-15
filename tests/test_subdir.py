@@ -850,6 +850,8 @@ class Test2(unittest.TestCase):
                             'date': datetime.date(2022,3,18), 
                             'datetime': datetime.datetime(2022,3,18,12,34,56),
                             'time': datetime.time(12,34,56),
+                            'pydt': np.datetime64("2026-05-15T12:34:56.123456789", "ns"),
+                            'dtx': np.array( [datetime.datetime(2022,3,18,12,34,56), datetime.datetime(2021,3,18,12,34,56) ], dtype="datetime64[ms]"),
                             'list': [ "A", "B" ],
                             'text': "Hello world" }
             def equal( x, y ):
@@ -871,6 +873,9 @@ class Test2(unittest.TestCase):
 
             sub.write("test",x)
             r = sub.read("test", raise_on_error=True)
+            print("\n",x)
+
+            print("\n",r)
             self.assertTrue( equal( x, r ))
 
             sub.write("test", x, version="0.1")        

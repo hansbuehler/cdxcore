@@ -5,7 +5,7 @@ Created on June 2022
 """
 from __future__ import annotations
 
-__version__ = "0.1.82"  # auto-updated by setup.py
+__version__ = "0.1.83"  # auto-updated by setup.py
 
 __all__ = [
     "__version__",

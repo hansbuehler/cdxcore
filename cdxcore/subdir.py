@@ -370,6 +370,7 @@ Documentation
 """
 from __future__ import annotations
 
+from itertools import count
 import os as os
 import uuid as uuid
 import threading as threading
@@ -1751,10 +1752,21 @@ class SubDir(object):
                                         v = v.decode("utf-8")
                                         r[k[4:]] = datetime.datetime.fromisoformat(v)
                                         continue
+                                    if k[:4] == "_1_n":
+                                        v = v[()]
+                                        v = v.decode("utf-8")
+                                        v, tp, cnt = v.split("@")
+                                        r[k[4:]] = np.datetime64(v, (tp, int(cnt)))
+                                        continue
                                     if k[:4] == "_1_T":
                                         v = v[()]
                                         v = v.decode("utf-8")
                                         r[k[4:]] = datetime.time.fromisoformat(v)
+                                        continue
+                                    if k[:4] == "_1_Q":
+                                        # nump arrays of datetime
+                                        k    = k[4:]
+                                        r[k] = _read_datetime64_dataset( v, f"{top}.{k}" )
                                         continue
                                     r[k] = v[()]
                                 elif isinstance(v, h5py.Group):
@@ -2254,6 +2266,9 @@ class SubDir(object):
                             if isinstance(k, str) and k[:3] == '_1_':
                                 raise ValueError("Cannot write '{full_file_name}: HDF5 format does not allow key names starting with '_1_'. Found '{k}'.")
                             if isinstance( v, np.ndarray ):
+                                if _is_datetime64_dtype(v.dtype):
+                                    _write_datetime64_dataset(f, "_1_Q"+k, v)
+                                    return
                                 try:
                                     f.create_dataset(k, data=v)
                                 except Exception as e:
@@ -2267,6 +2282,13 @@ class SubDir(object):
                                 return 
                             if isinstance( v, datetime.datetime):
                                 f.create_dataset('_1_d'+k, data=np.array(v.isoformat(),dtype=dtstr))
+                                return
+                            if isinstance( v, np.datetime64):
+                                unit, count = np.datetime_data(v.dtype)
+                                v           = np.datetime64(v, (unit, count))
+                                v           = np.datetime_as_string(v, unit=unit)
+                                v           = f"{v}@{unit}@{count}"
+                                f.create_dataset('_1_n'+k, data=np.array(v,dtype=dtstr))
                                 return
                             if isinstance( v, datetime.date):
                                 f.create_dataset('_1_D'+k, data=np.array(v.isoformat(),dtype=dtstr))
@@ -3681,8 +3703,6 @@ class SubDir(object):
             _ = g(2, override_cache_mode="cacheonly")  # ignores caches for 'f' and 'g' -> fails as there are no caches
                 
 
-
-
         Global behaviour can be controlled via :class:`CacheController` ``cache_mode``. For example,
         your central file could look like this:
 
@@ -4066,13 +4086,13 @@ class _CacheWrapper(object):
                         subdir               : SubDir|str, *,
                         version              : str|None = None,
                         dependencies         : list|None = None,
-                        label                : str|Callable = None,
-                        uid                  : str|Callable = None,
-                        name                 : str = None,
-                        in_sub_dir           : str|Callable = None,
-                        exclude_args         : set[str] = None,
-                        include_args         : set[str] = None,
-                        exclude_arg_types    : set[type] = None,
+                        label                : str|Callable|None = None,
+                        uid                  : str|Callable|None = None,
+                        name                 : str|None = None,
+                        in_sub_dir           : str|Callable|None = None,
+                        exclude_args         : set[str]|None = None,
+                        include_args         : set[str]|None = None,
+                        exclude_arg_types    : set[type]|None = None,
                         version_auto_class   : bool = True,
                         name_of_func_name_arg: str = "func_name") -> None:
         
@@ -4182,8 +4202,8 @@ class _CacheWrapper(object):
 
     @staticmethod
     def _ensure_has_version( F,
-                             version      : str = None,
-                             dependencies : list = None,
+                             version      : str|None = None,
+                             dependencies : list|None = None,
                              auto_class   : bool = True,
                              allow_default: bool = False):
         """
@@ -4254,8 +4274,8 @@ class _CacheWrapper(object):
                     raise ValueError(f"{self.name}: 'exclude_args' contains unknown argument names: exclude_args {sorted(self._exclude_args)} while argument names are {sorted(argus)}.")
             if not self._include_args is None:     
                 if self._include_args > argus:
-                    raise ValueError(f"{self.name}: 'include_args' contains unknown argument names: include_args {sorted(self._iinclude_args)} while argument names are {sorted(argus)}.")
-                excl = argus - self._iinclude_args
+                    raise ValueError(f"{self.name}: 'include_args' contains unknown argument names: include_args {sorted(self._include_args)} while argument names are {sorted(argus)}.")
+                excl = argus - self._include_args
             if not self._exclude_args is None:
                 excl |= self._exclude_args
             for arg in excl:
@@ -4576,9 +4596,55 @@ class _CacheWrapper(object):
         update_wrapper( wrapper=execute, wrapped=self._F )
         return execute
 
-        
+# ----------------------------
+# HDF5 datetime64 support
+# ----------------------------
+
+_KIND_ATTR = "__numpy_kind__"
+_DTYPE_ATTR = "__numpy_dtype__"
 
 
+def _is_datetime64_dtype(dtype) -> bool:
+    return np.issubdtype(np.dtype(dtype), np.datetime64)
 
+def _write_datetime64_dataset(group: h5py.Group, name: str, x, **create_kw):
+    """
+    Store np.datetime64 / datetime64 array as int64 + dtype metadata.
+
+    Preserves:
+      - shape
+      - exact resolution, e.g. datetime64[ns], datetime64[D], datetime64[5m]
+      - NaT, because NaT is the int64 minimum sentinel
+      - compression/chunking options passed via create_kw
+    """
+    arr = np.asarray(x)
+    dtype = arr.dtype
+
+    if not _is_datetime64_dtype(dtype):
+        raise TypeError(f"Expected datetime64 dtype, got {dtype}")
+
+    unit, count = np.datetime_data(dtype)
+    if unit == "generic":
+        raise TypeError(
+            "Refusing to store generic datetime64 dtype. "
+            "Cast explicitly first, e.g. x.astype('datetime64[ns]')."
+        )
+
+    raw = arr.view(np.int64)
+
+    ds = group.create_dataset(name, data=raw, dtype=np.int64, **create_kw)
+    ds.attrs[_KIND_ATTR] = "datetime64"
+    ds.attrs[_DTYPE_ATTR] = str(dtype)  # e.g. "datetime64[ns]"
+    return ds
+
+
+def _read_datetime64_dataset(ds, name: str):
+    if ds.attrs.get(_KIND_ATTR) != "datetime64":
+        raise TypeError(f"{name!r} is not a stored datetime64 dataset")
+
+    dtype = np.dtype(ds.attrs[_DTYPE_ATTR])
+    raw = ds[...].astype(np.int64, copy=False)
+
+    return raw.view(dtype)
 
 

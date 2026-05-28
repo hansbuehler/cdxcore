@@ -166,6 +166,36 @@ class Test(unittest.TestCase):
         l = sorted( channel.messages )
         self.assertEqual( str(l), r"['00: Analysis done\n', '00: Launching analysis\n', '02:     Result for BTC: -0.38, -0.42\n', '02:     Result for GLD: -0.47, -0.42\n', '02:     Result for SPY: -0.42, -0.41\n']")
                         
+    def test_pickle(self):
+        import pickle
+        pool    = JCPool(2, threading=False)
+        s = pickle.dumps(pool)
+        pool2 = pickle.loads(s)
+        self.assertEqual( type(pool), type(pool2) )
+        self.assertNotEqual( id(pool._pool), id(pool2._pool) ) # the pool is not pickled, so should be different objects
+
+    def test_pool_config(self):
+        from cdxcore.jcpool import JCPoolConfig
+        pool_config = JCPoolConfig(num_workers=3, threading=True)
+        pool1 = pool_config.pool()
+        pool2 = pool_config.pool()
+        self.assertEqual( id(pool1), id(pool2) ) # the pool is a singleton, so should be the same object
+        self.assertEqual( pool1.num_workers, 3 )
+        self.assertEqual( pool1.threading, True )
+
+    def test_set_leak_detection(self):
+        pool = JCPool(2, threading=False)
+        self.assertTrue(pool._mem_leak_enforce)
+        try:
+
+            _old = JCPool.DEFAULT_MEM_LEAK_ENFORCE
+            JCPool.DEFAULT_MEM_LEAK_ENFORCE = False
+
+            pool = JCPool(2, threading=False)
+            self.assertFalse(pool._mem_leak_enforce)
+        finally:
+            JCPool.DEFAULT_MEM_LEAK_ENFORCE = _old
+
 if __name__ == '__main__':
     unittest.main()
 

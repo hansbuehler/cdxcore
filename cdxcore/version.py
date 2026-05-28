@@ -357,7 +357,7 @@ class Version(object):
         self._resolve_dependencies()
         return self._dependencies
 
-    def is_dependent( self, other) -> str:
+    def is_dependent( self, other) -> str|None:
         """
         Determines whether the current element is dependent on another element.
         
@@ -365,7 +365,7 @@ class Version(object):
         
         Returns
         -------
-        Version : str
+        Version : str | None
             This function returns ``None`` if there is no dependency on ``other``, 
             or the direct user-specified version of the ``other``
             it is dependent on.
@@ -373,7 +373,7 @@ class Version(object):
         other        = self._qual_name( other ) if not isinstance(other, str) else other
         dependencies = self.dependencies
         
-        def is_dependent( ddict ):
+        def is_dependent( ddict : dict ) -> str|None:
             for k, d in ddict.items():
                 if k == other:
                     return d if isinstance(d, str) else d[0]
@@ -386,8 +386,8 @@ class Version(object):
         return is_dependent( { self._qual_name( self._original ): dependencies } )
 
     def _resolve_dependencies(     self,
-                                   top_context  : str = None, # top level context for error messages
-                                   recursive    : set = None  # set of visited functions
+                                   top_context  : str | None = None, # top level context for error messages
+                                   recursive    : set | None = None  # set of visited functions
                                    ):
         """
         Function to be called to compute dependencies for `original`.

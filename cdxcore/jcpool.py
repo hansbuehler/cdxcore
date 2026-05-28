@@ -32,6 +32,7 @@ import joblib as joblib
 import psutil as psutil
 import math as math
 import logging as logging
+from dataclasses import dataclass
 
 from .verbose import Context, Timer
 from .subdir import SubDir
@@ -110,7 +111,7 @@ class _ParallelContextOperator( object ):
     """
     def __init__(self, pool_verbose     : Context,      # context to print Pool progress to (in thread)
                        f_verbose        : Context,      # original function context (in thread)
-                       verbose_interval : float = None  # throttling for reporting 
+                       verbose_interval : float|None = None  # throttling for reporting 
             ) -> None:
         cid = id(f_verbose)
         tid = get_thread_id()
@@ -492,14 +493,17 @@ class JCPool( object ):
             Default is ``"?/.cdxmp"`` which creates a temporary temp directory using, :func:`tempfile.gettempdir`, and places
             a subdirectory ``".cdxmp"`` inside it.
             
-        mem_leak_enforce : bool, default ``True``
+        mem_leak_enforce : bool | None, default is ``None`` which uses :attr:`cdxcore.jcpool.JCPool.DEFAULT_MEM_LEAK_ENFORCE`
         
             This parameter controls whether Loky is allowed to detect memory leaks when multi-processing is used. 
             See the section on "Loky Memory Leak Detection" above for background.
 
+            You can set the static variable :attr:`cdxcore.jcpool.JCPool.DEFAULT_MEM_LEAK_ENFORCE` to change the default value of this parameter
+            process-wide.
+
             This parameter has no effect if ``threading`` is ``True``.
             
-        mem_leak_max_memory : int | float, default ``DEFAULT_MEM_LEAK_MAX_MEMORY``
+        mem_leak_max_memory : int | float | None, default is ``None`` which uses :attr:`cdxcore.jcpool.JCPool.DEFAULT_MEM_LEAK_MAX_MEMORY`
         
             This parameter sets the memory threshold after which Loky assumes a process leaks memory and kills it. 
             See the section on "Loky Memory Leak Detection" above for background.
@@ -512,7 +516,7 @@ class JCPool( object ):
 
             This parameter has no effect if ``threading`` is ``True``.
             
-        mem_leak_timer : float, default ``DEFAULT_MEM_LEAK_TIMER``
+        mem_leak_timer : float | None, default is ``None`` which uses :attr:`cdxcore.jcpool.JCPool.DEFAULT_MEM_LEAK_TIMER`
         
             This parameter controls how many seconds Loky waits before detecting memory leaks (if ``mem_leak_enforce`` is ``True``) or how
             often it calls :func:`gc.collect` (if ``mem_leak_enforce`` is ``False``). 
@@ -540,6 +544,7 @@ class JCPool( object ):
     
     """
     
+    DEFAULT_MEM_LEAK_ENFORCE    = True  #: Default for whether to enforce memory leak detection in Loky, which is on by default.
     DEFAULT_MEM_LEAK_MAX_MEMORY = joblib.externals.loky.process_executor._MAX_MEMORY_LEAK_SIZE     #: Default Loky memory leak size, usually 300MB
     DEFAULT_MEM_LEAK_TIMER      = joblib.externals.loky.process_executor._MEMORY_LEAK_CHECK_DELAY  #: Default loky memory leak and :func:`gc.collect` timer in seconds, usually 1.#
     MIN_MAX_MEMORY              = 10_000_000  #: lower bound for memory leak detection per process. See discussion on "Loky Memory Leak Detection" above.
@@ -547,23 +552,41 @@ class JCPool( object ):
     def __init__(self, num_workers          : int = 1,
                        threading            : bool = False,
                        tmp_root_dir         : str|SubDir= "!/.cdxmp",  *,
-                       mem_leak_enforce     : bool = True,
-                       mem_leak_max_memory  : int|float = DEFAULT_MEM_LEAK_MAX_MEMORY,
-                       mem_leak_timer       : float = DEFAULT_MEM_LEAK_TIMER,
+                       mem_leak_enforce     : bool|None = None,
+                       mem_leak_max_memory  : int|float|None = None,
+                       mem_leak_timer       : float|None = None,
                        logging_level        : int|None = logging.ERROR,
                        verbose              : Context = Context.quiet,
                        parallel_kwargs      : dict = {} ) -> None:
         """
         Initialize a multi-processing pool. Thin wrapper around joblib.parallel for cdxcore.verbose.Context() output
         """
+        mem_leak_enforce       = mem_leak_enforce if not mem_leak_enforce is None else JCPool.DEFAULT_MEM_LEAK_ENFORCE
+        mem_leak_max_memory    = mem_leak_max_memory if not mem_leak_max_memory is None else JCPool.DEFAULT_MEM_LEAK_MAX_MEMORY
+        mem_leak_timer         = mem_leak_timer if not mem_leak_timer is None else JCPool.DEFAULT_MEM_LEAK_TIMER
+    
+
+        self.__state = dict(
+            num_workers = num_workers,
+            threading = threading,
+            tmp_root_dir =tmp_root_dir,
+            mem_leak_enforce = mem_leak_enforce,
+            mem_leak_max_memory = mem_leak_max_memory,
+            mem_leak_timer = mem_leak_timer,
+            logging_level = logging_level,
+            verbose = verbose,
+            parallel_kwargs = dict(parallel_kwargs)
+        )
+
         tmp_dir_ext                = unique_hash8( uuid.getnode(), os.getpid(), get_thread_id(), datetime.datetime.now() )
-        num_workers                = int(num_workers)
+        self._num_workers          = int(num_workers)
         tmp_root_dir               = SubDir(tmp_root_dir) if not tmp_root_dir is None else None
         self._tmp_dir              = tmp_root_dir(tmp_dir_ext, ext='', create_directory=False) if not tmp_root_dir is None else None
         self._verbose              = verbose if not verbose is None else Context("quiet")
         self._threading            = threading
-        self._no_pool              = num_workers == 0
+        self._no_pool              = self._num_workers == 0
         self._pool                 = None # for error message handling
+        del num_workers
         
         if isinstance(mem_leak_max_memory, float):
             verify_inp( 0. < mem_leak_max_memory < 1., lambda : f"If 'mem_leak_max_memory' is a float it must be strictly between 0 and 1; found {mem_leak_max_memory:.4g}")
@@ -580,14 +603,14 @@ class JCPool( object ):
         logger = mp.util.log_to_stderr(level=logging_level) if not logging_level is None else mp.util.getLogger()
         logger.addFilter(_PromoteMemoryLeakToFatal())
             
-        if num_workers < 0:
-            num_workers = max( self.cpu_count() + num_workers + 1, 1 )
+        if self._num_workers < 0:
+            self._num_workers = max( self.cpu_count() + self._num_workers + 1, 1 )
         
         path_info = f" with temporary directory '{self.tmp_path}'" if not self.tmp_path is None else ''
-        if num_workers!=0:
-            with self._verbose.write_t(f"Launching {num_workers} processes{path_info}... ", end='') as tme:
-                self._pool = joblib_Parallel( n_jobs=num_workers, 
-                                              backend="loky" if not threading else "threading", 
+        if self._num_workers!=0:
+            with self._verbose.write_t(f"Launching {self._num_workers} processes{path_info}... ", end='') as tme:
+                self._pool = joblib_Parallel( n_jobs=self._num_workers, 
+                                              backend="loky" if not self._threading else "threading", 
                                               return_as="generator_unordered", 
                                               temp_folder=self.tmp_path,
                                               **parallel_kwargs)
@@ -599,6 +622,8 @@ class JCPool( object ):
     def __del__(self):
         self.terminate()
 
+
+
     @property
     def tmp_path(self) -> str|None:
         """ Path to the temporary directory for this object. """
@@ -607,6 +632,15 @@ class JCPool( object ):
     def is_threading(self) -> bool:
         """ Whether we are threading or multi-processing. """
         return self._threading
+
+    @property
+    def threading(self) -> bool:
+        """ Whether we are threading or multi-processing. """
+        return self._threading
+    @property
+    def num_workers(self) -> int:
+        """ Actual number of worker processes or threads. """
+        return self._num_workers
     @property
     def is_no_pool(self) -> bool:
         """ Whether this is an actual pool or not (i.e. the pool was constructed with zero workers) """
@@ -852,4 +886,57 @@ class JCPool( object ):
                 A list with results, in the order of ``jobs``.
         """
         return _parallel_to_list( self._pool, jobs )
+
+    # ------------------------------------------------------------
+    # Serialization - serialize the arguments, do not serialize
+    # the pool itself.
+    # ------------------------------------------------------------
+
+    @staticmethod
+    def _reconstruct_from_state( state : dict ) -> JCPool:
+        return JCPool(**state)
+
+    def __reduce__(self) -> tuple:
+        return ( JCPool._reconstruct_from_state, (self.__state,) )
+
+class JCPoolConfig(object):
+    """
+    Pool configuation object.
+    
+    This object's :meth:`pool` method returns a singleton :class:`JCPool` object for this configuration.
+    This allows you to use the same pool across your code base without having to pass around the pool object itself, e.g.::
+
+        def f( x, pool_config : JCPoolConfig ):
+            pool = pool_config.pool() # get the pool for this configuration
+            for y in pool.parallel( pool.delayed(g)(x=x) for x in [1,2,3] ):
+                print(y)
+
+        def g( x, pool_config : JCPoolConfig ):
+            ...
+            f( x, pool_config=pool_config ) # pass the same pool configuration to f() and g()
+            ...
+            pool = pool_config.pool() # get the same pool for this configuration
+
+    """
+    def __init__(self, num_workers : int = 4, threading : bool = False ):
+        self.num_workers: int         = num_workers  # Number of worker processes or threads. If zero, no pool is used.
+        self.threading:   bool        = threading    # Whether to use threading or multiprocessing. This is only used if the respective code base is supporting this.
+        self._pool:       JCPool|None = None
+
+    def __str__(self):
+        """ Minimal string representation of the pool configuration. """
+        return f"{self.num_workers}{'t' if self.threading else 'p'}"
+    
+    @staticmethod
+    def off():
+        """ Pool configuration for no parallel processing. """
+        return JCPoolConfig(num_workers=0, threading=True)
+    
+    def pool(self, **kwargs) -> JCPool:
+        """ Get the pool for this configuration. This is a singleton in a given process. """
+        if self._pool is None:
+            self._pool = JCPool( num_workers=self.num_workers, threading=self.threading, **kwargs )
+        return self._pool
+
+
 

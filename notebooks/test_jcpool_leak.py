@@ -1,5 +1,5 @@
 import importlib as imp
-import packages.cdxcore.cdxcore as _
+import cdxcore as _
 imp.reload(_)
 
 from cdxcore.jcpool import JCPool

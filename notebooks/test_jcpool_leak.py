@@ -2,7 +2,7 @@ import importlib as imp
 import packages.cdxcore.cdxcore as _
 imp.reload(_)
 
-from packages.cdxcore.cdxcore.jcpool import JCPool
+from cdxcore.jcpool import JCPool
 
 data = []
 

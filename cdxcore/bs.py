@@ -366,22 +366,26 @@ class BS(object):
                 if not np.all(vega <= max_vega+eps):
                     raise FloatingPointError(f"Internal Vega bound error: #overshoot: {np.sum(vega > max_vega+eps)} by {np.max(vega - (max_vega+eps))}")
                 vega = np.minimum(max_vega, np.maximum(vega,0.))
-            if not gamma is None:
+            if not gamma is None :
                 assert np.all(np.isfinite(gamma)), "Infinite gamma"
-                max_gamma = _inv_sqrt_2pi / vf
-                if not np.all(gamma >= -eps):
-                    raise FloatingPointError(f"Internal Gamma bound error: #undershoot: {np.sum(gamma < -eps)} by {np.max(-eps - gamma)}")
-                if not np.all(gamma <= max_gamma+eps):
-                    raise FloatingPointError(f"Internal Gamma bound error: #overshoot: {np.sum(gamma > max_gamma+eps)} by {np.max(gamma - (max_gamma+eps))}")
-                gamma = np.minimum(max_gamma, np.maximum(gamma,0.))
-            if not theta is None:
+                _gamma = gamma[vf > 0.]
+                if len(_gamma) > 0:
+                    max_gamma = _inv_sqrt_2pi / vf[vf > 0.]
+                    if not np.all( _gamma >= -eps):
+                        raise FloatingPointError(f"Internal Gamma bound error: #undershoot: {np.sum(_gamma < -eps)} by {np.max(-eps - _gamma)}")
+                    if not np.all(_gamma <= max_gamma+eps):
+                        raise FloatingPointError(f"Internal Gamma bound error: #overshoot: {np.sum(_gamma > max_gamma+eps)} by {np.max(_gamma - (max_gamma+eps))}")
+                    gamma = np.where( vf>0., np.minimum(max_gamma, np.maximum(gamma, 0.)), gamma)
+            if not theta is None :
                 assert np.all(np.isfinite(theta)), "Infinite theta"
-                max_theta = 0.5 * vol * _inv_sqrt_2pi / sqrtT
-                if not np.all(theta >= -eps):
-                    raise FloatingPointError(f"Internal Theta bound error: #undershoot: {np.sum(theta < -eps)} by {np.max(-eps - theta)}")
-                if not np.all(theta <= max_theta+eps):
-                    raise FloatingPointError(f"Internal Theta bound error: #overshoot: {np.sum(theta > max_theta+eps)} by {np.max(theta - (max_theta+eps))}")
-                theta = np.minimum(max_theta, np.maximum(theta,0.))
+                _theta = theta[vf > 0.]
+                if len(_theta) > 0:
+                    max_theta = 0.5 * vol * _inv_sqrt_2pi / sqrtT[sqrtT > 0.]
+                    if not np.all(_theta >= -eps):
+                        raise FloatingPointError(f"Internal Theta bound error: #undershoot: {np.sum(_theta < -eps)} by {np.max(-eps - _theta)}")
+                    if not np.all(_theta <= max_theta+eps):
+                        raise FloatingPointError(f"Internal Theta bound error: #overshoot: {np.sum(_theta > max_theta+eps)} by {np.max(_theta - (max_theta+eps))}")
+                    theta = np.where(sqrtT > 0., np.minimum(max_theta, np.maximum(theta, 0.)), theta)
 
         assert not (what & BS.PRICE) or not C is None
         assert not (what & BS.DELTA) or not delta is None

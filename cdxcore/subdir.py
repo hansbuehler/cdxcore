@@ -2142,10 +2142,16 @@ class SubDir(object):
         assert os.path.exists(fullTmpFile), ("Internal error: file does not exist ...?", fullTmpFile, full_file_name)
         try:
             if os.path.exists(full_file_name):
-                os.remove(full_file_name)
+                try:
+                    os.remove(full_file_name)
+                except FileNotFoundError:
+                    pass
             os.rename(fullTmpFile, full_file_name)
         except Exception as e:
-            os.remove(fullTmpFile)
+            try:
+                os.remove(fullTmpFile)
+            except FileNotFoundError:
+                pass
             if raise_on_error:
                 raise e
             return False

@@ -277,12 +277,12 @@ class BS(object):
                 max_vega = sqrtT * _inv_sqrt_2pi
                 if not (vega >= -eps and vega <= max_vega+eps): raise FloatingPointError("Internal Vega bound error", vega, 0., max_vega)
                 vega = min(max_vega, max(vega,0.))
-            if not gamma is None:
+            if not gamma is None and vf > 0.:
                 assert np.isfinite(gamma), "Infinite gamma"
                 max_gamma = _inv_sqrt_2pi / vf
                 if not (gamma >= -eps and gamma <= max_gamma+eps): raise FloatingPointError("Internal Gamma bound error", gamma, 0., max_gamma)
                 gamma = min(max_gamma, max(gamma,0.))  
-            if not theta is None:
+            if not theta is None and sqrtT > 0:
                 assert np.isfinite(theta), "Infinite theta"
                 max_theta = 0.5 * vol * _inv_sqrt_2pi / sqrtT
                 if not (theta >= -eps and theta <= max_theta+eps): raise FloatingPointError("Internal Theta bound error", theta, 0., max_theta)

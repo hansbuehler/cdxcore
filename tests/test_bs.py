@@ -17,6 +17,31 @@ import numpy as np
 import math as math
 
 class TestBS(unittest.TestCase):
+
+    def test_implied_rejects_prices_below_intrinsic(self):
+        with self.assertRaises(ValueError):
+            bs.implied(
+                np.array([0.8]),
+                np.array([0.1]),
+                is_call=True,
+                on_exceed_bounds='error',
+            )
+
+    def test_implied_uses_array_default_vol_as_initial_guess(self):
+        k = np.array([1.0, 0.8])
+        true_vol = np.array([4.0, 1.5])
+        prices = bs.price(k, true_vol, sqrtT=1.0, is_call=True)
+
+        implied = bs.implied(
+            k,
+            prices,
+            is_call=True,
+            sqrtT=1.0,
+            default_vol=true_vol,
+            max_iters=1,
+        )
+
+        self.assertLess(np.max(np.abs(implied - true_vol)), 1E-12)
     
     def test_bs(self):
         np.random.seed(21123)

@@ -39,7 +39,7 @@ import math as math
 import warnings as warnings
 from enum import IntFlag, auto, Enum
 import numpy as np
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 # Optional dependencies
 try:
@@ -108,6 +108,7 @@ class BS(object):
                   what : int = PRICE, 
                   is_call : np.ndarray|bool = True, *, 
                   logK : np.ndarray|float|None = None, 
+                  on_precision_error : str = "raise",
                   eps : float | None = None ) -> PrettyValueObject|np.ndarray|float:
         r"""
         Compute Black Scholes call option prices, and greeks in drift-less price domain efficiently.
@@ -155,16 +156,24 @@ class BS(object):
             The following then works as expected::
 
                 from cdxcore.bs import bs
-                price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA )['price','vega'] 
+                price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.VEGA|bs.PRICE )['price','vega'] 
 
-            The order of items is always "price", "delta", "dk", "gamma", "vega", "theta", "logK"
+            You can also access the result by tuple access. The order of the items is always "price", "delta", "dk", "gamma", "vega", "theta", "logK"
             *whichever was requested*; hence you can also do::
 
-                price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA )
+                price, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.VEGA|bs.PRICE )
+
+            Note that as expected the ``|`` operand does not alter the order of the returned data.
 
         logK : np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
             The function will mask this array where ``k==0``, hence ``logK`` can be left ``NaN`` in those locations.
+
+        on_precision_error: str, default ``raise``
+            What to do if any of the calculated values are outside their theoretical bounds by more than some tolerance.
+            Can be one of ``"clip"``, ``"warn"``, or ``"raise"``.
+            In case of ``"clip"`` and ``"warn"`` the function will clip the return the results clipped
+            at their theoretical bounds.
 
         eps : float | None, default ``None``
             An optional precision tolerance for the internal checks. If not provided, the default is ``bs._eps`` (1E-8).
@@ -215,6 +224,7 @@ class BS(object):
         verify_inp( np.min(sqrtT) >= 0., "'sqrtT' cannot be negative")
         verify_inp( isinstance(what, IntFlag), "'what' must be a bitmask of BS items" )
         verify_inp( what != 0, "'what' cannot be zero" )
+        verify_inp( on_precision_error in ["clip", "warn", "raise"], f"'on_precision_error' must be one of 'clip', 'warn', or 'raise', got {on_precision_error}" )
 
         need_N1   = (what & (BS.DELTA|BS.PRICE)) != 0
         need_N2   = (what & (BS.DK|BS.PRICE)) != 0
@@ -222,6 +232,12 @@ class BS(object):
         need_logK = (what & BS.LOGK) != 0
 
         vf   = vol * sqrtT
+
+        def handle_error( message : Callable[[], str] ):
+            if on_precision_error == "warn":
+                warnings.warn(message())
+            elif on_precision_error == "raise":
+                raise FloatingPointError(message())
         
         if _is_number( k ) and _is_number( vf ):
             verify( logK is None or _is_number(logK), "'logK' must be of same shape as 'k'" )
@@ -262,30 +278,31 @@ class BS(object):
             if not C is None:
                 assert np.isfinite(C), "Infinite C"
                 I = max(0.,1-k)
-                if not (C <= 1.+eps and C >= I-eps): raise FloatingPointError("Internal C bound error", C, 1., I)
+
+                if not (C <= 1.+eps and C >= I-eps): handle_error(lambda: f"Internal C bound error: {C} not in [{I}, 1.]")
                 C= min(1.,max(C,I))
             if not delta is None:
                 assert np.isfinite(delta), "Infinite delta"            
-                if not (delta >= -eps and delta <= 1.+eps): raise FloatingPointError("Internal Delta bound error", delta, 0., 1.)
+                if not (delta >= -eps and delta <= 1.+eps): handle_error(lambda: f"Internal Delta bound error: {delta} not in [0., 1.]")
                 delta = min(1.,max(delta,0.))
             if not dk is None:
                 assert np.isfinite(dk), "Infinite dk"
-                if not (dk <= eps and dk >= -1.-eps): raise FloatingPointError("Internal dk bound error", dk, -1., 0.)
+                if not (dk <= eps and dk >= -1.-eps): handle_error(lambda: f"Internal dk bound error: {dk} not in [-1., 0.]")
                 dk = min(0.,max(dk,-1.))
             if not vega is None:
                 assert np.isfinite(vega), "Infinite vega"
                 max_vega = sqrtT * _inv_sqrt_2pi
-                if not (vega >= -eps and vega <= max_vega+eps): raise FloatingPointError("Internal Vega bound error", vega, 0., max_vega)
+                if not (vega >= -eps and vega <= max_vega+eps): handle_error(lambda: f"Internal Vega bound error: {vega} not in [0., {max_vega}]")
                 vega = min(max_vega, max(vega,0.))
             if not gamma is None and vf > 0.:
                 assert np.isfinite(gamma), "Infinite gamma"
                 max_gamma = _inv_sqrt_2pi / vf
-                if not (gamma >= -eps and gamma <= max_gamma+eps): raise FloatingPointError("Internal Gamma bound error", gamma, 0., max_gamma)
+                if not (gamma >= -eps and gamma <= max_gamma+eps): handle_error(lambda: f"Internal Gamma bound error: {gamma} not in [0., {max_gamma}]")
                 gamma = min(max_gamma, max(gamma,0.))  
             if not theta is None and sqrtT > 0:
                 assert np.isfinite(theta), "Infinite theta"
                 max_theta = 0.5 * vol * _inv_sqrt_2pi / sqrtT
-                if not (theta >= -eps and theta <= max_theta+eps): raise FloatingPointError("Internal Theta bound error", theta, 0., max_theta)
+                if not (theta >= -eps and theta <= max_theta+eps): handle_error(lambda: f"Internal Theta bound error: {theta} not in [0., {max_theta}]")
                 theta = min(max_theta, max(theta,0.))
 
         else:
@@ -340,52 +357,54 @@ class BS(object):
                 assert np.all(np.isfinite(C)), "Infinite C"
                 I = np.maximum(1.-k,0.)
                 if not np.all(C-eps <= 1.):
-                    raise FloatingPointError(f"Internal C bound error: #overshoot: {np.sum(C > 1.+eps)} by {np.min(C - 1.)}")
+                    handle_error(lambda: f"Internal C bound error: #overshoot: {np.sum(C > 1.+eps)} by {np.min(C - 1.)}")
                 if not np.all(C+eps >= I):
-                    raise FloatingPointError(f"Internal C bound error: #undershoot: {np.sum(C < I-eps)}, by {np.max(I - C)}")
-                C = np.minimum(1.,np.maximum(C,I))
+                    handle_error(lambda: f"Internal C bound error: #undershoot: {np.sum(C < I-eps)}, by {np.max(I - C)}")
+                C = np.clip(C, I, 1.)
             if not delta is None:
                 assert np.all(np.isfinite(delta)), "Infinite delta"
                 if not np.all(delta >= -eps):
-                    raise FloatingPointError(f"Internal Delta bound error: #undershoot: {np.sum(delta < -eps)} by {np.max(-eps - delta)}")
+                    handle_error(lambda: f"Internal Delta bound error: #undershoot: {np.sum(delta < -eps)} by {np.max(-eps - delta)}")
                 if not np.all(delta <= 1.+eps):
-                    raise FloatingPointError(f"Internal Delta bound error: #overshoot: {np.sum(delta > 1.+eps)} by {np.max(delta - (1.+eps))}")
-                delta = np.minimum(1.,np.maximum(delta,0.))
+                    handle_error(lambda: f"Internal Delta bound error: #overshoot: {np.sum(delta > 1.+eps)} by {np.max(delta - (1.+eps))}")
+                delta = np.clip(delta, 0., 1.)
             if not dk is None:
                 assert np.all(np.isfinite(dk)), "Infinite dk"
                 if not np.all(dk <= eps):
-                    raise FloatingPointError(f"Internal dk bound error: #undershoot: {np.sum(dk < -1.-eps)} by {np.max(-eps - dk)}")
+                    handle_error(lambda: f"Internal dk bound error: #undershoot: {np.sum(dk < -1.-eps)} by {np.max(-eps - dk)}")
                 if not np.all(dk >= -1.-eps):
-                    raise FloatingPointError(f"Internal dk bound error: #overshoot: {np.sum(dk > eps)} by {np.max(dk - eps)}")
-                dk = np.minimum(0.,np.maximum(dk,-1.))
+                    handle_error(lambda: f"Internal dk bound error: #overshoot: {np.sum(dk > eps)} by {np.max(dk - eps)}")
+                dk = np.clip(dk, -1., 0.)
             if not vega is None:
                 assert np.all(np.isfinite(vega)), "Infinite vega"
                 max_vega = sqrtT * _inv_sqrt_2pi
                 if not np.all(vega >= -eps):
-                    raise FloatingPointError(f"Internal Vega bound error: #undershoot: {np.sum(vega < -eps)} by {np.max(-eps - vega)}")
+                    handle_error(lambda: f"Internal Vega bound error: #undershoot: {np.sum(vega < -eps)} by {np.max(-eps - vega)}")
                 if not np.all(vega <= max_vega+eps):
-                    raise FloatingPointError(f"Internal Vega bound error: #overshoot: {np.sum(vega > max_vega+eps)} by {np.max(vega - (max_vega+eps))}")
-                vega = np.minimum(max_vega, np.maximum(vega,0.))
+                    handle_error(lambda: f"Internal Vega bound error: #overshoot: {np.sum(vega > max_vega+eps)} by {np.max(vega - (max_vega+eps))}")
+                vega = np.clip(vega, 0., max_vega)
             if not gamma is None :
                 assert np.all(np.isfinite(gamma)), "Infinite gamma"
                 _gamma = gamma[vf > 0.]
                 if len(_gamma) > 0:
                     max_gamma = _inv_sqrt_2pi / vf[vf > 0.]
                     if not np.all( _gamma >= -eps):
-                        raise FloatingPointError(f"Internal Gamma bound error: #undershoot: {np.sum(_gamma < -eps)} by {np.max(-eps - _gamma)}")
+                        handle_error(lambda: f"Internal Gamma bound error: #undershoot: {np.sum(_gamma < -eps)} by {np.max(-eps - _gamma)}")
                     if not np.all(_gamma <= max_gamma+eps):
-                        raise FloatingPointError(f"Internal Gamma bound error: #overshoot: {np.sum(_gamma > max_gamma+eps)} by {np.max(_gamma - (max_gamma+eps))}")
-                    gamma = np.where( vf>0., np.minimum(max_gamma, np.maximum(gamma, 0.)), gamma)
+                        handle_error(lambda: f"Internal Gamma bound error: #overshoot: {np.sum(_gamma > max_gamma+eps)} by {np.max(_gamma - (max_gamma+eps))}")
+                    gamma[vf>0] = np.clip(_gamma, 0., max_gamma)
             if not theta is None :
                 assert np.all(np.isfinite(theta)), "Infinite theta"
-                _theta = theta[vf > 0.]
+                _theta    = theta[vf > 0.]
                 if len(_theta) > 0:
-                    max_theta = 0.5 * vol * _inv_sqrt_2pi / sqrtT[sqrtT > 0.]
+                    _vol      = vol[vf > 0.] if isinstance(vol,np.ndarray) else vol
+                    _sqrtT    = sqrtT[vf > 0.] if isinstance(sqrtT,np.ndarray) else sqrtT   
+                    max_theta = 0.5 * _inv_sqrt_2pi * _vol / _sqrtT
                     if not np.all(_theta >= -eps):
-                        raise FloatingPointError(f"Internal Theta bound error: #undershoot: {np.sum(_theta < -eps)} by {np.max(-eps - _theta)}")
+                        handle_error(lambda: f"Internal Theta bound error: #undershoot: {np.sum(_theta < -eps)} by {np.max(-eps - _theta)}")
                     if not np.all(_theta <= max_theta+eps):
-                        raise FloatingPointError(f"Internal Theta bound error: #overshoot: {np.sum(_theta > max_theta+eps)} by {np.max(_theta - (max_theta+eps))}")
-                    theta = np.where(sqrtT > 0., np.minimum(max_theta, np.maximum(theta, 0.)), theta)
+                        handle_error(lambda: f"Internal Theta bound error: #overshoot: {np.sum(_theta > max_theta+eps)} by {np.max(_theta - (max_theta+eps))}")
+                    theta[vf > 0.] = np.clip(_theta, 0., max_theta)
 
         assert not (what & BS.PRICE) or not C is None
         assert not (what & BS.DELTA) or not delta is None
@@ -803,12 +822,12 @@ class BS(object):
         if max_iters <= 0:
             raise ValueError(f"'max_iters' must be positive; found {max_iters}")
         shape = prices.shape
-        assert np.all(np.isfinite(prices)), "Infinite input prices"
         if not mask is None and not isinstance(mask, np.ndarray):
-            raise ValueError("'mask' must be an ndarray")
+            raise ValueError(f"'mask' must be an ndarray, found type {type(mask)}")
+        assert np.all(np.isfinite(prices[mask] if not mask is None else prices)), "Infinite input prices"
 
         # convert into same shape if not float
-        def match_shape_or_float( x, dtype ):
+        def match_shape_or_float( x, dtype ) -> np.ndarray|np.dtype:
             if not isinstance( x, np.ndarray):
                 return dtype.type(x)
             if x.shape == k.shape:
@@ -838,21 +857,25 @@ class BS(object):
         fits = np.zeros_like(prices)  # output prices
         vols = np.zeros_like(prices)  # output vol
         intr = np.maximum( f0, np.where( is_call, f1 - k, k - f1) )
-        total = len(fits) if mask is None else np.sum(mask)
+        total = len(fits) if mask is None else int(np.sum(mask))
 
         upper = np.where(is_call, f1, k)
-        err_min = prices - intr   < 0. 
-        err_max = prices - upper  > 0.
+        err_min = prices - intr
+        err_max = prices - upper
         
         if not mask is None:
             err_min = np.where( mask, err_min, 0. )
             err_max = np.where( mask, err_max, 0. )
 
-        if np.any(err_min < 0.) or np.any(err_max > 0.):            
+        has_err_min = bool(np.any(err_min < 0.))
+        has_err_max = bool(np.any(err_max > 0.))
+
+        if has_err_min or has_err_max:            
             str_err_min = None
-            if np.any(err_min < 0.):                
-                str_err_min = f"Found {fmt_digits(np.sum(err_min < 0.))} of {fmt_digits(total)} prices below instrinc value; worst undershoot is {np.min(prices - intr):.4g}. "
-                ixs = np.arange(len(err_min))[ err_min < 0. ]
+            if has_err_min:
+                err_min_mask = err_min < 0.
+                str_err_min = f"Found {fmt_digits(int(np.sum(err_min_mask)))} of {fmt_digits(total)} prices below intrinsic value; worst undershoot is {float(np.min(err_min[err_min_mask])):.4g}. "
+                ixs = np.arange(len(err_min))[ err_min_mask ]
                 if len(ixs) > 10:
                     str_err_min += "Showing first 10 violations: "
                     ixs = ixs[:10]
@@ -861,10 +884,11 @@ class BS(object):
                 for ix in ixs:
                     str_err_min += f"price[{ix}] {prices[ix]} < intrinsic[{ix}] {intr[ix]}, "
                 str_err_min = str_err_min[:-2] + "."
-            str_err_min = None
-            if np.any(err_max > 0.):                
-                str_err_max = f"Found {fmt_digits(np.sum(err_max > 0.))} of {fmt_digits(total)} prices above their  upper bound; worst overshoot is {np.max(prices - upper):.4g}. "
-                ixs = np.arange(len(err_max))[ err_max > 0. ]
+            str_err_max = None
+            if has_err_max:
+                err_max_mask = err_max > 0.
+                str_err_max = f"Found {fmt_digits(int(np.sum(err_max_mask)))} of {fmt_digits(total)} prices above their upper bound; worst overshoot is {float(np.max(err_max[err_max_mask])):.4g}. "
+                ixs = np.arange(len(err_max))[ err_max_mask ]
                 if len(ixs) > 10:
                     str_err_max += "Showing first 10 violations: "
                     ixs = ixs[:10]
@@ -878,6 +902,7 @@ class BS(object):
                 err = str_err_min + " " + str_err_max
             else:
                 err = str_err_min if not str_err_min is None else str_err_max
+            assert err is not None
 
             if on_exceed_bounds == "error":
                 raise ValueError(err)
@@ -939,7 +964,9 @@ class BS(object):
             # https://repub.eur.nl/pub/1472/ERS%202004%20054%20FA.pdf (20)
             ## RS MOD: Generalizing to both calls and puts
 
-            if not isinstance(default_vol, np.ndarray):
+            if isinstance(default_vol, np.ndarray):
+                vols[work] = default_vol[work]
+            else:
                 S = 1.0
                 X = k[work]
                 PR_raw = prices[work]

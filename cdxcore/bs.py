@@ -867,13 +867,13 @@ class BS(object):
             err_min = np.where( mask, err_min, 0. )
             err_max = np.where( mask, err_max, 0. )
 
-        has_err_min = bool(np.any(err_min < 0.))
-        has_err_max = bool(np.any(err_max > 0.))
+        has_err_min = bool(np.any(err_min < -eps))
+        has_err_max = bool(np.any(err_max > eps))
 
         if has_err_min or has_err_max:            
             str_err_min = None
             if has_err_min:
-                err_min_mask = err_min < 0.
+                err_min_mask = err_min < -eps
                 str_err_min = f"Found {fmt_digits(int(np.sum(err_min_mask)))} of {fmt_digits(total)} prices below intrinsic value; worst undershoot is {float(np.min(err_min[err_min_mask])):.4g}. "
                 ixs = np.arange(len(err_min))[ err_min_mask ]
                 if len(ixs) > 10:
@@ -886,7 +886,7 @@ class BS(object):
                 str_err_min = str_err_min[:-2] + "."
             str_err_max = None
             if has_err_max:
-                err_max_mask = err_max > 0.
+                err_max_mask = err_max > eps
                 str_err_max = f"Found {fmt_digits(int(np.sum(err_max_mask)))} of {fmt_digits(total)} prices above their upper bound; worst overshoot is {float(np.max(err_max[err_max_mask])):.4g}. "
                 ixs = np.arange(len(err_max))[ err_max_mask ]
                 if len(ixs) > 10:
@@ -903,6 +903,7 @@ class BS(object):
             else:
                 err = str_err_min if not str_err_min is None else str_err_max
             assert err is not None
+            err += f" [tolerance {eps:.4e}]"
 
             if on_exceed_bounds == "error":
                 raise ValueError(err)

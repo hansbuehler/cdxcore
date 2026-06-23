@@ -817,11 +817,11 @@ class DebugTraceCollect(DebugTrace):
                                 msg   = msg,
                                 child = child )
         self.trace.append( y )        
-    def _update( self, x, msg : str = None ):
+    def _update( self, x, msg : str|None = None ):
         """ Notify processing of `x`, with an optional process `msg`
         :meta private: """#@private
         self._mupdate( x=x, msg=msg, child=None )
-    def _update_topic( self, x, msg : str = None ):
+    def _update_topic( self, x, msg : str|None = None ):
         """ Notify and return a sub-trace context
         :meta private: """#@private
         child = DebugTraceCollect(tostr=self.tostr)
@@ -867,10 +867,10 @@ class DebugTraceVerbose(DebugTrace):
         """
         Initialize tracer.
         """
-        if strsize<=3: ValueError("'strsize' must exceed 3")
+        if strsize<=3: raise ValueError("'strsize' must exceed 3")
         self.strsize = strsize
         self.verbose = Context("all") if verbose is None else verbose
-    def _update( self, x, msg : str = None, is_topic : bool = False ):
+    def _update( self, x, msg : str|None = None, is_topic : bool = False ):
         """ Notify processing of 'x', with an optional process 'msg'
         :meta private:
         """#@private
@@ -883,7 +883,7 @@ class DebugTraceVerbose(DebugTrace):
             self.verbose.write( f"{'Entering ' if is_topic else 'Using '}{type(x).__name__}: '{xstr}'" )
         else:
             self.verbose.write( f"{'Entering ' if is_topic else 'Using '}{msg} {type(x).__name__}: '{xstr}'" )
-    def _update_topic( self, x, msg : str = None ):
+    def _update_topic( self, x, msg : str|None = None ):
         """ Notify and return a sub-trace context
         :meta private:
         """#@private
@@ -901,7 +901,7 @@ class DebugTraceVerbose(DebugTrace):
 def NamedUniqueHash( max_length       : int = 60,
                      id_length        : int = 16,  *,
                      separator        : str = ' ',
-                     filename_by      : str|None = None,
+                     filename_by      : str|Mapping[str,str]|None = None,
                      **unique_hash_arguments 
                      ) -> Callable:
     """
@@ -967,8 +967,8 @@ def NamedUniqueHash( max_length       : int = 60,
     if id_length < 4: raise ValueError("'id_length' must be at least 4. Found {id_length}")
     if id_length > max_length: raise ValueError(f"'max_length' must not be less than 'id_length'. Founb {max_length} and {id_length}, respectivelty")
     if 'length' in unique_hash_arguments: raise ValueError("Cannot specify 'length' here. Used 'id_length' and 'max_length'")
-    filename_by  = ( DEF_FILE_NAME_MAP if filename_by=="default" else filename_by ) if not filename_by is None else None
-    fseparator   = fmt_filename( separator, by=filename_by ) if not filename_by is None else separator
+    filename_map = ( DEF_FILE_NAME_MAP if filename_by=="default" else filename_by ) if not filename_by is None else None
+    fseparator   = fmt_filename( separator, by=filename_map ) if not filename_map is None else separator
 
     label_length = max_length-id_length-len(fseparator)
     if label_length<=0:
@@ -979,7 +979,7 @@ def NamedUniqueHash( max_length       : int = 60,
     def named_unique_hash(label, *args, **kwargs) -> str:
         if label_length>0:
             assert not label is None, ("'label' cannot be None", args, kwargs)
-            label        = fmt_filename( label, by=filename_by ) if not filename_by is None else label
+            label        = fmt_filename( label, by=filename_map ) if filename_map is not None else label
             base_hash    = unique_hash( label, separator, *args, **kwargs )
             label        = label[:label_length] + fseparator + base_hash
         else:
@@ -990,7 +990,7 @@ def NamedUniqueHash( max_length       : int = 60,
 def UniqueLabel(     max_length       : int = 60,
                      id_length        : int = 8,
                      separator        : str = ' ',
-                     filename_by      : str|None = None) -> Callable:
+                     filename_by      : str|Mapping[str,str]|None = None) -> Callable:
     """
     Extend unique lables by a hash ID if they exceed ``max_length``.
     
@@ -1053,8 +1053,8 @@ def UniqueLabel(     max_length       : int = 60,
     if id_length < 4: raise ValueError("'id_length' must be at least 4. Found {id_length}")
     if id_length > max_length: raise ValueError(f"'max_length' must not be less than 'id_length'. Founb {max_length} and {id_length}, respectivelty")
 
-    filename_by  = ( DEF_FILE_NAME_MAP if filename_by=="default" else filename_by ) if not filename_by is None else None
-    fseparator   = fmt_filename( separator, by=filename_by ) if not filename_by is None else separator
+    filename_map = ( DEF_FILE_NAME_MAP if filename_by=="default" else filename_by ) if not filename_by is None else None
+    fseparator   = fmt_filename( separator, by=filename_map ) if not filename_map is None else separator
 
     if id_length>=max_length+len(fseparator):
         id_length = max_length+len(fseparator)
@@ -1062,7 +1062,7 @@ def UniqueLabel(     max_length       : int = 60,
     unique_hash = UniqueHash( length=id_length )
 
     def unique_label_hash(label) -> str:
-        if filename_by is None and len(label) <= max_length and len(label) > 0:
+        if filename_map is None and len(label) <= max_length and len(label) > 0:
             # no filename conversion and label is short enough --> use this name
             return label
             
@@ -1074,7 +1074,7 @@ def UniqueLabel(     max_length       : int = 60,
             label = base_hash
         else:
             # convert label to filename
-            label = fmt_filename( label, by=filename_by ) if not filename_by is None else label
+            label = fmt_filename( label, by=filename_map ) if not filename_map is None else label
             label = label[:max_length-len(label_hash)] + label_hash
         return label
     return unique_label_hash

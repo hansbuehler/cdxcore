@@ -5,6 +5,8 @@ Created on June 2022
 """
 from __future__ import annotations
 
+from typing import Any
+
 __version__ = "0.1.88"  # auto-updated by setup.py
 
 __all__ = [
@@ -33,7 +35,7 @@ __all__ = [
     "version",
 ]
 
-_EXPORTS = {
+_EXPORTS: dict[str, tuple[str, str]] = {
     "Config": ("cdxcore.config", "Config"),
     "Int": ("cdxcore.config", "Int"),
     "Float": ("cdxcore.config", "Float"),
@@ -58,7 +60,7 @@ _EXPORTS = {
     "version": ("cdxcore.version", "version"),
 }
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     try:
         module_name, attr_name = _EXPORTS[name]
     except KeyError as exc:

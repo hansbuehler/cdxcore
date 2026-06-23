@@ -226,6 +226,22 @@ to generate a deferred grid spec.
 
 Example::
 
+    from cdxcore.dynaplot import figure
+    import numpy as np
+    x = np.linspace(-2.,+2,101)
+    y = np.tanh(x)
+    with figure("Grid Spec Example", figsize=(10,5)) as fig:
+        gs  = fig.add_gridspec(2,2)
+
+        ax = fig.add_subplot("1", spec_pos=gs[0,0] )
+        ax.plot(x,y)
+        ax = fig.add_subplot("2", spec_pos=gs[:,1] )
+        ax.plot(x,y)
+        ax = fig.add_subplot("3", spec_pos=gs[1,0] )
+        ax.plot(x,y)
+
+A simpler method is to just specify their position this can be done as follows::
+
     %matplotlib inline
     from cdxcore.dynaplot import figure
     import numpy as np
@@ -384,12 +400,12 @@ class DynaAx(_DynaDeferred):
     def __init__(self, *, 
                        fig_id    : str, 
                        fig_list  : list,
-                       row       : int, 
-                       col       : int, 
-                       spec_pos  : SubplotSpec,
-                       rect      : tuple,
-                       title     : str, 
-                       projection: str,
+                       row       : int|None, 
+                       col       : int|None, 
+                       spec_pos  : SubplotSpec|None,
+                       rect      : tuple|None,
+                       title     : str|None, 
+                       projection: str|None,
                        kwargs    : dict) -> None:
         """ Creates internal object which defers the creation of various graphics to a later point """
         if row is None:
@@ -966,7 +982,7 @@ class DynaFig(_DynaDeferred):
             ax._initialize( self._fig, rows=None, cols=None )        
         return ax
     
-    def add_gridspec(self, ncols=1, nrows=1, **kwargs):
+    def add_gridspec(self, nrows=1, ncols=1, **kwargs):
         """
         Wrapper for :meth:`matplotlib.figure.Figure.add_gridspec`, returning a defered ``GridSpec``.
         """

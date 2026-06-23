@@ -157,7 +157,7 @@ def fmt(text : str|Callable, * args, ** kwargs) -> str:
     """
     return _fmt(text=text,args=args,kwargs=kwargs,f=fmt)
 
-def error( text : str|Callable, *args, exception : Exception = RuntimeError, **kwargs ):
+def error( text : str|Callable, *args, exception : type[Exception] = RuntimeError, **kwargs ):
     """
     Raise an exception with string formatting.
     
@@ -207,7 +207,7 @@ def error( text : str|Callable, *args, exception : Exception = RuntimeError, **k
     text = _fmt(text=text,args=args,kwargs=kwargs,f=error)
     raise exception( text )
     
-def verify( cond : bool, text : str|Callable, *args, exception : Exception = RuntimeError, **kwargs ):
+def verify( cond : bool, text : str|Callable, *args, exception : type[Exception] = RuntimeError, **kwargs ):
     """
     Raise an exception using delayed error string formatting if a condition is not met.
     

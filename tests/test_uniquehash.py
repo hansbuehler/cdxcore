@@ -51,7 +51,6 @@ class Test(unittest.TestCase):
         self.assertEqual( unique_hash( 1E-10), "9102ac1dc2adb0aa013cd897a69f74d2" )
         self.assertEqual( unique_hash( np.nan ), "a22bbc77f337db5e2445bd5c0235812e" )
 
-
         self.assertEqual( unique_hash( 64*2-1 ), "ab3c7f769c33b253409c77c6d749c1b9" )
         self.assertEqual( unique_hash( 29299324949094424543410418505067287561 ), "21f44f68310b25ef5381e40f119a3318" ) # test some big number
 
@@ -402,6 +401,10 @@ class Test(unittest.TestCase):
         self.assertEqual( unique_hash( b ), "4dcc1a611fd718e957ef8e6bcff7a326")
         self.assertEqual( unique_hash( c ), "e5a2889b6aafe33389890259e73407a5")
         
+        # failed before
+
+        self.assertEqual( unique_hash8(np.random.default_rng(1234).bit_generator.state), "c93b7e09" )
+
         # named
         # -----
         

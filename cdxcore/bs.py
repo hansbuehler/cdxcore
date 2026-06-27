@@ -207,6 +207,15 @@ class BS(object):
 
                 price, gamma, vega = bs( k=0.8, vol=0.2, sqrtT=1., what=bs.PRICE|bs.VEGA|bs.GAMMA )
 
+            The returned values are in "pure" space. You can conver them as follows:
+
+            * ``cash_delta = df * pure_delta``
+            * ``cash_gamma = df * pure_gamma / fwd``
+            * ``cash_vega  = df * fwd * pure_vega``
+            * ``cash_theta = df * fwd * pure_theta``
+            * ``cash_dK    = df * pure_dK``
+
+
         Raises
         ------
         input errors: :class:`ValueError`
@@ -397,8 +406,8 @@ class BS(object):
                 assert np.all(np.isfinite(theta)), "Infinite theta"
                 _theta    = theta[vf > 0.]
                 if len(_theta) > 0:
-                    _vol      = vol[vf > 0.] if isinstance(vol,np.ndarray) else vol
-                    _sqrtT    = sqrtT[vf > 0.] if isinstance(sqrtT,np.ndarray) else sqrtT   
+                    _vol      = (vf*0.+vol)[vf > 0.] if isinstance(vol,np.ndarray) else vol
+                    _sqrtT    = (vf*0.+sqrtT)[vf > 0.] if isinstance(sqrtT,np.ndarray) else sqrtT   
                     max_theta = 0.5 * _inv_sqrt_2pi * _vol / _sqrtT
                     if not np.all(_theta >= -eps):
                         handle_error(lambda: f"Internal Theta bound error: #undershoot: {np.sum(_theta < -eps)} by {np.max(-eps - _theta)}")

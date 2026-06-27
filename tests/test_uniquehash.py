@@ -50,7 +50,9 @@ class Test(unittest.TestCase):
         self.assertEqual( unique_hash( 0.1 ), "f45961d9b7e8673e7c758bcfd8af7cb9" )
         self.assertEqual( unique_hash( 1E-10), "9102ac1dc2adb0aa013cd897a69f74d2" )
         self.assertEqual( unique_hash( np.nan ), "a22bbc77f337db5e2445bd5c0235812e" )
-        
+
+        self.assertEqual( unique_hash( 64*2-1 ), "ab3c7f769c33b253409c77c6d749c1b9" )
+
         self.assertEqual( unique_hash( np.float16(0) ), "ff1bed336aae497f15a0d3f534609380" )
         self.assertEqual( unique_hash( np.float32(0) ), "c566588ea757dd31297b78f8c62a4b05" )
         self.assertEqual( unique_hash( np.float64(0) ), "d566dfb39f20d549d1c0684e94949c71" )        
@@ -62,6 +64,8 @@ class Test(unittest.TestCase):
         self.assertEqual( unique_hash( np.int32(0) ), "c566588ea757dd31297b78f8c62a4b05" )
         self.assertEqual( unique_hash( np.int64(0) ), "d566dfb39f20d549d1c0684e94949c71" )
         self.assertEqual( unique_hash( np.int64(-1) ), "265e3aae841649db057419ac7d85d399" )
+        self.assertEqual( unique_hash( np.int64(64*2-1) ), "ab3c7f769c33b253409c77c6d749c1b9" )
+        self.assertEqual( unique_hash( np.uint64(64*2-1) ), "ab3c7f769c33b253409c77c6d749c1b9" )
         
         self.assertEqual( unique_hash( [1,2,np.float16(3),4] ), "0922f2f0d1df45dac328582df43888f2" )
         self.assertEqual( unique_hash( [2,1,np.float16(3),4] ), "a33b2ce355ea93a0153d53806e5b692b" )

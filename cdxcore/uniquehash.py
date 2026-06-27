@@ -396,7 +396,10 @@ class UniqueHash( object ):
             if not debug_trace is None: debug_trace._update( x )
             return
         if isinstance( x, int ):
-            h.update( x.to_bytes(8,'little', signed=True) )
+            try:
+                h.update( x.to_bytes(8,'little', signed=True) )
+            except OverflowError:
+                h.update( x.to_bytes(8,'little', signed=False) )
             if not debug_trace is None: debug_trace._update( x )
             return
         if isinstance( x, ( float, complex ) ):

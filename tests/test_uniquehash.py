@@ -51,7 +51,9 @@ class Test(unittest.TestCase):
         self.assertEqual( unique_hash( 1E-10), "9102ac1dc2adb0aa013cd897a69f74d2" )
         self.assertEqual( unique_hash( np.nan ), "a22bbc77f337db5e2445bd5c0235812e" )
 
+
         self.assertEqual( unique_hash( 64*2-1 ), "ab3c7f769c33b253409c77c6d749c1b9" )
+        self.assertEqual( unique_hash( 29299324949094424543410418505067287561 ), "21f44f68310b25ef5381e40f119a3318" ) # test some big number
 
         self.assertEqual( unique_hash( np.float16(0) ), "ff1bed336aae497f15a0d3f534609380" )
         self.assertEqual( unique_hash( np.float32(0) ), "c566588ea757dd31297b78f8c62a4b05" )

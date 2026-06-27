@@ -399,7 +399,9 @@ class UniqueHash( object ):
             try:
                 h.update( x.to_bytes(8,'little', signed=True) )
             except OverflowError:
-                h.update( x.to_bytes(8,'little', signed=False) )
+                nbytes = max(1, (x.bit_length() + 8) // 8)  # caters for signed and unsiged.
+                b = x.to_bytes(nbytes, "little", signed=True)
+                h.update(b)
             if not debug_trace is None: debug_trace._update( x )
             return
         if isinstance( x, ( float, complex ) ):

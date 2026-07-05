@@ -587,14 +587,14 @@ class CacheMode(object):
         if isinstance( mode, CacheMode ):
             return# id copy constuctor
         mode      = self.ON if mode is None else mode
-        self.mode = mode.mode if isinstance(mode, CacheMode) else str(mode)
+        self.mode : str = mode.mode if isinstance(mode, CacheMode) else str(mode)
         if not self.mode in self.MODES:
             raise KeyError( self.mode, f"Caching mode must be {fmt_list(self.MODES,link='or')}. Found '{self.mode}'" )
-        self._read   = self.mode in [self.ON, self.READONLY, self.GEN, self.CACHEONLY]
-        self._write  = self.mode in [self.ON, self.UPDATE, self.GEN]
-        self._delete = self.mode in [self.UPDATE, self.CLEAR]
-        self._del_in = self.mode in [self.UPDATE, self.CLEAR, self.ON]
-        self._must_exist = self.mode == self.CACHEONLY
+        self._read   : bool = self.mode in [self.ON, self.READONLY, self.GEN, self.CACHEONLY]
+        self._write  : bool = self.mode in [self.ON, self.UPDATE, self.GEN]
+        self._delete : bool = self.mode in [self.UPDATE, self.CLEAR]
+        self._del_in : bool = self.mode in [self.UPDATE, self.CLEAR, self.ON]
+        self._must_exist : bool = self.mode == self.CACHEONLY
 
     def __new__(cls, *kargs, **kwargs):
         """ Copy constructor """
@@ -722,10 +722,10 @@ class CacheController( object ):
     
     def __init__(self, *,
                     exclude_arg_types  : list[type|str] = [Context],
-                    cache_mode         : CacheMode = CacheMode.ON,
+                    cache_mode         : CacheMode|str = CacheMode.ON,
                     max_filename_length: int = 48,
                     hash_length        : int = 8,
-                    debug_verbose      : Context = None,
+                    debug_verbose      : Context|None = None,
                     keep_last_arguments: bool = False
                     ) -> None:
         """
@@ -1003,7 +1003,7 @@ class SubDir(object):
     VER_RETURN   = 2
     """ :meta private: """
 
-    def __init__(self, name : str|SubDir|None, 
+    def __init__(self, name : str|SubDir|None|Mapping[str,Any] = None,
                        parent : str|SubDir|None = None, *, 
                        ext : str|None = None, 
                        fmt : Format|None = None, 
@@ -1113,7 +1113,7 @@ class SubDir(object):
                 name = parent._path[:-1]
         else:
             # expand name
-            name = _remove_trailing(name)
+            name : str = _remove_trailing(name)
             if name == "" and parent is None:
                 name = "."
             if name[:1] in ['!', '~', '?'] or name[:2] == "./" or name == ".":
@@ -1134,7 +1134,7 @@ class SubDir(object):
             elif not parent is None:
                 # path relative to 'parent'
                 if not parent.is_none:
-                    name    = os.path.join( parent._path, name )
+                    name : str = os.path.join( str(parent._path), name )
 
         # create directory/clean up
         if name is None:
@@ -1232,7 +1232,7 @@ class SubDir(object):
         """ Returns True if 'self' is set, or False if 'self' is a None directory """
         return not self.is_none
 
-    def __hash__(self) -> str: #NOQA
+    def __hash__(self) -> int: #NOQA
         return hash( (self._path, self._ext, self._fmt) )
 
     @property
@@ -1241,7 +1241,7 @@ class SubDir(object):
         return self._path is None
 
     @property
-    def path(self) -> str:
+    def path(self) -> str|None:
         """
         Return current path, including trailing ``'/'``.
         
@@ -1259,7 +1259,7 @@ class SubDir(object):
         Use :meth:`cdxcore.subdir.SubDir.path` if creation on the fly is not desired.
         """
         self.create_directory()
-        return self.path
+        return self.path 
 
     @property
     def fmt(self) -> Format:
@@ -1275,7 +1275,7 @@ class SubDir(object):
         assert self._ext=="" or self._ext==self.EXT_FMT_AUTO or self._ext[0] == ".", ("Extension error", self._ext)
         return self._ext if self._ext != self.EXT_FMT_AUTO else self._auto_ext(self._fmt)
 
-    def auto_ext( self, ext_or_fmt : str|Format = None ) -> str:
+    def auto_ext( self, ext_or_fmt : str|Format|None = None ) -> str:
         """
         Computes the effective extension based on theh inputs ``ext_or_fmt``,
         and the current settings for ``self``.
@@ -1302,7 +1302,7 @@ class SubDir(object):
         assert r=="" or r[0] == ".", ("Extension error", self._ext, ext_or_fmt)
         return r
 
-    def auto_ext_fmt( self, *, ext : str = None, fmt : Format = None ) -> tuple[str]:
+    def auto_ext_fmt( self, *, ext : str|None = None, fmt : Format|None = None ) -> tuple[str, Format]:
         """
         Computes the effective extension and format based on inputs ``ext`` and ``fmt``,
         each of which defaults to the respective values of ``self``.
@@ -1319,9 +1319,9 @@ class SubDir(object):
             verify( fmt is None or fmt == ext, "If 'ext' is a Format, then 'fmt' must match 'ext' or be None. Found '%s' and '%s', respectively.", ext, fmt, exception=ValueError )
             return self._auto_ext(ext), ext
 
-        fmt = fmt if not fmt is None else self._fmt
-        ext = self._ext if ext is None else SubDir._extract_ext(ext)
-        ext = ext if ext != self.EXT_FMT_AUTO else self._auto_ext(fmt)
+        fmt : Format = fmt if not fmt is None else self._fmt
+        ext : str = self._ext if ext is None else SubDir._extract_ext(ext)
+        ext : str = ext if ext != self.EXT_FMT_AUTO else self._auto_ext(fmt)
         return ext, fmt
     
     @property
@@ -1407,7 +1407,7 @@ class SubDir(object):
             
     # -- public utilities --
 
-    def full_file_name(self, file : str, *, ext : str = None) -> str:
+    def full_file_name(self, file : str, *, ext : str|None = None) -> str|None:
         """
         Returns fully qualified file name, based on a given unqualified file name (e.g. without path or extension).
 
@@ -4058,25 +4058,25 @@ class CacheInfo(PrettyObject):
         :meta private:
         """
         self.name        : str = name                  #: Decoded name of the function.        
-        self.unique_id   : str = None                  #: Unique ID of the last function call.
-        self.filename    : str = None                  #: Unique filename of the last function call.
-        self.label       : str = None                  #: Label of the last function call.
+        self.unique_id   : str|None = None             #: Unique ID of the last function call.
+        self.filename    : str|None = None             #: Unique filename of the last function call.
+        self.label       : str|None = None             #: Label of the last function call.
         self.version     : str = idversion             #: (hash) version used. This is equal to ``F.version.unique_id64``.
-        self.last_cached : bool = None                 #: Whether the last function call restored data from disk; ``None`` if no function call was made yet.
-        self.sub_dir     : SubDir = None               #: Sub-directory where the file was stored (this can differ from the original sub-directory of the function label contains directory information).
+        self.last_cached : bool|None = None            #: Whether the last function call restored data from disk; ``None`` if no function call was made yet.
+        self.sub_dir     : SubDir|None = None          #: Sub-directory where the file was stored (this can differ from the original sub-directory of the function label contains directory information).
         self.override_cache_mode : CacheMode|None = None #: Last ``override_cache_mode`` used; ``None`` otherwise.
-        self.cache_generate_only : bool = None        #: Value of ``cache_generate_only`` during the last cached function call. 
+        self.cache_generate_only : bool|None = None        #: Value of ``cache_generate_only`` during the last cached function call. 
         
         if keep_last_arguments:             
-            self.last_arguments : dict = None          #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` when the :class:`cdxcore.subdir.CacheController` was created.
+            self.last_arguments : dict|None = None          #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` when the :class:`cdxcore.subdir.CacheController` was created.
 
     @property
-    def path(self) -> str:
+    def path(self) -> str|None:
         """ Path of the last cached file, or ``None`` if no file was cached yet. """
         return self.sub_dir.path if not self.sub_dir is None else None
     
     @property
-    def full_file_name(self) -> str:
+    def full_file_name(self) -> str|None:
         """ Full file name of the last cached file, or ``None`` if no file was cached yet. """
         return self.sub_dir.full_file_name(self.filename) if not self.filename is None and not self.sub_dir is None else None
 
@@ -4096,9 +4096,9 @@ class _CacheWrapper(object):
                         uid                  : str|Callable|None = None,
                         name                 : str|None = None,
                         in_sub_dir           : str|Callable|None = None,
-                        exclude_args         : set[str]|None = None,
-                        include_args         : set[str]|None = None,
-                        exclude_arg_types    : set[type]|None = None,
+                        exclude_args         : list[str]|None = None,
+                        include_args         : list[str]|None = None,
+                        exclude_arg_types    : list[type|str]|None = None,
                         version_auto_class   : bool = True,
                         name_of_func_name_arg: str = "func_name") -> None:
         
@@ -4140,18 +4140,18 @@ class _CacheWrapper(object):
         # process inputs
         # --------------
 
-        self._subdir                = SubDir(subdir) if not isinstance(subdir,SubDir) else subdir
-        self._uid_or_label          = uid if label is None else label
-        self._unique                = not uid is None
-        self._in_sub_dir            = in_sub_dir
-        self._name                  = str(name) if not name is None else qual_name
-        self._exclude_args          = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
-        self._include_args          = set(include_args) if not include_args is None and len(include_args) > 0 else None
+        self._subdir                : SubDir = SubDir(subdir) if not isinstance(subdir,SubDir) else subdir
+        self._uid_or_label          : str|Callable[[], str]|None = uid if label is None else label
+        self._unique                : bool = not uid is None
+        self._in_sub_dir            : str|Callable[[], str]|None = in_sub_dir
+        self._name                  : str = str(name) if not name is None else qual_name
+        self._exclude_args          : set[str]|None = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
+        self._include_args          : set[str]|None = set(include_args) if not include_args is None and len(include_args) > 0 else None
         self.cache_controller.versioned[self._name] = self
 
-        exclude_arg_types     = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else set()
-        global_exlc_at        = set(self.cache_controller.exclude_arg_types) if not self.cache_controller.exclude_arg_types is None and len(self.cache_controller.exclude_arg_types) > 0 else set()
-        self._exclude_types   = exclude_arg_types | global_exlc_at
+        exclude_arg_types     : set[type|str] = set(exclude_arg_types) if not exclude_arg_types is None else set()
+        global_exlc_at        : set[type|str] = set(self.cache_controller.exclude_arg_types) if not self.cache_controller.exclude_arg_types is None and len(self.cache_controller.exclude_arg_types) > 0 else set()
+        self._exclude_types   : set[type|str] = exclude_arg_types | global_exlc_at
 
         # equip F with a version
         # ----------------------

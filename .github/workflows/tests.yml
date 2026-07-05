@@ -26,7 +26,6 @@ jobs:
           pip install jsonpickle
           pip install blosc
           pip install numpy
-          pip install numba
           pip install -e .
 
       - name: Lint with flake8

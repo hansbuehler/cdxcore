@@ -551,7 +551,7 @@ class JCPool( object ):
         
     def __init__(self, num_workers          : int = 1,
                        threading            : bool = False,
-                       tmp_root_dir         : str|SubDir= "!/.cdxmp",  *,
+                       tmp_root_dir         : str|SubDir|None = "!/.cdxmp", *,
                        mem_leak_enforce     : bool|None = None,
                        mem_leak_max_memory  : int|float|None = None,
                        mem_leak_timer       : float|None = None,
@@ -580,7 +580,7 @@ class JCPool( object ):
 
         tmp_dir_ext                = unique_hash8( uuid.getnode(), os.getpid(), get_thread_id(), datetime.datetime.now() )
         self._num_workers          = int(num_workers)
-        tmp_root_dir               = SubDir(tmp_root_dir) if not tmp_root_dir is None else None
+        tmp_root_dir : SubDir|None = SubDir(tmp_root_dir) if not tmp_root_dir is None else None
         self._tmp_dir              = tmp_root_dir(tmp_dir_ext, ext='', create_directory=False) if not tmp_root_dir is None else None
         self._verbose              = verbose if not verbose is None else Context("quiet")
         self._threading            = threading
@@ -621,8 +621,6 @@ class JCPool( object ):
 
     def __del__(self):
         self.terminate()
-
-
 
     @property
     def tmp_path(self) -> str|None:

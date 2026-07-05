@@ -7,13 +7,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdxcore"
-version = "0.1.91"
+version = "0.1.92"
 description = "Basic Python Tools; upgraded cdxbasics"
 authors = [{ name = "Hans Buehler", email = "github@buehler.london" }]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ['numpy', 'pandas', 'matplotlib', 'psutil', 'polars','prettytable','sortedcontainers','pyarrow','h5py',
-	 'jsonpickle', 'numba', 'joblib', 'blosc', 'scipy'] 
+	 'jsonpickle', 'joblib', 'blosc', 'scipy'] 
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",

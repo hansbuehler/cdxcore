@@ -2373,10 +2373,15 @@ class SubDir(object):
 
                 else:
                     raise NotImplementedError(fmt, txtfmt("Internal error: invalid format '%s'", fmt))
+            except PermissionError as e:
+                if raise_on_error:
+                    raise PermissionError(f"Permission error writing '{full_file_name}': {e}") from e
+                return False
             except Exception as e:
                 if raise_on_error:
                     raise e
                 return False
+
             return True
         return self._write( writer=writer, file=file, obj=obj, raise_on_error=raise_on_error, ext=ext )
 

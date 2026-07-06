@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__version__ = "0.1.93"  # auto-updated by setup.py
+__version__ = "0.1.94"  # auto-updated by setup.py
 
 __all__ = [
     "__version__",

@@ -126,3 +126,4 @@ Documentation can be found here: <https://quantitative-research.de/docs/cdxcore>
 - [`cdxcore.npio`](https://quantitative-research.de/docs/cdxcore/api/generated/cdxcore.npio.html) provides a low level binary i/o interface for numpy files.
 
 - [`cdxcore.npshm`](https://quantitative-research.de/docs/cdxcore/api/generated/cdxcore.npshm.html) provides shared memory numpy arrays.
+- [`cdxcore.rolling`](https://quantitative-research.de/docs/cdxcore/api/generated/cdxcore.rolling.html) provides robust rolling statistics: exponentially weighted location and scale estimators which flag outliers, for regular and irregular time steps.

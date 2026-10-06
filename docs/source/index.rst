@@ -123,6 +123,9 @@ General purpose utilities
 
 * :mod:`cdxcore.npshm` provides shared memory numpy arrays.
 
+* :mod:`cdxcore.rolling` provides robust rolling statistics: exponentially weighted location and scale estimators
+  which flag outliers, for regular and irregular time steps.
+
 Contents
 ^^^^^^^^
 

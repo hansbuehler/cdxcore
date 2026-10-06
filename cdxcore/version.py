@@ -208,7 +208,7 @@ class Version(object):
         and member functions on their (versioned) containing classes.    
     """
 
-    def __init__(self, original : Callable, version : str, dependencies : list[type], auto_class : bool ) -> None:
+    def __init__(self, original : Callable, version : str, dependencies : list[type|str]|None, auto_class : bool ) -> None:
         """
         :meta private:
         """
@@ -509,7 +509,7 @@ class Version(object):
 # =======================================================
 
 def version( version              : str = "0.0.1" ,
-             dependencies         : list[type] = [], *, 
+             dependencies         : list[type|str]|None = None, *, 
              auto_class           : bool = True,
              raise_if_has_version : bool = True ):
     """
@@ -589,20 +589,20 @@ def version( version              : str = "0.0.1" ,
     version : str
         Version string for this function or class.
         
-    dependencies : list[type], optional
+    dependencies : list[type|str] | None, default ``None``
         List of elements this function depends on. Usually the list contains the actual other element by Python reference.
         If this is not suitable (for example if the name cannot be resolved in order), a string can be used to identify the
         dependency.
-        If strings are used, then the function's global context and, if appliable, the associated
+        If strings are used, the function's global context and, if applicable, the associated
         ``self`` will be searched for the respective element.
         
     auto_class : bool, optional
-        If ``True``, the default, then the version of member function or an inherited class is automatically dependent
-        on the version of the defining/base class. Set to ``False`` to turn off. The default is ``True``.
+        If ``True``, the default, then the version of a member function or an inherited class is automatically dependent
+        on the version of the defining or base class. Set to ``False`` to turn off. The default is ``True``.
         
     raise_if_has_version : bool, optional
-        Whether to throw an exception if version information are already present.
-        Throwing an exception is usually the desired behaviour except if used in another wrapper, see for example
+        Whether to raise an exception if version information is already present.
+        Raising an exception is usually the desired behavior except when used in another wrapper, see for example
         :dec:`cdxcore.subdir.SubDir.cache`. The default is ``True``.
 
     Returns
@@ -628,7 +628,7 @@ def version( version              : str = "0.0.1" ,
             ( version, { dependency: dependency.dependencies } )
     """
     def wrap(f):
-        dep = dependencies
+        dep = list(dependencies) if dependencies is not None else []
         existing = getattr(f, "version", None)
         if not existing is None:
             # is 'version' a Version
@@ -640,12 +640,13 @@ def version( version              : str = "0.0.1" ,
                 if not raise_if_has_version:
                     return f
                 tmsg = "type" if isinstance(f,type) else "function"
-                raise ValueError(f"@version: {tmsg} '{Version._qual_name( f )}' already has a member 'version'. It has initial value {existing._input_version}.")
+                raise ValueError(f"@version: {tmsg} '{Version._qual_name( f )}' already has a member 'version'. It has an input version of '{existing._input_version}'.")
             # auto-create dependencies to base classes:
             # in this case 'existing' is a member of the base class.
-            if not existing._original in dependencies and not Version._qual_name( existing._original ) in dependencies and auto_class:
-                dep = list(dep)
-                dep.append( existing._original )
+            # we are using "dependencies" here delibertely to avoid loops
+            if auto_class:
+                if dependencies is None or ( not existing._original in dependencies and not Version._qual_name( existing._original ) in dependencies ):
+                    dep.append( existing._original )
         if isinstance( f, type ):
             # set '_class' for all Version objects
             # of all members of a type

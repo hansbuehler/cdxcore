@@ -21,6 +21,7 @@ API Reference
    npio
    npshm
    bs
+   rolling
 
    dynaplot
 

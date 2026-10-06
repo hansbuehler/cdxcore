@@ -20,7 +20,7 @@ from enum import Enum
 """
 Imports
 """
-from cdxcore.uniquehash import UniqueHash, NamedUniqueHash, UniqueLabel, unique_hash32 as unique_hash, unique_hash8, unique_hash16, unique_hash32, unique_hash48, unique_hash64, DEF_FILE_NAME_MAP, DebugTraceCollect, DebugTraceVerbose, unique_label48_8
+from cdxcore.uniquehash import UniqueHash, NamedUniqueHash, UniqueLabel, unique_hash32 as unique_hash, unique_hash8, unique_hash16, unique_hash32, unique_hash48, unique_hash64, DEF_FILE_NAME_MAP, DebugTraceCollect, DebugTraceVerbose, unique_label48_8, label_unique_filename48_8
 from cdxcore.pretty import PrettyObject
 from cdxcore.npio import from_file, to_file
 
@@ -497,6 +497,51 @@ class Test(unittest.TestCase):
         l = "abcde"*10 
         self.assertEqual( unique_label48_8(l), "abcdeabcdeabcdeabcdeabcdeabcdeabcdeabcd 2b4ca680")
         
+    def test_label_unique_filename48_8(self):
+
+        # label_unique_filename48_8 is UniqueLabel(max_length=48, id_length=8, filename_by="default"),
+        # i.e. it always converts to a valid filename and always appends a hash ID
+        # since filename conversion can never guarantee uniqueness.
+
+        # short, plain label: still gets a hash appended (unlike unique_label48_8 without as_file_name)
+        self.assertEqual( label_unique_filename48_8("abc"), "abc 7aa59946" )
+        # must match unique_label48_8(..., as_file_name=True) since both use the same underlying UniqueLabel
+        self.assertEqual( label_unique_filename48_8("abc"), unique_label48_8("abc", as_file_name=True) )
+
+        # characters invalid in file names are translated
+        self.assertEqual( label_unique_filename48_8("abc:def"), "abc;def 520dc694" )
+        # the hash itself is based on the *original* label, not the filename-converted one
+        self.assertNotEqual( label_unique_filename48_8("abc:def").rsplit(' ',1)[-1],
+                              label_unique_filename48_8("abc;def").rsplit(' ',1)[-1] )
+
+        # long label: gets truncated and a hash appended; hash matches unique_label48_8 on the same raw label
+        l = "abcde"*10
+        r = label_unique_filename48_8(l)
+        self.assertEqual( r, "abcdeabcdeabcdeabcdeabcdeabcdeabcdeabcd 2b4ca680" )
+        self.assertEqual( r, unique_label48_8(l) )
+        self.assertLessEqual( len(r), 48 )
+
+        # label exactly at max_length still gets a hash appended (filename_by is always set)
+        r = label_unique_filename48_8("a"*48)
+        self.assertEqual( r, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa d28dfba7" )
+        self.assertLessEqual( len(r), 48 )
+
+        # label longer than max_length
+        r = label_unique_filename48_8("a"*49)
+        self.assertEqual( r, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ea372b9c" )
+        self.assertNotEqual( r, label_unique_filename48_8("a"*48) )
+
+        # empty label: falls back to the pure hash (no label, no separator prefix)
+        self.assertEqual( label_unique_filename48_8(""), "af949ccb" )
+
+        # repeated invalid characters get translated consistently
+        r = label_unique_filename48_8("a:b"*20)
+        self.assertEqual( r, "a;ba;ba;ba;ba;ba;ba;ba;ba;ba;ba;ba;ba;b 1c0813dc" )
+        self.assertLessEqual( len(r), 48 )
+
+        # calling twice with the same input is deterministic
+        self.assertEqual( label_unique_filename48_8("repeatable"), label_unique_filename48_8("repeatable") )
+
                     
             
 if __name__ == '__main__':

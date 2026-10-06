@@ -3,6 +3,8 @@ Numpy stats with a distribution function
 Hans Buehler 2023
 """
 
+from typing import Tuple
+
 from .logger import Logger
 import numpy as np
 import math as math
@@ -35,13 +37,13 @@ def assert_iter_not_is_nan( d : dict, name = "" ):
 # Basic arithmetics for non-uniform distributions
 # -------------------------------------------------
 
-def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
+def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> Tuple[np.ndarray, np.ndarray, int]:
     """
-    Converts P and x in compatible shapes.
-    P is normalized
+    Converts `P` and `x` in compatible shapes.
+    `P` is normalized
 
-    If axis is None, then this function flattens x and assumes |P| = |x|.
-    If axis is not None, then this function ensures P and x have compatible shapes.
+    If `axis` is None, then this function flattens `x` and assumes `|P| = |x|`.
+    If `axis` is not None, then this function ensures `P` and `x` have compatible shapes.
     """
     P = np.asarray(P)
     x = np.asarray(x)
@@ -75,7 +77,7 @@ def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
             p /= sum_p
     return p, x, axis
 
-def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
+def mean( P : np.ndarray, x : np.ndarray, axis : int|None = None, keepdims : bool = False ) -> np.ndarray:
     """
     Compute the mean of x with a distribution P along 'axis
 
@@ -86,7 +88,7 @@ def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = F
             If P is None, then this function calls np.mean()
         x : tensor
             Array of data.
-        axis : int
+        axis : int | None
             Axis to compute along. See np.mean().
             If axis is a valid axis descriptior, then x.shape[axis] must be qual to len(P).
             If axis is None, then 'x' will be flattened, and P's length must match the length of the flattened x
@@ -103,7 +105,7 @@ def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = F
     p, x, axis = _prep_P_and_X( P, x, axis )
     return np.sum( p*x, axis=axis,keepdims=keepdims )
 
-def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
+def var( P : np.ndarray, x : np.ndarray, axis : int|None = None, keepdims : bool = False ) -> np.ndarray:
     """
     Compute the variance of x with a distribution P along 'axis
     This function uses the literal definition of variance, not its unbiased estimator
@@ -115,7 +117,7 @@ def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
             If P is None, then this function calls np.var()
         x : tensor
             Array of data.
-        axis : int
+        axis : int | None
             Axis to compute along. See np.var().
             If axis is a valid axis descriptior, then x.shape[axis] must be qual to len(P).
             If axis is None, then 'x' will be flattened, and P's length must match the length of the flattened x
@@ -133,7 +135,7 @@ def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
     m = np.sum( p * x, axis=axis,keepdims=keepdims )
     return np.sum( p * (( x - m ) ** 2), axis=axis,keepdims=keepdims )
 
-def std( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
+def std( P : np.ndarray, x : np.ndarray, axis : int|None = None, keepdims : bool = False ) -> np.ndarray:
     """
     Compute the standard deviation of x with a distribution P along 'axis
 
@@ -158,7 +160,7 @@ def std( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
     """
     return np.sqrt( var(P,x,axis,keepdims=keepdims)  )
 
-def err( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
+def err( P : np.ndarray, x : np.ndarray, axis : int|None = None, keepdims : bool = False ) -> np.ndarray:
     """
     Computes the standard error of x with a distribution P along 'axis
 
@@ -169,7 +171,7 @@ def err( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
             If P is None, then this function calls np.std()
         x : tensor
             Array of data.
-        axis : int
+        axis : int | None
             Axis to compute along. See np.std().
             If axis is a valid axis descriptior, then x.shape[axis] must be qual to len(P).
             If axis is None, then 'x' will be flattened, and P's length must match the length of the flattened x
@@ -187,20 +189,20 @@ def err( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
     assert np.sum(np.isnan(e)) == 0, "Internal error: %g" % e
     return e
 
-def quantile( P : np.ndarray, x : np.ndarray, quantiles : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
+def quantile( P : np.ndarray, x : np.ndarray, quantiles : np.ndarray, axis : int|None = None, keepdims : bool = False ) -> np.ndarray:
     """
-    Compute P-weighted quantiles of 'x'
+    Compute `P`-weighted quantiles of `x`
 
     Parameters
     ----------
         P : vector
-            Density for 'x'. Must not be negative, and should sum up to 1 (will be normalized to 1 automatically)
-            If P is None, then this function calls np.quantile()
+            Density for `x`. Must not be negative, and should sum up to 1 (will be normalized to 1 automatically)
+            If `P` is None, then this function calls :func:`numpy.quantile()`
         x : tensor
             Array of data.
         quantiles : vector
             Array of quantiles to compute. See np.quantile()
-        axis : int
+        axis : int | None
             Axis to compute along. See np.quantile().
             If axis is a valid axis descriptior, then x.shape[axis] must be qual to len(P).
             If axis is None, then 'x' will be flattened, and P's length must match the length of the flattened x
@@ -241,9 +243,9 @@ def quantile( P : np.ndarray, x : np.ndarray, quantiles : np.ndarray, axis : int
             r = np.reshape(r, new_shape)
     return r
 
-def median( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
+def median( P : np.ndarray, x : np.ndarray, axis : int|None = None, keepdims : bool = False ) -> np.ndarray:
     """
-    Compute the P-weighted median for 'x' by calling quantile() with quantiles = 0.5.
+    Compute the P-weighted median for 'x' by calling :func:`quantile` with quantiles = 0.5.
 
     Parameters
     ----------
@@ -265,7 +267,7 @@ def median( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool =
     """
     return quantile(P,x,0.5,axis=axis,keepdims=keepdims)
 
-def mad( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False, factor : float = 1.4826 ) -> np.ndarray:
+def mad( P : np.ndarray, x : np.ndarray, axis : int|None = None, keepdims : bool = False, factor : float = 1.4826 ) -> np.ndarray:
     """
     Compute median absolute deviation
     https://en.wikipedia.org/wiki/Median_absolute_deviation
@@ -297,13 +299,12 @@ def mad( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
     mad = median( P, np.abs( x - med ), axis=axis, keepdims=keepdims )
     return mad * factor
 
-def mean_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray = None ) -> np.ndarray:
+def mean_bins( x : np.ndarray, bins : int, axis : int|None = None, P : np.ndarray|None = None ) -> np.ndarray:
     """
     Return a vector of 'bins' means of x.
     Bins the vector 'x' into 'bins' bins, then computes the mean of each bin, and returns the resulting vector of length 'bins'.
 
-    Typical use case is computing the mean over percentiles, e.g.
-
+    Typical use case is computing the mean over percentiles, e.g.::
         x = np.sort(x)
         b = mean_bins(x, 9)
 
@@ -327,13 +328,12 @@ def mean_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray = N
         return np.asarray( np.mean( x[ixs[i]:ixs[i+1]], axis=axis ) for i in range(len(ixs)-1))
     return np.asarray( mean( P[ixs[i]:ixs[i+1]], x[ixs[i]:ixs[i+1]], axis=axis ) for i in range(len(ixs)-1))
 
-def mean_std_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray = None ) -> np.ndarray:
+def mean_std_bins( x : np.ndarray, bins : int, axis : int|None = None, P : np.ndarray|None = None ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Return a vector of 'bins' means of x.
     Bins the vector 'x' into 'bins' bins, then computes the mean of each bin, and returns the resulting vector of length 'bins'.
 
-    Typical use case is computing the mean over percentiles, e.g.
-
+    Typical use case is computing the mean over percentiles, e.g.::
         x = np.sort(x)
         b = mean_bins(x, 9)
 
@@ -840,204 +840,6 @@ def orth_project( XtX, XtY, YtY, * , total_rel_floor : float = 0.001,
     assert YtoZ.dtype == dtype, ("Dtype error", YtoZ.dtype, dtype)
     return XtoZ, YtoZ
     
-# ------------------------------------------------
-# Normnalization
-# -------------------------------------------------
-
-madf = 1.4826
-log2 = math.log(2.)
-nano_y = 1./(255.*24.*60.*60.*1000.*1000.) # a nanosecond in years
-              
-@njit(nogil=True)
-def rolling_ew_std( x : np.ndarray, window, init : int = 10, cutoff : float = 2.5 ):
-    """
-    Comnputes standard recursive exponential weighted mean and volatility, initialized over 'init' steps.
-    The update rule for w=1/window if there is no outlier is
-        m_t := (1-w) m_{t-1} + w x_t 
-        v_t := (1-w) v_{t-1} + w ( x_t - m_t )**2
-    Where v is variance. The function returns sqrt{v}
-    
-    An outlier is identified if the absolute value of the normalized innovation excdeeds cutoff.
-    In that case:
-        m_t = m_{t-1}
-        v_t is updated using the capped and floored innovation.
-
-    Parameters
-    -----------
-        x : time series in the first coordinate
-        window : The parametrization w=1/window means that any new observation gets the same weight as it would get
-                in a rolling estimator with size 'window'.
-        init : initial period. All elements loc, vol up to init have the same value
-        cutoff : normalized values exceeding this level are considered outliers.
-        
-    Returns
-    -------
-        Mean and vol
-    """
-    loc          = np.zeros_like( x )
-    dis          = np.zeros_like( x )    
-    loc[:init]   = np.mean( x[:init] ) 
-    dis[:init]   = np.mean( (x[:init] - loc[init-1])**2 ) 
-    w            = 1./float(window)
-
-    for i in range(init, x.shape[0]):
-        vol    = np.sqrt( dis[i-1] ) + 0.0001 / 255.
-        z_i    = ( x[i] - loc[i-1] ) / vol
-        skip_i = np.abs( z_i ) > cutoff
-        xx_i   = np.minimum( cutoff, np.maximum( -cutoff, ( x[i] - loc[i-1] ) / vol ) ) * vol + loc[i-1]
-        loc[i] = np.where( skip_i, loc[i-1], (1.-w) * loc[i-1] + w * xx_i )
-        dis[i] = (1.-w) * dis[i-1] + w * ( xx_i - loc[i] )**2
-    return loc, np.sqrt( dis )
-
-@njit(nogil=True)
-def robust_rolling_ew( x, window, init=10, cutoff=2.5 ):
-    """
-    Comnputes robust recursive exponential weighted mean and volatility, initialized over 'init' steps using median and MAD, respectively.
-    The update rule for w=1/window if there is no outlier is:
-        m_t := (1-w) m_{t-1} + w x_t 
-        v_t := (1-w) v_{t-1} + w 1.4826 | x_t - m_t |
-        
-    An outlier is identified if the absolute value of the normalized innovation excdeeds cutoff.
-    In that case:
-        m_t = m_{t-1}
-        v_t is updated using the capped and floored innovation.
-        
-    Parameters
-    ----------
-        x : time series in the first coordinate
-        window : The parametrization w=1/window means that any new observation gets the same weight as it would get
-                in a rolling estimator with size 'window'.
-        init : initial period. All elements loc, vol up to init have the same value
-        cutoff : normalized values exceeding this level are considered outliers.
-        
-    Returns
-    -------
-        Robust Mean, vol, and outlier detections
-    """
-    loc          = np.zeros_like( x )
-    dis          = np.zeros_like( x )
-    otl          = np.zeros_like( x, dtype=np.bool_ ) 
-
-    # robust initial values
-    loc[:init]   = np.median( x[:init] ) 
-    dis[:init]   = madf * np.median( np.abs(x[:init] - loc[init-1]) ) 
-    w            = 1./float(window)
-
-    for i in range(init, x.shape[0]):
-        vol    = dis[i-1] + 0.0001 / 255.
-        z_i    = ( x[i] - loc[i-1] ) / vol
-        otl[i] = np.abs( z_i ) > cutoff
-        xx_i   = np.minimum( cutoff, np.maximum( -cutoff, ( x[i] - loc[i-1] ) / vol ) ) * vol + loc[i-1]
-        loc[i] = np.where( otl[i], loc[i-1], (1.-w) * loc[i-1] + w * xx_i )
-        dis[i] = (1.-w) * dis[i-1] + w * madf * np.abs( xx_i - loc[i] )
-    return loc, dis, otl
-
-@njit(nogil=True)
-def _inner_robust_rolling_dt_ew( *,
-        x  : np.ndarray,
-        dt : np.ndarray,
-        w : np.ndarray,
-        loc : np.ndarray,
-        dis : np.ndarray,
-        otl : np.ndarray,
-        twindow : float,
-        init : int,
-        cutoff : float,
-        scale_by_dt : bool,
-        normalize_by_dt : bool
-        ):
-
-    if not scale_by_dt:
-        for i in range(init, x.shape[0]):
-            vol    = dis[i-1] + 0.0001 / 255.
-            z_i    = ( x[i] - loc[i-1] ) / vol
-            otl[i] = np.abs( z_i ) > cutoff
-            xx_i   = np.minimum( cutoff, np.maximum( -cutoff, z_i ) ) * vol + loc[i-1]
-            loc[i] = np.where( otl[i], loc[i-1], (1.-w[i]) * loc[i-1] + w[i] * xx_i )
-            dis[i] = (1.-w[i]) * dis[i-1] + w[i] * madf * np.abs( xx_i - loc[i-1] )
-            
-        if normalize_by_dt:
-            loc /= dt
-            dis /= np.sqrt(dt)
-    else:
-        assert np.min( dt ) >= nano_y, ("Found too smaLL 'dt':", np.min(dt), "which is less than a nanosecond", nano_y )
-        for i in range(init, x.shape[0]):
-            vol    = dis[i-1] + 0.0001 / 255.
-            sqtdt  = np.sqrt(dt[i])
-            z_i    = ( x[i] - loc[i-1]*dt[i] ) / ( vol*sqtdt )
-            otl[i] = np.abs( z_i ) > cutoff
-            xx_i   = np.minimum( cutoff, np.maximum( -cutoff, z_i ) ) * vol * sqtdt  + loc[i-1] * dt[i]
-            loc[i] = np.where( otl[i], loc[i-1], (1.-w[i]) * loc[i-1] + w[i] * xx_i / dt[i] )
-            dis[i] = (1.-w[i]) * dis[i-1] + w[i] * madf * np.abs( xx_i - loc[i]*dt[i] ) / sqtdt
-        if not normalize_by_dt:
-            loc *= dt
-            dis *= np.sqrt(dt)
-    return loc, dis, otl
-
-def robust_rolling_dt_ew( x  : np.ndarray,
-                          dt : np.ndarray,
-                          twindow : float = 0.25,
-                          init : int = 10,
-                          cutoff : float = 2.5,
-                          scale_by_dt : bool = False,
-                          normalize_by_dt : bool = False ):
-    r"""
-    Comnputes robust recursive exponential weighted mean and volatility, initialized over 'init' steps using median and MAD, respectively.
-    The update rule for w=1-exp(-dt/twindow) ~ dt/twindow if there is no outlier is:
-        scale_by_dt False:
-            m_t := (1-w_t) m_{t-1} + w_t x_t 
-            v_t := (1-w_t) v_{t-1} + w_t 1.4826 | x_t - m_t |
-            
-    In case 'x' is itself a return-type such as dS for a stock, then you may want to use:
-        scale_by_dt True:
-            m_t := (1-w_t) m_{t-1} + w_t x_t/dt
-            v_t := (1-w_t) v_{t-1} + w_t 1.4826 | x_t - m_t*dt | / sqrt{dt}
-            If each time step is of the same dt and if twindow=window*dt then this functionis equivalent to robust_rolling_ew except that the quantity
-            estimated is the mean of dx/dt and the vol is of (dx-m*dt)/sqrt{dt}.
-            
-        
-    An outlier is identified if the absolute value of the normalized innovation excdeeds cutoff.
-    In that case:
-        m_t = m_{t-1}
-        v_t is updated using the capped and floored innovation.
-        
-        
-    Parameters
-    ----------
-        x : time series in the first coordinate
-        window : The parametrization w=1/window means that any new observation gets the same weight as it would get
-                in a rolling estimator with size 'window'.
-        init : initial period. All elements loc, vol up to init have the same value
-        cutoff : normalized values exceeding this level are considered outliers.
-        scale_by_dt : scale returns by 'dt' and volatilties by sqrt(dt) during estimation [see above]
-        normalize_by_dt: if True, take the time series of means m and volatilities v and divide by 'dt' and sqrt(dt), respectively.
-        
-    Returns
-    -------
-        Robust Mean, vol, and outlier detections
-    """
-    loc          = np.zeros_like( x )
-    dis          = np.zeros_like( x )
-    otl          = np.zeros_like( x, dtype=np.bool_ ) 
-    w            = - np.expm1( - dt / twindow )
-    q            = w[:init] / np.sum( w[:init] )
-
-    # TODO: current numba does not support quantiles with weights
-    if not scale_by_dt:
-        loc[:init]   = np.quantile( x[:init], 0.5, weights=q, method="inverted_cdf" ) 
-        dis[:init]   = madf *  np.quantile( np.abs(x[:init] - loc[init-1]), 0.5, weights=q, method="inverted_cdf" ) 
-    else:
-        assert np.min( dt ) >= nano_y, ("Found too smaLL 'dt':", np.min(dt), "which is less than a nanosecond", nano_y )
-        loc[:init]   = np.quantile( x[:init]/dt[:init], 0.5, weights=q, method="inverted_cdf" ) 
-        dis[:init]   = madf * np.quantile( np.abs(x[:init] - loc[init-1]*dt[:init]) / np.sqrt( dt[:init] ), 0.5, weights=q, method="inverted_cdf" ) 
-
-    return _inner_robust_rolling_dt_ew( x=x, dt=dt, w=w, loc=loc, dis=dis, otl=otl,
-                                       twindow =twindow,
-                                       init =init,
-                                       cutoff =cutoff,
-                                       scale_by_dt =scale_by_dt,
-                                       normalize_by_dt=normalize_by_dt )
-
 # ------------------------------------------------
 # Data management
 # -------------------------------------------------

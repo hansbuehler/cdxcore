@@ -197,6 +197,13 @@ class Test(unittest.TestCase):
             r = sub.read("test", None, version="2", raise_on_error=True)
             # wrong version
         
+    def test_create_directory_returns_self(self):
+        sub = SubDir("!/tmp_test_for_cdxcore.subdir_create_directory", delete_everything=True)
+        created = sub.create_directory()
+        self.assertIs(created, sub)
+        self.assertTrue(sub.path_exists())
+        sub.delete_everything()
+
     def test_new(self):
         subdir0 = SubDir("my_directory")      # relative to current working directory
         subdir1 = SubDir("./my_directory")    # relative to current working directory

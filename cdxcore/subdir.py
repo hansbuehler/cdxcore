@@ -370,6 +370,7 @@ Documentation
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from itertools import count
 import os as os
 import uuid as uuid
@@ -385,7 +386,7 @@ from collections import OrderedDict
 from collections.abc import Collection, Mapping, Callable, Iterable
 from enum import Enum
 from functools import update_wrapper
-from typing import Any, Iterator
+from typing import Any, BinaryIO, Iterator, TextIO, cast
 import pathlib as pathlib
 
 import polars as pl
@@ -415,7 +416,7 @@ def _import_jsonpickle():
         jsonpickle_numpy.register_handlers()
     return jsonpickle
 
-def _remove_trailing( path ):
+def _remove_trailing( path : str ) -> str:
     if len(path) > 0:
         if path[-1] in ['/' or '\\']:
             return _remove_trailing(path[:-1])
@@ -756,6 +757,8 @@ default_cacheController = CacheController()
 # ========================================================================
 
 class SubDir(object):
+    FORMAT_NAMES : list[str] = [member.name for member in Format]
+
     r"""
     ``SubDir`` implements a transparent i/o
     interface for storing data in files.
@@ -1045,8 +1048,10 @@ class SubDir(object):
             assert self._ext=="" or self._ext==self.EXT_FMT_AUTO or self._ext[0] == ".", ("Extension error", self._ext)
             return
 
-        name = str(name) if isinstance(name, pathlib.Path) else name
-        parent = str(parent) if isinstance(parent, pathlib.Path) else parent
+        if isinstance(name, pathlib.Path):
+            name = str(name)
+        if isinstance(parent, pathlib.Path):
+            parent = str(parent)
 
         # parent
         if isinstance(parent, str):
@@ -1068,19 +1073,19 @@ class SubDir(object):
 
         # name
         if not name is None:
-            if not isinstance(name, str): raise ValueError( txtfmt("'name' must be string. Found object of type %s", type(name) ))
+            if not isinstance(name, str): raise ValueError( f"'name' must be string. Found object of type {type(name)}" )
             name   = name.replace('\\','/')
 
             # avoid windows file names on Linux
             if platform.system() != "Windows" and name[1:3] == ":/":
-                raise ValueError( txtfmt("Detected use of windows-style drive declaration %s in path %s.", name[:3], name ))
+                raise ValueError( f"Detected use of windows-style drive declaration {name[:3]} in path {name}." )
 
             # extract extension information
             ext_i = name.find(";*.")
             if ext_i >= 0:
                 _ext = name[ext_i+3:]
                 if not ext is None and ext != _ext:
-                    raise ValueError( txtfmt("Canot specify an extension both in the name string ('%s') and as 'ext' ('%s')", _name, ext))
+                    raise ValueError( f"Cannot specify an extension both in the name string ('{_name}') and as 'ext' ('{ext}')" )
                 ext  = SubDir._extract_ext(_ext)
                 name = name[:ext_i]
                 del _ext
@@ -1118,7 +1123,7 @@ class SubDir(object):
                 name = "."
             if name[:1] in ['!', '~', '?'] or name[:2] == "./" or name == ".":
                 if len(name) > 1 and name[1] != '/':
-                    raise ValueError( txtfmt("If 'name' starts with '%s', then the second character must be '/' (or '\\' on windows). Found 'name' set to '%s'", name[:1], _name ))
+                    raise ValueError( f"If 'name' starts with '{name[:1]}', then the second character must be '/' (or '\\' on windows). Found 'name' set to '{_name}'" )
                 if name[0] == '!':
                     name = SubDir.temp_dir()[:-1] + name[1:]
                 elif name[0] == ".":
@@ -1197,11 +1202,10 @@ class SubDir(object):
         if not os.path.exists( self._path[:-1] ):
             try:
                 os.makedirs( self._path[:-1] )
-                return
             except FileExistsError:
                 pass
         if not os.path.isdir(self._path[:-1]):
-            raise NotADirectoryError(txtfmt( "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] ))
+            raise NotADirectoryError(f"Cannot use sub directory '{self._path[:-1]}': object exists but is not a directory")
         return self
 
     def path_exists(self) -> bool:
@@ -1219,13 +1223,13 @@ class SubDir(object):
 
     def __repr__(self) -> str: # NOQA
         if self._path is None: return "SubDir(None)"
-        return "SubDir(%s)" % self.__str__()
+        return f"SubDir({self.__str__()})"
 
     def __eq__(self, other) -> bool: # NOQA
         """ Tests equality between to SubDirs, or between a SubDir and a directory """
         if isinstance(other,str):
             return self._path == other
-        verify( isinstance(other,SubDir), "Cannot compare SubDir to object of type '%s'", type(other).__name__, exception=TypeError )
+        verify( isinstance(other,SubDir),  lambda : f"Cannot compare SubDir to object of type '{type(other).__name__}'", exception=TypeError )
         return self._path == other._path and self._ext == other._ext and self._fmt == other._fmt
 
     def __bool__(self) -> bool:
@@ -1259,7 +1263,10 @@ class SubDir(object):
         Use :meth:`cdxcore.subdir.SubDir.path` if creation on the fly is not desired.
         """
         self.create_directory()
-        return self.path 
+        path = self.path
+        if path is None:
+            raise RuntimeError("Cannot obtain a path for an empty SubDir")
+        return path
 
     @property
     def fmt(self) -> Format:
@@ -1298,7 +1305,7 @@ class SubDir(object):
         else:
             ext = self._ext if ext_or_fmt is None else SubDir._extract_ext(ext_or_fmt)
             r = ext if ext != self.EXT_FMT_AUTO else self._auto_ext(self._fmt)
-            del ext
+        assert not r is None, f"Internal error: 'auto_ext' returned None for ext_or_fmt={ext_or_fmt} and self._ext={self._ext} and self._fmt={self._fmt}"
         assert r=="" or r[0] == ".", ("Extension error", self._ext, ext_or_fmt)
         return r
 
@@ -1316,13 +1323,13 @@ class SubDir(object):
             of type :class:`cdxcore.subdir.Format`.
         """
         if isinstance(ext, Format):
-            verify( fmt is None or fmt == ext, "If 'ext' is a Format, then 'fmt' must match 'ext' or be None. Found '%s' and '%s', respectively.", ext, fmt, exception=ValueError )
+            verify( fmt is None or fmt == ext,  lambda : f"If 'ext' is a Format, then 'fmt' must match 'ext' or be None. Found '{ext}' and '{fmt}', respectively.", exception=ValueError )
             return self._auto_ext(ext), ext
 
-        fmt : Format = fmt if not fmt is None else self._fmt
-        ext : str = self._ext if ext is None else SubDir._extract_ext(ext)
-        ext : str = ext if ext != self.EXT_FMT_AUTO else self._auto_ext(fmt)
-        return ext, fmt
+        fmt_value : Format = fmt if not fmt is None else self._fmt
+        ext_value : str = self._ext if ext is None else SubDir._extract_ext(ext)
+        ext_value = ext_value if ext_value != self.EXT_FMT_AUTO else self._auto_ext(fmt_value)
+        return ext_value, fmt_value
     
     @property
     def cache_controller(self) -> CacheController:
@@ -1355,7 +1362,7 @@ class SubDir(object):
             return ".pdq"
         if fmt == Format.PYTREE_HDF5:
             return ".h5"
-        error("Unknown format '%s'", str(fmt))
+        error(f"Unknown format '{fmt}'")
 
     @staticmethod
     def _version_to_bytes( version : str ) -> bytearray:
@@ -1367,7 +1374,7 @@ class SubDir(object):
             return None
         version_    = bytearray(version,'utf-8')
         if len(version_) >= SubDir.MAX_VERSION_BINARY_LEN:
-            raise ValueError(txtfmt("Cannot use version '%s': when translated into a bytearray it exceeds the maximum version lengths of '%ld' (byte string is '%s')", version, SubDir.MAX_VERSION_BINARY_LEN-1, version_ ))
+            raise ValueError(f"Cannot use version '{version}': when translated into a bytearray it exceeds the maximum version lengths of '{SubDir.MAX_VERSION_BINARY_LEN-1}' (byte string is '{version_}')")
         ver_        = bytearray(SubDir.MAX_VERSION_BINARY_LEN)
         l           = len(version_)
         ver_[0]     = l
@@ -1385,7 +1392,7 @@ class SubDir(object):
         * Returns '*' if ext='*'
         """
         assert not ext is None, ("'ext' should not be None here")
-        verify( isinstance(ext,str), "Extension 'ext' must be a string. Found type %s", type(ext).__name__, exception=ValueError )
+        verify( isinstance(ext,str),  lambda : f"Extension 'ext' must be a string. Found type {type(ext).__name__}", exception=ValueError )
         # auto?
         if ext == SubDir.EXT_FMT_AUTO:
             return SubDir.EXT_FMT_AUTO        
@@ -1397,23 +1404,23 @@ class SubDir(object):
             return ""
         # ensure extension has no directiory information
         sub, _ = os.path.split(ext)
-        verify( len(sub) == 0, "Extension '%s' contains directory information", ext)
+        verify( len(sub) == 0,  lambda : f"Extension '{ext}' contains directory information")
 
         # remove internal characters
-        verify( ext[0] != "!", "Extension '%s' cannot start with '!' (this symbol indicates the temp directory)", ext, exception=ValueError )
-        verify( ext[0] != "~", "Extension '%s' cannot start with '~' (this symbol indicates the user's directory)", ext, exception=ValueError )
-        verify( ext[0] != "?", "Extension '%s' cannot start with '?' (this symbol indicates a temporary directory)", ext, exception=ValueError )
+        verify( ext[0] != "!",  lambda : f"Extension '{ext}' cannot start with '!' (this symbol indicates the temp directory)", exception=ValueError )
+        verify( ext[0] != "~",  lambda : f"Extension '{ext}' cannot start with '~' (this symbol indicates the user's directory)", exception=ValueError )
+        verify( ext[0] != "?",  lambda : f"Extension '{ext}' cannot start with '?' (this symbol indicates a temporary directory)", exception=ValueError )
         return "." + ext
             
     # -- public utilities --
 
-    def full_file_name(self, file : str, *, ext : str|None = None) -> str|None:
+    def full_file_name(self, file : str|None, *, ext : str|None = None) -> str|None:
         """
         Returns fully qualified file name, based on a given unqualified file name (e.g. without path or extension).
 
         Parameters
         ----------
-        file : str
+        file : str | None
             Core file name without path or extension.
         ext : str | None, default ``None``
             If not ``None``, use this extension rather than :attr:`cdxcore.subdir.SubDir.ext`.
@@ -1430,17 +1437,20 @@ class SubDir(object):
         verify( len(file) > 0, "'file' cannot be empty")
 
         sub, _ = os.path.split(file)
-        verify( len(sub) == 0, "Key '%s' contains directory information", file)
+        verify( len(sub) == 0,  lambda : f"Key '{file}' contains directory information")
 
-        verify( file[0] != "!", "Key '%s' cannot start with '!' (this symbol indicates the temp directory)", file, exception=ValueError )
-        verify( file[0] != "~", "Key '%s' cannot start with '~' (this symbol indicates the user's directory)", file, exception=ValueError )
-        verify( file[0] != "?", "Key '%s' cannot start with '?' (this symbol indicates the user's directory)", file, exception=ValueError )
+        verify( file[0] != "!",  lambda : f"Key '{file}' cannot start with '!' (this symbol indicates the temp directory)", exception=ValueError )
+        verify( file[0] != "~",  lambda : f"Key '{file}' cannot start with '~' (this symbol indicates the user's directory)", exception=ValueError )
+        verify( file[0] != "?",  lambda : f"Key '{file}' cannot start with '?' (this symbol indicates the user's directory)", exception=ValueError )
 
         ext = self.auto_ext( ext )
-        assert len(ext) == 0 or ext[0]==".", ("Extension error", ext)
+        assert not ext is None, f"Internal error - Extension error '{ext}'"
+        assert len(ext) == 0 or ext[0]==".", f"Internal error - Extension error '{ext}'"
         if len(ext) > 0 and file[-len(ext):] != ext:
-            return self._path + file + ext
-        return self._path + file
+            ffn = self._path + file + ext
+        else:
+            ffn = self._path + file
+        return ffn
 
     @staticmethod
     def temp_dir() -> str:
@@ -1474,9 +1484,9 @@ class SubDir(object):
         This function is called when the ``?/`` is used when constructing
         :class:`cdxcore.subdir.SubDir` objects.
 
-        **Implementation notoce:**
+        **Implementation notice:**
         
-        In most cirsumstances, a temporary temp directioy is *not* deleted from a system upon reboot.
+        In most circumstances, a temporary temp directory is *not* deleted from a system upon reboot.
         Do not rely on regular clean ups.
         It is strongly recommended to clean up after usage, for example using the pattern::
             
@@ -1538,7 +1548,7 @@ class SubDir(object):
 
     # -- read --
 
-    def _read_reader( self, reader, file : str, default : Any|None, raise_on_error : bool, *, ext : str = None ) -> Any|None:
+    def _read_reader( self, reader, file : str|list[str], default : Any|None, raise_on_error : bool, *, ext : str|list[str|None]|None = None ) -> Any|None:
         """
         Utility function for read() and readLine()
 
@@ -1563,32 +1573,35 @@ class SubDir(object):
         """
         # vector version
         if not isinstance(file,str):
-            if not isinstance(file, Collection): raise ValueError(txtfmt( "'file' must be a string, or an interable object. Found type %s", type(file)))
+            if not isinstance(file, Collection): raise ValueError(f"'file' must be a string, or an interable object. Found type {type(file)}")
             l = len(file)
             if default is None or isinstance(default,str) or not isinstance(default, Collection):
                 default = [ default ] * l
             else:
-                if len(default) != l: raise ValueError(txtfmt("'default' must have same lengths as 'file' if the latter is a collection; found %ld and %ld", len(default), l ))
+                if len(default) != l: raise ValueError(f"'default' must have same lengths as 'file' if the latter is a collection; found {len(default)} and {l}")
             if ext is None or isinstance(ext, str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
+                ext_list : list[str | None] = [ ext ] * l
             else:
-                if len(ext) != l: raise ValueError(txtfmt("'ext' must have same lengths as 'file' if the latter is a collection; found %ld and %ld", len(ext), l ))
-            return [ self._read_reader(reader=reader,file=k,default=d,raise_on_error=raise_on_error,ext=e) for k, d, e in zip(file,default,ext) ]
+                if len(ext) != l: raise ValueError(f"'ext' must have same lengths as 'file' if the latter is a collection; found {len(ext)} and {l}")
+                ext_list = [ cast(str | None, e) for e in ext ]
+            return [ self._read_reader(reader=reader,file=k,default=d,raise_on_error=raise_on_error,ext=e) for k, d, e in zip(file,default,ext_list) ]
 
         # deleted directory?
         if self._path is None:
-            verify( not raise_on_error, "Trying to read '%s' from an empty directory object", file, exception=NotADirectoryError)
+            verify( not raise_on_error, lambda : f"Trying to read '{file}' from an empty directory object", exception=NotADirectoryError)
             return default
 
         # single file
-        if len(file) == 0: raise ValueError(txtfmt("'file' missing (the filename)" ))
+        if len(file) == 0: raise ValueError(f"'file' missing (the filename)" )
         sub, key_ = os.path.split(file)
         if len(sub) > 0:
             return self(sub)._read_reader(reader=reader,file=key_,default=default,raise_on_error=raise_on_error,ext=ext)
-        if len(key_) == 0: ValueError(txtfmt("'file' %s indicates a directory, not a file", file))
+        if len(key_) == 0: ValueError(f"'file' {file} indicates a directory, not a file")
 
         # don't try if directory doesn't exist
-        full_file_name = self.full_file_name(file,ext=ext)
+        ext_value = cast(str | None, ext)
+        full_file_name = self.full_file_name(file, ext=ext_value)
+        assert full_file_name is not None
         if not self.path_exists():
             if raise_on_error:
                 raise KeyError(file, full_file_name)
@@ -1600,7 +1613,7 @@ class SubDir(object):
                 raise KeyError(file,full_file_name)
             return default
         if not os.path.isfile(full_file_name):
-            raise IOError(txtfmt( "Cannot read '%s': object exists, but is not a file (full path %s)", file, full_file_name ))
+            raise IOError(f"Cannot read '{file}': object exists, but is not a file (full path {full_file_name})")
 
         # read content
         # delete existing files upon read error
@@ -1609,9 +1622,9 @@ class SubDir(object):
         except EOFError as e:
             try:
                 os.remove(full_file_name)
-                warn("Cannot read '%s'; file deleted (full path '%s').\nError: %s",file,full_file_name, str(e))
+                warn(f"Cannot read '{file}'; file deleted (full path '{full_file_name}').\nError: {str(e)}")
             except Exception as e:
-                warn("Cannot read '%s'; subsequent attempt to delete file failed (full path '%s''): %s",file,full_file_name,str(e))
+                warn(f"Cannot read '{file}'; subsequent attempt to delete file failed (full path '{full_file_name}'): {str(e)}")
         except FileNotFoundError as e:
             if raise_on_error:
                 raise KeyError(file, full_file_name, str(e)) from e
@@ -1668,12 +1681,13 @@ class SubDir(object):
             if fmt == Format.PICKLE:
                 # we do not read any version information if not requested
                 with open(full_file_name,"rb") as f:
+                    binary_f = cast(BinaryIO, f)
                     # handle version as byte string
                     ok      = True
                     if not version is None:
-                        test_len     = int( f.read( 1 )[0] )
-                        test_version = f.read(test_len)
-                        test_version = test_version.decode("utf-8")
+                        test_len     = int( binary_f.read( 1 )[0] )
+                        test_version_bytes = binary_f.read(test_len)
+                        test_version = test_version_bytes.decode("utf-8")
                         if handle_version == SubDir.VER_RETURN:
                             return test_version
                         ok = (version == "*" or test_version == version)
@@ -1681,7 +1695,7 @@ class SubDir(object):
                         if handle_version == SubDir.VER_CHECK:
                             return True
                         try:
-                            data = pickle.load(f)
+                            data = pickle.load(binary_f)
                         except pickle.UnpicklingError as e:
                             handle_pickle_error(e)
                         return data
@@ -1733,13 +1747,13 @@ class SubDir(object):
                                 if isinstance(v, h5py.Dataset):
                                     if k[:4] == "_1_N":
                                         v = v[()]
-                                        assert isinstance(v, (float, int, np.generic)), ("Internal error: expected numeric dataset to be read as a number, but got type %s", type(v))
+                                        assert isinstance(v, (float, int, np.generic)), f"Internal error: expected numeric dataset to be read as a number, but got type {type(v)}"
                                         r[k[4:]] = v
                                         continue
                                     if k[:4] == "_1_S":
                                         v = v[()]
                                         v = v.decode("utf-8")
-                                        assert isinstance(v, str), ("Internal error: expected string dataset to be read as a string, but got type %s", type(v))
+                                        assert isinstance(v, str), f"Internal error: expected string dataset to be read as a string, but got type {type(v)}"
                                         r[k[4:]] = v
                                         continue
                                     if k[:4] == "_1_D":
@@ -1783,32 +1797,33 @@ class SubDir(object):
                                     # dict
                                     r[k] = read_h5( v, top=f"{top}.{k}" )
                             return r
-                        verify( set(f) == {'root'}, f"Cannot load H5 file: file must contain unique root note 'root'. Found nodes {sorted(f)}. Full file name '{full_file_name}'.")
+                        verify( set(f) == {'root'},  lambda : f"Cannot load H5 file: file must contain unique root note 'root'. Found nodes {sorted(f)}. Full file name '{full_file_name}'.")
                         return read_h5(f["root"],file)
                 
             elif fmt == Format.BLOSC:
                 # we do not write 
                 # any version information if not requested
                 with open(full_file_name,"rb") as f:
+                    binary_f = cast(BinaryIO, f)
                     # handle version as byte string
                     ok      = True
                     if not version is None: # it's never None
-                        test_len     = int( f.read( 1 )[0] )
-                        test_version = f.read(test_len)
-                        test_version = test_version.decode("utf-8")
+                        test_len     = int( binary_f.read( 1 )[0] )
+                        test_version_bytes = binary_f.read(test_len)
+                        test_version = test_version_bytes.decode("utf-8")
                         if handle_version == SubDir.VER_RETURN:
                             return test_version
                         ok = (version == "*" or test_version == version)
                     if ok:
                         if handle_version == SubDir.VER_CHECK:
                             return True
-                        nnbb       = f.read(2)
+                        nnbb       = binary_f.read(2)
                         num_blocks = int.from_bytes( nnbb, 'big', signed=False )
                         data       = bytearray()
                         for i in range(num_blocks):
-                            blockl = int.from_bytes( f.read(6), 'big', signed=False )
+                            blockl = int.from_bytes( binary_f.read(6), 'big', signed=False )
                             if blockl>0:
-                                bdata  = blosc.decompress( f.read(blockl) )
+                                bdata  = blosc.decompress( binary_f.read(blockl) )
                                 data  += bdata
                                 del bdata
                         try:
@@ -1820,19 +1835,20 @@ class SubDir(object):
             elif fmt == Format.GZIP:
                 # always read version information
                 with gzip.open(full_file_name,"rb") as f:
+                    binary_f = cast(BinaryIO, f)
                     # handle version as byte string
                     ok      = True
                     if not version is None: # it's never None
-                        test_len     = int( f.read( 1 )[0] )
-                        test_version = f.read(test_len)
-                        test_version = test_version.decode("utf-8")
+                        test_len     = int( binary_f.read( 1 )[0] )
+                        test_version_bytes = binary_f.read(test_len)
+                        test_version = test_version_bytes.decode("utf-8")
                         if handle_version == SubDir.VER_RETURN:
                             return test_version
                         ok = (version == "*" or test_version == version)
                     if ok:
                         if handle_version == SubDir.VER_CHECK:
                             return True
-                        data = pickle.load(f)
+                        data = pickle.load(binary_f)
                         return data
 
             elif fmt in [Format.JSON_PLAIN, Format.JSON_PICKLE]:
@@ -1845,7 +1861,7 @@ class SubDir(object):
                         if test_version[:2] != "# ":
                             raise VersionError("Error reading '{full_file_name}' using {fmt}: file does not appear to contain a version (it should start with '# ')",
                                                version_found="",
-                                               version_expected=version)                                               
+                                               version_expected=version if version is not None else "")                                               
                         test_version = test_version[2:]
                         if test_version[-1:] == "\n":
                             test_version = test_version[:-1]
@@ -1864,7 +1880,7 @@ class SubDir(object):
                             return json.loads( f.read() )
                         
             else:
-                raise NotImplementedError(fmt, txtfmt("Unknown format '%s'", fmt ))
+                raise NotImplementedError(fmt, f"Unknown format '{fmt}'")
 
             # arrive here if version is wrong
             # delete a wrong version
@@ -1884,10 +1900,10 @@ class SubDir(object):
                 return False
             if not raise_on_error:
                 return default
-            deleted = " (file was deleted)" if e is None else " (attempt to delete file failed: %s)" % e
+            deleted = " (file was deleted)" if e is None else f" (attempt to delete file failed: {e})"
             raise VersionError( f"Error reading '{full_file_name}' using {fmt}: found version '{test_version}' not '{version}'{deleted}",
-                                version_found=test_version,
-                                version_expected=version
+                                version_found=str(test_version),
+                                version_expected=version if version is not None else ""
                                 )
 
         return self._read_reader( reader=reader, file=file, default=default, raise_on_error=raise_on_error, ext=ext )
@@ -2010,7 +2026,7 @@ class SubDir(object):
 
         raise_on_error : bool
             Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
-            By default this function fails silently and returns the default.
+            By default this function fails silently and returns ``False``.
  
         delete_wrong_version : bool, default ``True``
             If ``True``, and if a wrong version was found, delete ``file``.
@@ -2031,11 +2047,14 @@ class SubDir(object):
         Returns
         -------
             Status : bool
-                Returns ``True`` only if the file exists, has version information, and its version is equal to ``version``.
+                Returns ``True`` only if the file exists,
+                has version information,
+                and its version is equal to ``version``.
         """
-        return self._read( file=file,default=False,raise_on_error=raise_on_error,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_CHECK )
+        result = self._read( file=file,default=False,raise_on_error=raise_on_error,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_CHECK )
+        return cast(bool, result)
 
-    def get_version( self, file : str, raise_on_error : bool = False, *, ext : str|None = None, fmt : Format|None = None ) -> str:
+    def get_version( self, file : str, raise_on_error : bool = False, *, ext : str|None = None, fmt : Format|None = None ) -> str|None:
         """
         Returns a version stored in a file.
         
@@ -2049,7 +2068,7 @@ class SubDir(object):
 
         raise_on_error : bool
             Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
-            By default this function fails silently and returns the default.
+            By default this function fails silently and returns ``None``.
  
         delete_wrong_version : bool, default ``True``
             If ``True``, and if a wrong version was found, delete ``file``.
@@ -2069,8 +2088,8 @@ class SubDir(object):
 
         Returns
         -------
-        version : str
-            The version.
+        version : str|None
+            The version, or ``None`` if the file did not exist and ``raise_on_error`` is ``False``.
         """
         return self._read( file=file,default=None,raise_on_error=raise_on_error,version="",ext=ext,fmt=fmt,delete_wrong_version=False,handle_version=SubDir.VER_RETURN )
 
@@ -2080,13 +2099,14 @@ class SubDir(object):
         
         Returns the read string, or a list of strings if ``file`` was iterable.
         """
-        verify( not isinstance(ext, Format), "Cannot change format when writing strings. Found extension '%s'", ext)
+        verify( not isinstance(ext, Format),  lambda : f"Cannot change format when writing strings. Found extension '{ext}'")
         ext = ext if not ext is None else self._ext
         ext = ext if ext != self.EXT_FMT_AUTO else ".txt"
 
         def reader( file, full_file_name, default ):
             with open(full_file_name,"rt",encoding="utf-8") as f:
-                line = f.readline()
+                text_f = cast(TextIO, f)
+                line = text_f.readline()
                 if len(line) > 0 and line[-1] == '\n':
                     line = line[:-1]
                 return line
@@ -2094,59 +2114,59 @@ class SubDir(object):
 
     # -- write --
 
-    def _write( self, writer, file : str, obj, raise_on_error : bool, *, ext : str|None = None ) -> bool:
+    def _write( self, writer, file : str|list[str], obj, raise_on_error : bool, *, ext : str|list[str|None]|None = None ) -> bool:
         """ Utility function for write() and writeLine() """
         if self._path is None:
-            raise EOFError("Cannot write to '%s': current directory is not specified" % file)
+            raise EOFError(f"Cannot write to '{file}': current directory is not specified")
         self.create_directory()
 
         # vector version
         if not isinstance(file,str):
-            if not isinstance(file, Collection): error( "'file' must be a string or an interable object. Found type %s", type(file), exception=ValueError)
+            if not isinstance(file, Collection): error( f"'file' must be a string or an interable object. Found type {type(file)}", exception=ValueError)
             l = len(file)
             if obj is None or isinstance(obj,str) or not isinstance(obj, Collection):
                 obj = [ obj ] * l
             else:
-                if len(obj) != l: error("'obj' must have same lengths as 'file' if the latter is a collection; found %ld and %ld", len(obj), l, exception=ValueError )
+                if len(obj) != l: error(f"'obj' must have same lengths as 'file' if the latter is a collection; found {len(obj)} and {l}", exception=ValueError )
             if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
+                ext_list : list[str | None] = [ ext ] * l
             else:
-                if len(ext) != l: error("'ext' must have same lengths as 'file' if the latter is a collection; found %ld and %ld", len(ext), l, exception=ValueError )
+                if len(ext) != l: error(f"'ext' must have same lengths as 'file' if the latter is a collection; found {len(ext)} and {l}", exception=ValueError )
+                ext_list = [ cast(str | None, e) for e in ext ]
             ok = True
-            for k,o,e in zip(file,obj,ext):
+            for k,o,e in zip(file,obj,ext_list):
                 ok |= self._write( writer, k, o, raise_on_error=raise_on_error, ext=e )
             return ok
 
         # single file
         if not len(file) > 0: error("'file is empty (the filename)" )
         sub, file = os.path.split(file)
-        if len(file) == 0: error("'file '%s' refers to a directory, not a file", file)
+        if len(file) == 0: error(f"'file '{file}' refers to a directory, not a file")
         if len(sub) > 0:
             return SubDir(sub,parent=self)._write(writer,file,obj, raise_on_error=raise_on_error,ext=ext )
 
         # write to temp file, then rename into target file
         # this reduces collision when i/o operations are slow
-        full_file_name = self.full_file_name(file,ext=ext)
+        full_file_name = self.full_file_name(file,ext=cast(str | None, ext))
+        assert full_file_name is not None
         tmp_file       = self.temp_file_name( file )
         tmp_i          = 0
         fullTmpFile    = self.full_file_name(tmp_file,ext="tmp" if not ext=="tmp" else "_tmp")
+        assert fullTmpFile is not None
         while os.path.exists(fullTmpFile):
-            fullTmpFile = self.full_file_name(tmp_file) + "." + str(tmp_i) + ".tmp"
+            tmp_path = self.full_file_name(tmp_file)
+            assert tmp_path is not None
+            fullTmpFile = tmp_path + "." + str(tmp_i) + ".tmp"
             tmp_i       += 1
             if tmp_i >= 10:
-                raise RuntimeError("Failed to generate temporary file for writing '%s': too many temporary files found. For example, this file already exists: '%s'" % ( full_file_name, fullTmpFile ) )
+                raise RuntimeError(f"Failed to generate temporary file for writing '{full_file_name}': too many temporary files found. For example, this file already exists: '{fullTmpFile}'")
 
         # write
         if not writer( file, fullTmpFile, obj ):
             return False
-        assert os.path.exists(fullTmpFile), ("Internal error: file does not exist ...?", fullTmpFile, full_file_name)
+        assert os.path.exists(fullTmpFile), ("Internal error: temporary file does not exist ...?", fullTmpFile, full_file_name)
         try:
-            if os.path.exists(full_file_name):
-                try:
-                    os.remove(full_file_name)
-                except FileNotFoundError:
-                    pass
-            os.rename(fullTmpFile, full_file_name)
+            os.replace(fullTmpFile, full_file_name)
         except Exception as e:
             try:
                 os.remove(fullTmpFile)
@@ -2232,15 +2252,16 @@ class SubDir(object):
                 if fmt == Format.PICKLE:
                     # only if a version is provided write it into the file
                     with open(full_file_name,"wb") as f:
+                        binary_f = cast(BinaryIO, f)
                         # handle version as byte string
                         if not version is None:
                             version_ = bytearray(version, "utf-8")
-                            if len(version_) > 255: error("Version '%s' is way too long: its byte encoding has length %ld which does not fit into a byte", version, len(version_))
+                            if len(version_) > 255: error(f"Version '{version}' is way too long: its byte encoding has length {len(version_)} which does not fit into a byte")
                             len8     = bytearray(1)
                             len8[0]  = len(version_)
-                            f.write(len8)
-                            f.write(version_)
-                        pickle.dump(obj,f,-1)
+                            binary_f.write(len8)
+                            binary_f.write(version_)
+                        pickle.dump(obj,binary_f,-1)
 
                 elif fmt == Format.POLARS_PARQUET:
                     # only if a version is provided write it into the file
@@ -2263,6 +2284,9 @@ class SubDir(object):
                     del table
                     
                 elif fmt == PYTREE_HDF5:
+                    if isinstance( obj, (pd.DataFrame, pl.DataFrame) ):
+                        raise ValueError(f"Cannot write '{full_file_name}': HDF5 format does not support writing objects of type {type(obj)}. Use POLARS_PARQUET or PANDAS_PARQUET instead.")
+                    
                     with h5py.File(full_file_name, "w") as f:
                         if not version is None:
                             f.attrs["version"] = version.encode("utf-8")
@@ -2321,58 +2345,62 @@ class SubDir(object):
                 elif fmt == Format.BLOSC:
                     # only if a version is provided write it into the file
                     with open(full_file_name,"wb") as f:
+                        binary_f = cast(BinaryIO, f)
                         # handle version as byte string
                         if not version is None: # it's never None
                             version_ = bytearray(version, "utf-8")
-                            if len(version_) > 255: error("Version '%s' is way too long: its byte encoding has length %ld which does not fit into a byte", version, len(version_))
+                            if len(version_) > 255: error(f"Version '{version}' is way too long: its byte encoding has length {len(version_)} which does not fit into a byte")
                             len8     = bytearray(1)
                             len8[0]  = len(version_)
-                            f.write(len8)
-                            f.write(version_)
+                            binary_f.write(len8)
+                            binary_f.write(version_)
                         pdata      = pickle.dumps(obj)  # returns data as a bytes object
                         del obj
                         len_data   = len(pdata)
                         num_blocks = max(0,len_data-1) // _BLOSC_MAX_USE + 1
-                        f.write(num_blocks.to_bytes(2, 'big', signed=False))
+                        binary_f.write(num_blocks.to_bytes(2, 'big', signed=False))
                         for i in range(num_blocks):
                             start  = i*_BLOSC_MAX_USE
                             end    = min(len_data,start+_BLOSC_MAX_USE)
                             assert end>start, ("Internal error; nothing to write")
                             block  = blosc.compress( pdata[start:end] )
                             blockl = len(block)
-                            f.write( blockl.to_bytes(6, 'big', signed=False) )
+                            binary_f.write( blockl.to_bytes(6, 'big', signed=False) )
                             if blockl > 0:
-                                f.write( block )
+                                binary_f.write( block )
                             del block
                         del pdata
 
                 elif fmt == Format.GZIP:
                     # only if a version is provided write it into the file
                     with gzip.open(full_file_name,"wb") as f:
+                        binary_f = cast(BinaryIO, f)
                         # handle version as byte string
                         if not version is None: # it's never None
                             version_ = bytearray(version, "utf-8")
-                            if len(version_) > 255: error("Version '%s' is way too long: its byte encoding has length %ld which does not fit into a byte", version, len(version_))
+                            if len(version_) > 255: error(f"Version '{version}' is way too long: its byte encoding has length {len(version_)} which does not fit into a byte")
                             len8     = bytearray(1)
                             len8[0]  = len(version_)
-                            f.write(len8)
-                            f.write(version_)
-                        pickle.dump(obj,f,-1)
+                            binary_f.write(len8)
+                            binary_f.write(version_)
+                        pickle.dump(obj,binary_f,-1)
 
                 elif fmt in [Format.JSON_PLAIN, Format.JSON_PICKLE]:
                     # only if a version is provided write it into the file
                     with open(full_file_name,"wt",encoding="utf-8") as f:
+                        text_f = cast(TextIO, f)
                         if not version is None:
-                            f.write("# " + version + "\n")
+                            text_f.write("# " + version + "\n")
                         if fmt == Format.JSON_PICKLE:
                             jsonpickle = _import_jsonpickle()
-                            f.write( jsonpickle.encode(obj) )
+                            payload = cast(str, jsonpickle.encode(obj))
+                            text_f.write( payload )
                         else:
                             assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                            f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True, dt_to_str=True ), default=str ) )
+                            text_f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True, dt_to_str=True ), default=str ) )
 
                 else:
-                    raise NotImplementedError(fmt, txtfmt("Internal error: invalid format '%s'", fmt))
+                    raise NotImplementedError(fmt, f"Internal error: invalid format '{fmt}'")
             except PermissionError as e:
                 if raise_on_error:
                     raise PermissionError(f"Permission error writing '{full_file_name}': {e}") from e
@@ -2399,7 +2427,7 @@ class SubDir(object):
 
         If the current directory is ``None``, then the function throws an EOFError exception
         """
-        verify( not isinstance(ext, Format), "Cannot change format when writing strings. Found extension '%s'", ext, exception=ValueError )
+        verify( not isinstance(ext, Format),  lambda : f"Cannot change format when writing strings. Found extension '{ext}'", exception=ValueError )
         ext = ext if not ext is None else self._ext
         ext = ext if ext != self.EXT_FMT_AUTO else ".txt"
         
@@ -2438,7 +2466,9 @@ class SubDir(object):
         ext   = self.auto_ext( ext )
         ext_l = len(ext)
         keys = []
-        with os.scandir(self._path) as it:
+        path = self._path
+        assert path is not None
+        with os.scandir(path) as it:
             for entry in it:
                 if not entry.is_file():
                     continue
@@ -2460,7 +2490,9 @@ class SubDir(object):
         if not self.path_exists():
             return []
         subdirs = []
-        with os.scandir(self._path[:-1]) as it:
+        path = self._path
+        assert path is not None
+        with os.scandir(path[:-1]) as it:
             for entry in it:
                 if not entry.is_dir():
                     continue
@@ -2470,7 +2502,7 @@ class SubDir(object):
     # delete
     # ------
 
-    def delete( self, file : str, raise_on_error: bool  = False, *, ext : str|None = None ):
+    def delete( self, file : str|list[str], raise_on_error: bool  = False, *, ext : str|list[str|None]|None = None ):
         """
         Deletes ``file``.
         
@@ -2497,25 +2529,26 @@ class SubDir(object):
         """
         # do not do anything if the object was deleted
         if self._path is None:
-            if raise_on_error: raise EOFError("Cannot delete '%s': current directory not specified" % file)
+            if raise_on_error: raise EOFError(f"Cannot delete '{file}': current directory not specified")
             return
             
         # vector version
         if not isinstance(file,str):
-            if not isinstance(file, Collection): error( "'file' must be a string or an interable object. Found type %s", type(file))
+            if not isinstance(file, Collection): error( f"'file' must be a string or an interable object. Found type {type(file)}")
             l = len(file)
             if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
+                ext_list : list[str | None] = [ ext ] * l
             else:
-                if len(ext) != l: error("'ext' must have same lengths as 'file' if the latter is a collection; found %ld and %ld", len(ext), l )
-            for k, e in zip(file,ext):
+                if len(ext) != l: error(f"'ext' must have same lengths as 'file' if the latter is a collection; found {len(ext)} and {l}")
+                ext_list = [ cast(str | None, e) for e in ext ]
+            for k, e in zip(file,ext_list):
                 self.delete(k, raise_on_error=raise_on_error, ext=e)
             return
 
         # handle directories in 'file'
         if len(file) == 0: error( "'file' is empty" )
         sub, key_ = os.path.split(file)
-        if len(key_) == 0: error("'file' %s indicates a directory, not a file", file)
+        if len(key_) == 0: error(f"'file' {file} indicates a directory, not a file")
         if len(sub) > 0: return SubDir(sub,parent=self).delete(key_,raise_on_error=raise_on_error,ext=ext)
         # don't try if directory doesn't existy
         if not self.path_exists():
@@ -2523,6 +2556,10 @@ class SubDir(object):
                 raise KeyError(file)
             return        
         full_file_name = self.full_file_name(file, ext=ext)
+        if full_file_name is None:
+            if raise_on_error:
+                raise KeyError(file)
+            return
         if not os.path.exists(full_file_name):
             if raise_on_error:
                 raise KeyError(file)
@@ -2550,7 +2587,9 @@ class SubDir(object):
             return
         if not self.path_exists():
             return
-        self.delete( self.files(ext=ext), raise_on_error=raise_on_error, ext=ext )
+        files = self.files(ext=ext)
+        print(f"*** deleting {files}")
+        self.delete( files, raise_on_error=raise_on_error, ext=ext )
 
     def delete_all_content( self, delete_self : bool = False, raise_on_error : bool = False, *, ext : str|None = None ):
         """
@@ -2591,7 +2630,7 @@ class SubDir(object):
         txt = str(rest)
         txt = txt if len(txt) < 50 else (txt[:47] + '...')
         if len(rest) > 0:
-            if raise_on_error: error( "Cannot delete my own directory %s: directory not empty: found %ld object(s): %s", self._path,len(rest), txt)
+            if raise_on_error: error( f"Cannot delete my own directory {self._path}: directory not empty: found {len(rest)} object(s): {txt}")
             return
         os.rmdir(self._path[:-1])   ## does not work ????
         self._path = None
@@ -2619,7 +2658,7 @@ class SubDir(object):
     # file ops
     # --------
 
-    def exists(self, file : str, *, ext : str|None = None ) -> bool:
+    def exists(self, file : str|Collection, *, ext : str|None = None ) -> bool | list[bool]:
         """
         Checks whether a file exists.
 
@@ -2642,20 +2681,21 @@ class SubDir(object):
         """
         # vector version
         if not isinstance(file,str):
-            verify( isinstance(file, Collection), "'file' must be a string or an interable object. Found type %s", type(file))
+            verify( isinstance(file, Collection),  lambda : f"'file' must be a string or an interable object. Found type {type(file)}")
             l = len(file)
             if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
+                ext_list : list[str | None] = [ ext ] * l
             else:
-                if len(ext) != l: error("'ext' must have same lengths as 'file' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.exists(k,ext=e) for k,e in zip(file,ext) ]
+                if len(ext) != l: error(f"'ext' must have same lengths as 'file' if the latter is a collection; found {len(ext)} and {l}")
+                ext_list = [ cast(str | None, e) for e in ext ]
+            return [ cast(bool, self.exists(k,ext=e)) for k,e in zip(file,ext_list) ]
         # empty directory
         if self._path is None:
             return False
         # handle directories in 'file'
         if len(file) == 0: raise ValueError("'file' missing (the filename)")
         sub, key_ = os.path.split(file)
-        if len(key_) == 0: raise IsADirectoryError( file, txtfmt("'file' %s indicates a directory, not a file", file) )
+        if len(key_) == 0: raise IsADirectoryError(file, f"'file' {file} indicates a directory, not a file")
         if len(sub) > 0:
             return self(sub).exists(file=key_,ext=ext)
         # if directory doesn't exit
@@ -2663,40 +2703,44 @@ class SubDir(object):
             return False
         # single file
         full_file_name = self.full_file_name(file, ext=ext)
+        assert full_file_name is not None
         if not os.path.exists(full_file_name):
             return False
         if not os.path.isfile(full_file_name):
-            raise IsADirectoryError("Structural error: file %s: exists, but is not a file (full path %s)",file,full_file_name)
+            raise IsADirectoryError(file, f"Structural error: file '{file}': exists, but is not a file (full path '{full_file_name}')")
         return True
     
-    def _getFileProperty( self, *, file : str, ext : str, func ):
+    def _getFileProperty( self, *, file : str|list[str], ext : str|list[str]|None, func : Callable ) -> datetime.datetime|list[datetime.datetime]|None:
         # vector version
         if not isinstance(file,str):
-            verify( isinstance(file, Collection), "'file' must be a string or an interable object. Found type %s", type(file))
+            verify( isinstance(file, Collection), lambda : f"'file' must be a string or an interable object. Found type {type(file)}")
             l = len(file)
             if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
+                ext_list : list[str | None] = [ ext ] * l
             else:
-                if len(ext) != l: error("'ext' must have same lengths as 'file' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self._getFileProperty(file=k,ext=e,func=func) for k,e in zip(file,ext) ]
+                if len(ext) != l: error(f"'ext' must have same lengths as 'file' if the latter is a collection; found {len(ext)} and {l}")
+                ext_list = [ cast(str | None, e) for e in ext ]
+            return [ cast(datetime.datetime, self._getFileProperty(file=k,ext=e,func=func)) for k,e in zip(file,ext_list) ]
         # empty directory
         if self._path is None:
             return None
         # handle directories in 'file'
         if len(file) == 0: raise ValueError("'file' missing (the filename)")
         sub, key_ = os.path.split(file)
-        if len(key_) == 0: raise IsADirectoryError( file, txtfmt("'file' %s indicates a directory, not a file", file) )
+        if len(key_) == 0: raise IsADirectoryError( file, f"'file' {file} indicates a directory, not a file" )
         if len(sub) > 0: return self(sub)._getFileProperty(file=key_,ext=ext,func=func)
         # if directory doesn't exit
         if not self.path_exists():
             return None
         # single file
         full_file_name = self.full_file_name(file, ext=ext)
+        if full_file_name is None:
+            return None
         if not os.path.exists(full_file_name):
             return None
         return func(full_file_name)
 
-    def get_creation_time( self, file : str, *, ext : str|None = None ) -> datetime.datetime:
+    def get_creation_time( self, file : str|list[str], *, ext : str|list[str]|None = None ) -> datetime.datetime|list[datetime.datetime]|None:
         """
         Returns the creation time of a file.
         
@@ -2722,7 +2766,7 @@ class SubDir(object):
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getctime(x)) )
 
-    def get_last_modification_time( self, file : str, *, ext : str = None ) -> datetime.datetime:
+    def get_last_modification_time( self, file : str|list[str], *, ext : str|list[str]|None = None ) -> datetime.datetime|list[datetime.datetime]|None:
         """
         Returns the last modification time a file.
         
@@ -2748,7 +2792,7 @@ class SubDir(object):
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getmtime(x)) )
 
-    def get_last_access_time( self, file : str, *, ext : str = None ) -> datetime.datetime:
+    def get_last_access_time( self, file : str|list[str], *, ext : str|list[str]|None = None ) -> datetime.datetime|list[datetime.datetime]|None:
         """
         Returns the last access time of a file.
         
@@ -2774,7 +2818,7 @@ class SubDir(object):
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getatime(x)) )
 
-    def file_size( self, file : str, *, ext : str = None ) -> int:
+    def file_size( self, file : str|list[str], *, ext : str|list[str]|None = None ) -> int:
         """
         Returns the file size of a file.
         
@@ -2797,7 +2841,7 @@ class SubDir(object):
         """
         return self._getFileProperty( file=file, ext=ext, func=lambda x : os.path.getsize(x) )
 
-    def rename( self, source : str, target : str, *, ext : str = None ):
+    def rename( self, source : str, target : str, *, ext : str|None = None ):
         """
         Rename a file.
         
@@ -2821,7 +2865,7 @@ class SubDir(object):
         # handle directories in 'source'
         if len(source) == 0: raise ValueError("'source' missing (the filename)")
         sub, source_ = os.path.split(source)
-        if len(source_) == 0: raise IsADirectoryError( source, txtfmt("'source' %s indicates a directory, not a file", source ))
+        if len(source_) == 0: raise IsADirectoryError( source, f"'source' {source} indicates a directory, not a file" )
         if len(sub) > 0:
             src_full = self(sub).full_file_name(file=source_,ext=ext)
         else:
@@ -2830,7 +2874,7 @@ class SubDir(object):
         # handle directories in 'target'
         if len(target) == 0: raise ValueError("'target' missing (the filename)" )
         sub, target_ = os.path.split(target)
-        if len(target_) == 0: raise IsADirectoryError( target, txtfmt("'target' %s indicates a directory, not a file", target))
+        if len(target_) == 0: raise IsADirectoryError( target, f"'target' {target} indicates a directory, not a file" )
         if len(sub) > 0:
             tar_dir  = self(sub)
             tar_dir.create_directory()
@@ -2839,6 +2883,8 @@ class SubDir(object):
             tar_full = self.full_file_name( target, ext=ext )
             self.create_directory()
             
+        assert src_full is not None
+        assert tar_full is not None
         os.rename(src_full, tar_full)
 
     # utilities
@@ -2924,7 +2970,7 @@ class SubDir(object):
     # object interface
     # ----------------
 
-    def __call__(self, element : str|None = None,
+    def __call__(self, element : str|list[str]|None = None,
                        default : Any = RET_SUB_DIR,
                        raise_on_error : bool = False,
                        *,
@@ -3047,7 +3093,7 @@ class SubDir(object):
             verify( version is None, "Cannot specify 'version' when operating in directory mode", exception=ValueError)      
             if not element is None and not isinstance(element, (str, pathlib.Path)):
                 if not isinstance(element, Collection): 
-                    raise ValueError(txtfmt("'element' must be a string or an iterable object. Found type '%s;", type(element)))
+                    raise ValueError(f"'element' must be a string or an iterable object. Found type '{type(element)}'")
                 return [ SubDir( k,parent=self,ext=ext,fmt=fmt,create_directory=create_directory, cache_controller=cache_controller) for k in element ]
             return SubDir(element,parent=self,ext=ext,fmt=fmt,create_directory=create_directory, cache_controller=cache_controller)
         verify( not element is None, "Cannot use 'None' as filename", exception=ValueError)        
@@ -3113,14 +3159,14 @@ class SubDir(object):
                 An iterable generator
         """       
         class ItemIterable(Iterable):
-            def __init__(_) -> None:
-                _._files  = self.files(ext=ext)
-                _._subdir = self
-            def __len__(_):
-                return len(_._files)
-            def __iter__(_):
-                for file in _._files:
-                    data = _._subdir.read(file, ext=ext, raise_on_error=raise_on_error)
+            def __init__(self) -> None:
+                self._files  = self.files(ext=ext)
+                self._subdir = self
+            def __len__(self):
+                return len(self._files)
+            def __iter__(self):
+                for file in self._files:
+                    data = self._subdir.read(file, ext=ext, raise_on_error=raise_on_error)
                     yield file, data
         return ItemIterable()
 
@@ -3163,7 +3209,7 @@ class SubDir(object):
         self._tclean = state['tclean']
 
     @staticmethod
-    def as_format( format_name : str ) -> int:
+    def as_format( format_name : str ) -> Format:
         """
         Converts a named format into the respective format code.
         
@@ -3773,7 +3819,7 @@ class SubDir(object):
               to generate the actual label.
               
               The parameter ``func_name`` refers to the qualified
-              name of the function. Its value can be overwitten by ``name``, while the parameter name itself
+              name of the function. Its value can be overwritten by ``name``, while the parameter name itself
               can be overwritten using ``name_of_func_name_arg``, see below.
 
             * If ``label`` is a plain string without ``{}`` formatting: use this string as-is.
@@ -3782,7 +3828,7 @@ class SubDir(object):
               will be used to generate the actual label. 
               
               The parameter ``func_name`` refers to the qualified
-              name of the function. Its value can be overwitten by ``name``, while the parameter name itself
+              name of the function. Its value can be overwritten by ``name``, while the parameter name itself
               can be overwritten using ``name_of_func_name_arg``, see below.
             
             See above for examples.
@@ -3801,22 +3847,22 @@ class SubDir(object):
             If neither ``uid`` and ``label`` are present, ``name`` will be used as non-unique ``label``.
         
         name : str | None, default ``None``
-            Name of this function which is used either on its own if neither ``label`` not ``uid`` are used,
-            or which passed as a parameter ``func_name`` to either the callable or the
+            Name of this function, used either on its own if neither ``label`` nor ``uid`` are used,
+            or passed as a parameter ``func_name`` to either the callable or the
             formatting operator. See above for more details.
             
             If ``name`` is not specified it defaults to ``__qualname__`` expanded
             by the module name the function is defined in.
         
         include_args : list[str] | None, default ``None``
-            List of arguments to include in generating an unqiue ID, or ``None`` for all.
+            List of arguments to include when generating a unique ID, or ``None`` for all.
         
         exclude_args : list[str] | None, default ``None``
-            List of arguments to exclude from generating an unique ID. Examples of such non-functional arguments
+            List of arguments to exclude when generating a unique ID. Examples of such non-functional arguments
             are workflow controls (debugging) and i/o elements.
             
         exclude_arg_types : list[type | str] | None, default ``None``
-            List of parameter types or names of type to exclude from generating an unique ID. Examples of such non-functional arguments
+            List of parameter types or names of types to exclude when generating a unique ID. Examples of such non-functional arguments
             are workflow controls (debugging) and i/o elements. Strings are compared to ``type(arg).__name__``.
 
         in_sub_dir : str | Callable | None, default ``None``
@@ -3841,8 +3887,8 @@ class SubDir(object):
                 f("test", 1)
                 
             Generates a :class:`RuntimeError` ``f@__main__: 'func_name' is a reserved keyword
-            and used as formatting parameter
-            name for the function name. Found it also in the function parameter list. Use 'name_of_name_arg' to change the internal parameter name used.``.
+            and is used as the formatting parameter name for the function name. It was also found in the function parameter list.
+            Use 'name_of_func_name_arg' to change the internal parameter name used.``.
 
             Instead, use:            
             
@@ -4040,6 +4086,22 @@ class CacheTracker(object):
     def __repr__(self) -> str:#NOQA
         return f"Tracked: {self._files}"
 
+@dataclass(frozen=True)
+class CacheContext():
+    """
+    Context for caching operations.
+
+    If a cached function has a ``cache_context`` parameter, it will be passed a :class:`CacheContext` object which contains information on the caching operation.
+    """
+    name                : str       # Decoded qualified name of the function, for error messages.
+    label               : str       # Label of the function call. If the function ID was generated using 'uid' then this is equal to 'unique_id'.
+    unique_id           : str       # Unique ID of this function call, essentially 'label' plus a hash. If the function ID was generated using 'uid' then this is equal to 'label'.
+    filename            : str       # Filename of the cached file, without extension.
+    sub_dir             : SubDir    # Directory, extension, and format.
+    version             : str       # Version for the function.
+    cache_mode          : CacheMode # Active cache mode.
+    cache_generate_only : bool      # Whether to only generate the cache but not return it (e.g. write to disk but not return the result).
+
 class CacheInfo(PrettyObject):
     """
     Information on functions decorated with :dec:`cdxcore.subdir.SubDir.cache`.
@@ -4057,10 +4119,7 @@ class CacheInfo(PrettyObject):
         uid, result = f(1, return_cache_uid=True)
         print(uid, ":", result) # --> f(1) c64e9c51 : 1
 
-    **This functionality is not thread-safe**
-
-    Note that the data contained in this object is not thread-safe. 
-    Use alternatives to obtain thread-safe information.
+    **This functionality is not thread-safe** -- add a ``cache_info`` parameter with argument type :class:`CacheInfo` to a decorated function instead.
     """
     def __init__(self, name: str, subdir : SubDir, idversion: str, keep_last_arguments : bool ) -> None:
         """
@@ -4073,8 +4132,8 @@ class CacheInfo(PrettyObject):
         self.version     : str = idversion             #: (hash) version used. This is equal to ``F.version.unique_id64``.
         self.last_cached : bool|None = None            #: Whether the last function call restored data from disk; ``None`` if no function call was made yet.
         self.sub_dir     : SubDir|None = None          #: Sub-directory where the file was stored (this can differ from the original sub-directory of the function label contains directory information).
-        self.override_cache_mode : CacheMode|None = None #: Last ``override_cache_mode`` used; ``None`` otherwise.
-        self.cache_generate_only : bool|None = None        #: Value of ``cache_generate_only`` during the last cached function call. 
+        self.override_cache_mode  : CacheMode|None = None       #: Last ``override_cache_mode```; ``None`` otherwise.
+        self.cache_generate_only : bool|None = None    #: Value of ``cache_generate_only`` during the last cached function call. 
         
         if keep_last_arguments:             
             self.last_arguments : dict|None = None          #: Last arguments used. This member is only present if ``keep_last_arguments`` was set to ``True`` when the :class:`cdxcore.subdir.CacheController` was created.
@@ -4150,9 +4209,9 @@ class _CacheWrapper(object):
         # --------------
 
         self._subdir                : SubDir = SubDir(subdir) if not isinstance(subdir,SubDir) else subdir
-        self._uid_or_label          : str|Callable[[], str]|None = uid if label is None else label
+        self._uid_or_label          : ActiveFormat | None = None
         self._unique                : bool = not uid is None
-        self._in_sub_dir            : str|Callable[[], str]|None = in_sub_dir
+        self._in_sub_dir            : ActiveFormat | None = None
         self._name                  : str = str(name) if not name is None else qual_name
         self._exclude_args          : set[str]|None = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
         self._include_args          : set[str]|None = set(include_args) if not include_args is None and len(include_args) > 0 else None
@@ -4172,6 +4231,7 @@ class _CacheWrapper(object):
         self._signature  = inspect.signature(F)  
         self._f_has_override_cache_mode = "override_cache_mode" in self._signature.parameters
         self._f_has_cache_generate_only = "cache_generate_only" in self._signature.parameters
+        self._f_has_cache_context       = "cache_context" in self._signature.parameters
 
         # uid/label
         # ----------
@@ -4180,9 +4240,9 @@ class _CacheWrapper(object):
         name_of_func_name_arg = str(name_of_func_name_arg)
         reserved             = {}
         reserved[name_of_func_name_arg] = self._name
-        self._uid_or_label = self._uid_or_label if not self._uid_or_label is None else self._name
-        self._uid_or_label = ActiveFormat(self._uid_or_label,label=which,name=self._name,reserved_keywords=reserved ) 
-        self._in_sub_dir   = ActiveFormat(self._in_sub_dir,label="in_sub_dir",name=self._name,reserved_keywords=reserved ) if not self._in_sub_dir is None else None
+        uid_or_label = uid if uid is not None else label if label is not None else self._name
+        self._uid_or_label = ActiveFormat(uid_or_label,label=which,name=self._name,reserved_keywords=reserved ) 
+        self._in_sub_dir   = ActiveFormat(in_sub_dir,label="in_sub_dir",name=self._name,reserved_keywords=reserved ) if not in_sub_dir is None else None
 
         # wrap up
         # -------
@@ -4193,10 +4253,22 @@ class _CacheWrapper(object):
                 param_str += "override_cache_mode, "
             if self._f_has_cache_generate_only:
                 param_str += "cache_generate_only, "
+            if self._f_has_cache_context:
+                param_str += "cache_context, "
             if len(param_str) > 0:
                 param_str = f" (with explicit {param_str[:-2]})"
 
             self.debug_verbose.write(f"cache({self._name}){param_str}: function registered for caching into '{self._subdir.path}'.")
+
+    @property
+    def name(self) -> str:
+        """Returns the wrapped function name."""
+        return self._name
+
+    @property
+    def signature(self) -> inspect.Signature:
+        """Returns the wrapped function signature."""
+        return self._signature
 
     @property
     def version(self) -> Version:
@@ -4211,14 +4283,14 @@ class _CacheWrapper(object):
         """ Returns the :class:`cdxcore.subdir.CacheMode` of the underlying :class:`cdxcore.subdir.CacheController` """ 
         return self.cache_controller.cache_mode
     @property
-    def debug_verbose(self) -> Context:
+    def debug_verbose(self) -> Context | None:
         """ Returns the debug :class:`cdxcore.verbose.Context` used to print caching information, or ``None`` """
         return self.cache_controller.debug_verbose
 
     @staticmethod
     def _ensure_has_version( F,
                              version      : str|None = None,
-                             dependencies : list|None = None,
+                             dependencies : list[str|type]|None = None,
                              auto_class   : bool = True,
                              allow_default: bool = False):
         """
@@ -4346,11 +4418,14 @@ class _CacheWrapper(object):
         
         arguments = None
         
-        if not self._uid_or_label.is_simple_str:
+        uid_or_label_object = self._uid_or_label
+        if uid_or_label_object is None:
+            full_uid_or_label = self._name
+        elif not uid_or_label_object.is_simple_str:
             arguments         = self.cache_relevant_arguments(args=args,kwargs=kwargs) if arguments is None else arguments
-            full_uid_or_label = self._uid_or_label(**arguments)
+            full_uid_or_label = uid_or_label_object(**arguments)
         else:
-            full_uid_or_label = self._uid_or_label()
+            full_uid_or_label = uid_or_label_object()
             
         if self._unique and "\\" in full_uid_or_label:
             raise ValueError(f"The unique filename '{full_uid_or_label}' computed for '{self._name}' contains '\\'. Use forward slashes to define a directory structure instead.")
@@ -4514,14 +4589,24 @@ class _CacheWrapper(object):
             # allow functions to understand caching
             # -------------------------------------
 
-            if self._f_has_override_cache_mode or self._f_has_cache_generate_only:
+            if self._f_has_override_cache_mode or self._f_has_cache_generate_only or self._f_has_cache_context:
                 kwargs = dict(kwargs)
                 if self._f_has_override_cache_mode:
                     kwargs["override_cache_mode"] = override_cache_mode
                 if self._f_has_cache_generate_only:
                     kwargs["cache_generate_only"] = cache_generate_only
+                if self._f_has_cache_context:
+                    kwargs["cache_context"] = CacheContext( name=self._name,
+                                                            unique_id=unique_id,
+                                                            filename=filename,
+                                                            sub_dir=sub_dir,
+                                                            version=idversion,
+                                                            label=label,
+                                                            cache_mode=cache_mode,
+                                                            cache_generate_only=cache_generate_only )
 
             execute.cache_info.override_cache_mode = override_cache_mode
+            execute.cache_info.cache_mode          = cache_mode
             execute.cache_info.cache_generate_only = cache_generate_only
             del override_cache_mode
 
@@ -4534,20 +4619,20 @@ class _CacheWrapper(object):
                 sub_dir.delete( filename )
 
             elif cache_mode.read:
-                rex =  sub_dir.exists(filename) #doing this here for cache_mode.must_exist because otherwise we cannot determine whether the version was correct or the file did not exist if del_incomp is true
-                if rex and cache_generate_only and sub_dir.is_version( filename, version=idversion, delete_wrong_version=cache_mode.del_incomp ):
+                rex = sub_dir.is_version( filename, version=idversion, delete_wrong_version=cache_mode.del_incomp )  # returns False if the version is wrong.
+                if rex and cache_generate_only:
                     execute.cache_info.last_cached = True
                     if not self.debug_verbose is None:
-                        self.debug_verbose.write(f"cache({self._name}): confirmed for '{label}' cache '{sub_dir.full_file_name(filename)}' exists and has version '{idversion}'.")
+                        self.debug_verbose.write(f"cache({self._name}): '{label}' cache file '{sub_dir.full_file_name(filename)}' exists and has version '{idversion}' -- returning in 'generate_only' mode.")
                     # return status "not generated"
                     if return_cache_uid:
                         return unique_id, False
                     return False
-                    
+ 
                 class Tag:
                     pass
                 tag = Tag()
-                r = sub_dir.read( filename, tag, version=idversion, delete_wrong_version=cache_mode.del_incomp ) if rex else tag
+                r = sub_dir.read( filename, tag, version=idversion, delete_wrong_version=cache_mode.del_incomp, raise_on_error=True ) if rex else tag
                         
                 if r is tag:
                     if cache_mode.must_exist:
@@ -4564,11 +4649,10 @@ class _CacheWrapper(object):
                             except Exception as e:
                                 reason = f"Failure to read file: {e}."
                         raise CacheMustExistError( ffn, f"'{self._name}': failed to read cache '{unique_id}' for '{label}': {reason}")
+                    if rex and not self.debug_verbose is None:
+                        self.debug_verbose.write(f"cache({self._name}): '{label}' cache file '{sub_dir.full_file_name(filename)}' existed but could not be read.")
                     
                 else:
-                    if not track_cached_files is None:
-                        track_cached_files += self._fullFileName(filename)
-     
                     execute.cache_info.last_cached = True 
                     if not self.debug_verbose is None:
                         self.debug_verbose.write(f"cache({self._name}): read '{label}' from cache '{sub_dir.full_file_name(filename)}' with version '{idversion}'.")

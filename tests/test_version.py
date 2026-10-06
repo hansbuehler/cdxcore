@@ -90,7 +90,31 @@ def Ag(x,z):
 class Empty:
     pass
 
+@version("0.1", dependencies=["circular_b"])
+def circular_a():
+    return 1
+
+@version("0.1", dependencies=["circular_a"])
+def circular_b():
+    return 1
+
 class Test(unittest.TestCase):
+
+    def test_none_dependencies_is_supported(self):
+        @version("0.1")
+        class Parent:
+            pass
+
+        @version("0.2")
+        class Child(Parent):
+            pass
+
+        self.assertIn("Parent: 0.1", Child.version.full)
+        self.assertTrue(Child.version.full.startswith("0.2 {"))
+
+    def test_circular_dependencies_raise_recursion_error(self):
+        with self.assertRaises(RecursionError):
+            circular_a.version.full
     
     def test_version(self):
         # test dependency

@@ -946,7 +946,7 @@ class ActiveFormat( object ):
                 
         strict : bool, default ``False``
             If ``False`` this function does not validate that all arguments passed to :meth:`cdxcore.util.ActiveFormat.__call__`
-            have to be understood by the formatting function. This is usally the best solution as the calling entity
+            have to be understood by the formatting function. This is usually the best solution as the calling entity
             just passes everything and the formatter selects what it needs.
             
             Set to ``True`` to validate that the passed arguments match exactly the expected arguments.
@@ -1487,7 +1487,7 @@ class TrackTime(object):
         Returns
         -------
             sub_timer : :class:`cdxcore.util.TrackTime`
-                The timer for the sub topic. If the sub topic does not exist, it is created and returned. If it already exists, it is returned as is.   
+The timer for the subtopic. If the subtopic does not exist, it is created and returned. If it already exists, it is returned as is.
 
         Raises
         ------

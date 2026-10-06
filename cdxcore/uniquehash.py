@@ -90,24 +90,24 @@ def _qual_name(x, with_mod=False):
 
 class DebugTrace(object):
     """
-    Base class for tracing hashing operations. 
+    Base class for tracing hashing operations.
     
     Use either :class:`cdxcore.uniquehash.DebugTraceCollect` or
     :class:`cdxcore.uniquehash.DebugTraceVerbose` for debugging. The latter prints out tracing during the computation
-    of a hash, while to former collects all this information in a simplistic data structure. Note that this can be quite memory intensive.
+    of a hash, while the former collects all this information in a simplistic data structure. Note that this can be quite memory intensive.
     """
     def _update( self, x, msg : str|None = None ):
-        """ Notify processing of `x`, with an optional process `msg`
+        """Notify processing of `x` with an optional message `msg`.
         :meta private:
         """#@private
-        raise NotImplementedError()        
+        raise NotImplementedError()
     def _update_topic( self, x, msg : str|None = None ):
-        """ Notify processing of a topc `x` with message `msg`, and return a sub-trace context
+        """Notify processing of a topic `x` with message `msg`, and return a sub-trace context.
         :meta private:
         """#@private
-        raise NotImplementedError()        
+        raise NotImplementedError()
     def _warning( self, msg : str):
-        """ Issue warning `msg`
+        """Issue warning `msg`.
         :meta private:
         """#@private
         raise NotImplementedError()        
@@ -920,7 +920,7 @@ def NamedUniqueHash( max_length       : int = 60,
     where ID has length `id_length`. Since `label` heads the resulting string this function is suited for
     use cases where a user might want an indication what a hash refers to.
 
-    This function does not suppose that `label` is unqiue, hence the ID is prioritized.
+    This function does not assume that `label` is unique, so the ID is prioritized.
     See :func:`cdxcore.uniquehash.UniqueLabel` for a function which assumes the label is unique.
     
     The maximum length of the returned string is `max_length`; if need be `label` will be truncated: 
@@ -1011,7 +1011,7 @@ def UniqueLabel(     max_length       : int = 60,
         else:
             unique_label + separator + ID
 
-    where ``ID`` is a unqiue hash computed from ``unique_label`` of maximum length ``id_length``.
+    where ``ID`` is a unique hash computed from ``unique_label`` with maximum length ``id_length``.
 
     This function assumes that ``unique_label`` is unique, hence the ID is dropped if ``unique_label``
     is less than ``max_length``.
@@ -1194,3 +1194,16 @@ def unique_label48_8( label : str, as_file_name : bool = False ) -> str:
     elements starting with `_` or function members.
     """
     return UniqueLabel( max_length=48, id_length=8, filename_by="default" if as_file_name else None )(label)
+
+def label_unique_filename48_8( label : str ) -> str:
+    """
+    Returns a unique label suitable for use as a file name. This function assumes that ``label`` is inherently unique, but
+    might exceed the maximum length of 48 or contains characters not suitable for file names. In that case a unique hash of length 8 is added
+    to the truncated label and returned.
+
+    ``label`` is assumed to be unique.
+
+    This is the hash function returned by :class:`cdxcore.uniquehash.UniqueLabel`
+    with parameters ``max_length=48, id_length=8, filename_by="default"``.
+    """
+    return UniqueLabel( max_length=48, id_length=8, filename_by="default" )(label)

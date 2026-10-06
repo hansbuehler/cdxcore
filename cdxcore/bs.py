@@ -7,7 +7,7 @@ Overview
 
 This module offers with the ``bs`` instance of :class:`cdxcore.bs.BS` a basic Black & Scholes pricing framework for the drift-less case::
 
-    from cdxbasics.bs import bs
+    from cdxcore.bs import bs
     call = bs.price(1.,vol=0.2,sqrtT=0.1)
 
 Aside from the respective pricing functions and greeks, ``bs`` object also offers
@@ -37,7 +37,7 @@ from .util import fmt_digits
 
 import math as math
 import warnings as warnings
-from enum import IntFlag, auto, Enum
+from enum import IntFlag, auto
 import numpy as np
 from collections.abc import Callable, Mapping
 
@@ -172,8 +172,8 @@ class BS(object):
         on_precision_error: str, default ``raise``
             What to do if any of the calculated values are outside their theoretical bounds by more than some tolerance.
             Can be one of ``"clip"``, ``"warn"``, or ``"raise"``.
-            In case of ``"clip"`` and ``"warn"`` the function will clip the return the results clipped
-            at their theoretical bounds.
+            The result is clipped to its theoretical bounds regardless of this setting; ``"warn"`` additionally
+            issues a warning and ``"raise"`` raises a :class:`FloatingPointError` instead of clipping.
 
         eps : float | None, default ``None``
             An optional precision tolerance for the internal checks. If not provided, the default is ``bs._eps`` (1E-8).
@@ -193,8 +193,8 @@ class BS(object):
             * ``price``
             * ``delta``
             * ``dk``
-            * ``vega``
             * ``gamma``
+            * ``vega``
             * ``theta`` (positive!)
             * ``logK``
 
@@ -519,7 +519,7 @@ class BS(object):
             mkt.opt_theta = pure['theta'] * df * fwd
         return mkt
 
-    def price( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
+    def price( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, on_precision_error : str = "raise", eps : float|None = None ):
         r"""
         Compute Black Scholes option prices in drift-less price domain.
         
@@ -540,6 +540,9 @@ class BS(object):
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
 
+        on_precision_error : str, default ``raise``
+            Action to take on precision errors. Options are ``raise`` to raise an exception or ``warn`` to issue a warning.
+
         eps : float | None, default ``None``
             An optional precision tolerance for internal price validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
@@ -548,9 +551,9 @@ class BS(object):
         price : np.ndarray
             Black Scholes prices
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.PRICE, eps=eps )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.PRICE, on_precision_error=on_precision_error, eps=eps )
 
-    def delta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
+    def delta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, on_precision_error : str = "raise", eps : float|None = None ):
         r"""
         Compute Black Scholes option deltas in drift-less price domain.
         
@@ -571,6 +574,9 @@ class BS(object):
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
 
+        on_precision_error : str, default ``raise``
+            Action to take on precision errors. Options are ``raise`` to raise an exception or ``warn`` to issue a warning.
+
         eps : float | None, default ``None``
             An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                              
@@ -579,9 +585,9 @@ class BS(object):
         delta : np.ndarray
             Black Scholes deltas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DELTA, eps=eps )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DELTA, on_precision_error=on_precision_error, eps=eps )
 
-    def dk( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
+    def dk( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, on_precision_error : str = "raise", eps : float|None = None ):
         r"""
         Compute Black Scholes dk (derivative in k) in drift-less price domain.
         
@@ -602,6 +608,9 @@ class BS(object):
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
 
+        on_precision_error : str, default ``raise``
+            Action to take on precision errors. Options are ``raise`` to raise an exception or ``warn`` to issue a warning.
+
         eps : float | None, default ``None``
             An optional precision tolerance for internal price validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
@@ -610,9 +619,9 @@ class BS(object):
         dk : np.ndarray
             Black Scholes dk (derivative in k)
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DK, eps=eps )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.DK, on_precision_error=on_precision_error, eps=eps )
 
-    def gamma( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
+    def gamma( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, on_precision_error : str = "raise", eps : float|None = None ):
         r"""
         Compute Black Scholes option gamma in drift-less price domain.
         
@@ -633,6 +642,9 @@ class BS(object):
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
 
+        on_precision_error : str, default ``raise``
+            Action to take on precision errors. Options are ``raise`` to raise an exception or ``warn`` to issue a warning.
+
         eps : float | None, default ``None``
             An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
@@ -641,9 +653,9 @@ class BS(object):
         gamma : np.ndarray
             Black Scholes gammas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.GAMMA, eps=eps )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.GAMMA, on_precision_error=on_precision_error, eps=eps )
 
-    def vega( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, eps : float|None = None ):
+    def vega( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True, *, logK : np.ndarray|float|None = None, on_precision_error : str = "raise", eps : float|None = None ):
         r"""
         Compute Black Scholes option vega in drift-less price domain.
         
@@ -664,6 +676,9 @@ class BS(object):
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
 
+        on_precision_error : str, default ``raise``
+            Action to take on precision errors. Options are ``raise`` to raise an exception or ``warn`` to issue a warning.
+
         eps : float | None, default ``None``
             An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
@@ -672,9 +687,9 @@ class BS(object):
         vega : np.ndarray
             Black Scholes vegas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.VEGA, eps=eps )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.VEGA, on_precision_error=on_precision_error, eps=eps )
 
-    def theta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True,*,  logK : np.ndarray|float|None = None, eps : float|None = None ):
+    def theta( self, k : np.ndarray, vol : np.ndarray|float, sqrtT : np.ndarray|float=1., is_call : np.ndarray|bool = True,*,  logK : np.ndarray|float|None = None, on_precision_error : str = "raise", eps : float|None = None ):
         r"""
         Compute Black Scholes option theta in drift-less price domain.
         
@@ -695,6 +710,9 @@ class BS(object):
         logK: np.ndarray | float | None, default ``None``
             An optional pre-computed log-strike. If provided, this is used instead of computing ``log(k)`` internally.
 
+        on_precision_error : str, default ``raise``
+            Action to take on precision errors. Options are ``raise`` to raise an exception or ``warn`` to issue a warning.
+
         eps : float | None, default ``None``
             An optional precision tolerance for greek validation checks. If not provided, the default is ``bs._eps`` (1E-8).
                 
@@ -703,7 +721,7 @@ class BS(object):
         theta : np.ndarray
             Black Scholes thetas
         """
-        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.THETA, eps=eps )
+        return self( k=k, vol=vol, sqrtT=sqrtT, is_call=is_call, logK=logK, what=BS.THETA, on_precision_error=on_precision_error, eps=eps )
 
     def implied(
         self,
@@ -729,7 +747,7 @@ class BS(object):
 
         This routine:
 
-        1) Assigns ``max_vol`` to every option whose price is at or above the option price implied by ``vol_max``, and ``vol_min`` to every option whose price is at or below
+        1) Assigns ``vol_max`` to every option whose price is at or above the option price implied by ``vol_max``, and ``vol_min`` to every option whose price is at or below
            the option price implied by ``vol_min``.
         
         2) Initializes the search at ``default_vol`` if it is an array, or otherwise using the `closed-form approximation (20) <https://repub.eur.nl/pub/1472/ERS%202004%20054%20FA.pdf>`__.
@@ -772,7 +790,7 @@ class BS(object):
 
             price_tol : np.ndarray | float, default ``1E-6``
                 Price tolerance (typically a fraction of spreads) as
-                float or array or array compatible with ``k``.
+                float or array or array compatible with ``k``. Must be at least ``1E-8``.
                 A standard value is ``0.1*spread``.
 
             vol_min : float, default ``0.01``
@@ -793,10 +811,11 @@ class BS(object):
                 Maximum iterations. Usually the routine uses very few iterations.
 
             eps : float, default ``1E-10``
-                Only used to decide whether stirke or sqrtVar are zero.
+                Used to decide whether strike or ``sqrtT`` are zero, and as the precision tolerance
+                passed to the internal :meth:`cdxcore.bs.BS.price` and :meth:`cdxcore.bs.BS.vega` calls.
 
             min_vega : float, default ``1E-12``
-                Minimum vega for taking an updates step.
+                Minimum vega for taking an update step.
 
             ret_only_vols : bool, default ``True``
                 Return only vols.
@@ -830,6 +849,7 @@ class BS(object):
             raise ValueError(f"'min_vega' must be positive; found {min_vega:.4g}")
         if max_iters <= 0:
             raise ValueError(f"'max_iters' must be positive; found {max_iters}")
+        verify_inp( on_exceed_bounds in ("error", "warn", "quiet", None), lambda : f"'on_exceed_bounds' must be 'error', 'warn', 'quiet', or None. Found '{on_exceed_bounds}'" )
         shape = prices.shape
         if not mask is None and not isinstance(mask, np.ndarray):
             raise ValueError(f"'mask' must be an ndarray, found type {type(mask)}")
@@ -891,7 +911,8 @@ class BS(object):
                 else:
                     str_err_min += "Violations: "
                 for ix in ixs:
-                    str_err_min += f"price[{ix}] {prices[ix]} < intrinsic[{ix}] {intr[ix]}, "
+                    iis_call = is_call[ix] if isinstance(is_call, np.ndarray) else is_call
+                    str_err_min += ("call" if iis_call else "put") + f" price[{ix}] {prices[ix]} < intrinsic[{ix}] {intr[ix]} (strike {k[ix]}), "
                 str_err_min = str_err_min[:-2] + "."
             str_err_max = None
             if has_err_max:
@@ -904,7 +925,8 @@ class BS(object):
                 else:
                     str_err_max += "Violations: "
                 for ix in ixs:
-                    str_err_max += f"price[{ix}] {prices[ix]} > upper[{ix}] {upper[ix]}, "
+                    iis_call = is_call[ix] if isinstance(is_call, np.ndarray) else is_call
+                    str_err_max += ("call" if iis_call else "put") + f" price[{ix}] {prices[ix]} > upper[{ix}] {upper[ix]} (strike {k[ix]}), "
                 str_err_max = str_err_max[:-2] + "."
                 
             if not str_err_min is None and not str_err_max is None:
@@ -918,8 +940,6 @@ class BS(object):
                 raise ValueError(err)
             elif on_exceed_bounds == "warn":
                 warnings.warn(err)
-            else:
-                verify_inp( on_exceed_bounds is None or on_exceed_bounds == "quiet", lambda : f"'on_exceed_bounds' must be 'error', 'warn', or 'quiet'. Found '{on_exceed_bounds}'")
             prices = np.maximum( intr, np.minimum( prices, upper ) )
         del err_min, err_max, upper
 
@@ -958,8 +978,6 @@ class BS(object):
         verbose.report(1, lambda: f"Used maximum volatility {vol_max:.3f} for {sum(done)} options.")
 
         # identify options priced at or beyond vol_min
-        ## RS FIX: vol_min wasn't masked with work
-        # done           = prices - price_min <= price_tol
         done = (prices - price_min <= price_tol) & work
         fits[done] = price_min[done]
         vols[done] = vol_min
@@ -971,8 +989,7 @@ class BS(object):
         else:
             # initial guess
             # -------------
-            # https://repub.eur.nl/pub/1472/ERS%202004%20054%20FA.pdf (20)
-            ## RS MOD: Generalizing to both calls and puts
+            # https://repub.eur.nl/pub/1472/ERS%202004%20054%20FA.pdf (20), generalized to both calls and puts
 
             if isinstance(default_vol, np.ndarray):
                 vols[work] = default_vol[work]
@@ -985,12 +1002,7 @@ class BS(object):
                 # C-P=1-K => P=C-1+K => C=P+1-K
                 C_eq = np.where(isc_work, PR_raw, PR_raw + S - X)
 
-                # [27-01-2026 RS] FIX: 
-                # C_eq is a call-equivalent price, so guard it against CALL price bounds, not put bounds
-                # The original code used price_min/price_max which are computed with is_call, 
-                # but C_eq should be clipped to call bounds regardless of option type (puts too)
-                
-                # C_eq = np.minimum(np.maximum(C_eq, price_min[work]), price_max[work])  # guard
+                # C_eq is a call-equivalent price: clip it to call bounds regardless of option type
                 call_price_min = price_min[work] + np.where( isc_work, f0, S - X )
                 call_price_max = price_max[work] + np.where( isc_work, f0, S - X )
                 C_eq = np.minimum(np.maximum(C_eq, call_price_min), call_price_max)
@@ -1065,11 +1077,9 @@ class BS(object):
                 newton_step = (prices[work] - fits[work]) / np.maximum( test_vega, min_vega )
                 new_vols = vols[work] + newton_step
 
-                # [27-01-2026 RS] FIX: 
-                # --- Newton-Raphson Oscillation Fallback using Bisection --- #
-                # Use Newtown-Bisection hybrid step to prevent overshoot.
-                # Use bisection when Newton step would jump outside the bracketed interval
-                # This prevents oscillation when vega is very small (e.g., deep ITM puts)
+                # --- Newton-Raphson oscillation fallback using bisection --- #
+                # Use bisection when the Newton step would jump outside the bracketed interval,
+                # which prevents oscillation when vega is very small (e.g. deep ITM puts)
                 use_bisection = (new_vols < vols_min[work]) | (new_vols > vols_max[work])
                 if np.any(use_bisection):
                     bisection_vols = 0.5 * (vols_min[work] + vols_max[work])

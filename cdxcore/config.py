@@ -1642,11 +1642,11 @@ class Config(OrderedDict):
         
             If ``unique_hash`` is ``None`` these parameters are passed to
             :meth:`cdxcore.uniquehash.UniqueHash.__call__` to obtain
-            the corrsponding hashing function.
+            the corresponding hashing function.
             
         unique_hash : Callable
 
-            A function to return unique hashes, usally generated using :class:`cdxcore.uniquehash.UniqueHash`.
+            A function to return unique hashes, usually generated using :class:`cdxcore.uniquehash.UniqueHash`.
 
         debug_trace : :class:`cdxcore.uniquehash.DebugTrace`
             Allows tracing of hashing activity for debugging purposes.
